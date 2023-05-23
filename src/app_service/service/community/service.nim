@@ -825,17 +825,6 @@ QtObject:
       error "Error joining the community", msg = e.msg
       result = fmt"Error joining the community: {e.msg}"
 
-  proc requestToJoinCommunity*(self: Service, communityId: string, ensName: string, password: string) =
-    try:
-      let response = status_go.requestToJoinCommunity(communityId, ensName, password)
-      self.activityCenterService.parseActivityCenterResponse(response)
-
-      if not self.processRequestsToJoinCommunity(response.result):
-        error "error: ", procName="requestToJoinCommunity", errDesription = "no 'requestsToJoinCommunity' key in response"
-
-    except Exception as e:
-      error "Error requesting to join the community", msg = e.msg, communityId, ensName
-
   proc canceledRequestsToJoinForCommunity*(self: Service, communityId: string): seq[CommunityMembershipRequestDto] =
     try:
       let response = status_go.canceledRequestsToJoinForCommunity(communityId)
@@ -1351,6 +1340,38 @@ QtObject:
 
     self.events.emit(SIGNAL_COMMUNITY_DATA_IMPORTED, CommunityArgs(community: community))
 
+  proc asyncRequestToJoinCommunity*(self: Service, communityId: string, ensName: string, password: string) =
+    try:
+      let arg = AsyncRequestToJoinCommunityTaskArg(
+        tptr: cast[ByteAddress](asyncRequestToJoinCommunityTask),
+        vptr: cast[ByteAddress](self.vptr),
+        slot: "onAsyncRequestToJoinCommunityDone",
+        communityId: communityId,
+        ensName: ensName,
+        password: password
+      )
+      self.threadpool.start(arg)
+    except Exception as e:
+      error "Error request to join community", msg = e.msg 
+    
+  proc onAsyncRequestToJoinCommunityDone*(self: Service, communityIdAndRpcResponse: string) {.slot.} =
+    try:
+      let rpcResponseObj = communityIdAndRpcResponse.parseJson
+      if (rpcResponseObj{"response"}{"error"}.kind != JNull):
+        let error = Json.decode($rpcResponseObj["response"]["error"], RpcError)
+        error "Error requesting community info", msg = error.message
+        return
+
+      let communityId = rpcResponseObj{"communityId"}.getStr()
+      let rpcResponse = Json.decode($rpcResponseObj["response"], RpcResponse[JsonNode])
+      self.activityCenterService.parseActivityCenterResponse(rpcResponse)
+      
+      if not self.processRequestsToJoinCommunity(rpcResponse.result):
+        error "error: ", procName="onAsyncRequestToJoinCommunityDone", errDesription = "no 'requestsToJoinCommunity' key in response"
+
+    except Exception as e:
+      error "Error requesting to join the community", msg = e.msg
+
   proc asyncAcceptRequestToJoinCommunity*(self: Service, communityId: string, requestId: string) =
     try:
       let userKey = self.getUserPubKeyFromPendingRequest(communityId, requestId)
@@ -1367,11 +1388,14 @@ QtObject:
       error "Error accepting request to join community", msg = e.msg 
 
   proc onAsyncAcceptRequestToJoinCommunityDone*(self: Service, response: string) {.slot.} =
+    var communityId: string
+    var requestId: string
+    var userKey: string
     try:
       let rpcResponseObj = response.parseJson
-      let communityId = rpcResponseObj{"communityId"}.getStr
-      let requestId = rpcResponseObj{"requestId"}.getStr
-      let userKey = self.getUserPubKeyFromPendingRequest(communityId, requestId)
+      communityId = rpcResponseObj{"communityId"}.getStr
+      requestId = rpcResponseObj{"requestId"}.getStr
+      userKey = self.getUserPubKeyFromPendingRequest(communityId, requestId)
       if rpcResponseObj{"error"}.kind != JNull and rpcResponseObj{"error"}.getStr != "":
         let errorMessage = rpcResponseObj{"error"}.getStr
 
@@ -1395,7 +1419,7 @@ QtObject:
     except Exception as e:
       let errMsg = e.msg
       error "error accepting request to join: ", errMsg
-      self.events.emit(SIGNAL_ACCEPT_REQUEST_TO_JOIN_FAILED, Args())
+      self.events.emit(SIGNAL_ACCEPT_REQUEST_TO_JOIN_FAILED, CommunityMemberArgs(communityId: communityId, pubKey: userKey, requestId: requestId))
 
   proc asyncLoadCuratedCommunities*(self: Service) =
     self.events.emit(SIGNAL_CURATED_COMMUNITIES_LOADING, Args())

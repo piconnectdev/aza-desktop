@@ -29,6 +29,7 @@ QtObject {
 
     property var walletSectionInst: walletSection
     property var totalCurrencyBalance: walletSection.totalCurrencyBalance
+    property var activityController: walletSection.activityController
     property string signingPhrase: walletSection.signingPhrase
     property string mnemonicBackedUp: walletSection.isMnemonicBackedUp
 
@@ -174,12 +175,24 @@ QtObject {
         return walletSectionSavedAddresses.getNameByAddress(address)
     }
 
+    function getNameForWalletAddress(address) {
+        return walletSectionAccounts.getNameByAddress(address)
+    }
+
     function getNameForAddress(address) {
-        let name = getNameForSavedWalletAddress(address)
+        let name = getNameForWalletAddress(address)
         if (name.length === 0) {
-            name = walletSectionAccounts.getNameByAddress(address)
+            name = getNameForSavedWalletAddress(address)
         }
         return name
+    }
+
+    function getEmojiForWalletAddress(address) {
+        return walletSectionAccounts.getEmojiByAddress(address)
+    }
+
+    function getColorForWalletAddress(address) {
+        return walletSectionAccounts.getColorByAddress(address)
     }
 
     function createOrUpdateSavedAddress(name, address, favourite, chainShortNames, ens) {
