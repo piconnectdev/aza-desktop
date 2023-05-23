@@ -101,3 +101,9 @@ build/
 *.out
 *.app
 nimbus-build-system.paths
+
+Makefile.*Debug
+Makefile.*Release
+debug/
+release/
+.qmake.stash
