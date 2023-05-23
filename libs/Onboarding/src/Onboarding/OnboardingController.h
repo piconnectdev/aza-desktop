@@ -3,6 +3,8 @@
 #include "UserAccountsModel.h"
 
 #include "Accounts/MultiAccount.h"
+#include "Accounts/AccountsServiceInterface.h"
+#include "NewAccountController.h"
 
 #include <QQmlEngine>
 #include <QtQmlIntegration>

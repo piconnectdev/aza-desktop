@@ -57,7 +57,7 @@ bool AccountsService::init(const fs::path& statusgoDataDir)
 
 std::vector<MultiAccount> AccountsService::openAndListAccounts()
 {
-    auto response = StatusGo::Accounts::openAccounts(m_statusgoDataDir.c_str());
+    auto response = StatusGo::Accounts::openAccounts(QString::fromWCharArray(m_statusgoDataDir.c_str()).toUtf8().data());
     if(response.containsError())
     {
         qWarning() << response.error.message;
@@ -94,7 +94,7 @@ bool AccountsService::setupAccountAndLogin(const QString& accountId,
     auto hashedPassword(Utils::hashPassword(password));
 
     // This initialize the DB if first time running. Required for storing accounts
-    if(StatusGo::Accounts::openAccounts(m_statusgoDataDir.c_str()).containsError()) return false;
+    if(StatusGo::Accounts::openAccounts(QString::fromWCharArray(m_statusgoDataDir.c_str()).toUtf8().data()).containsError()) return false;
 
     AccountsService::storeAccount(accountId, hashedPassword);
     AccountsService::storeDerivedAccounts(accountId, hashedPassword, Constants::General::AccountDefaultPaths);
@@ -122,7 +122,7 @@ bool AccountsService::isFirstTimeAccountLogin() const
 bool AccountsService::setKeyStoreDir(const QString& key)
 {
     m_keyStoreDir = m_statusgoDataDir / m_keyStoreDirName / key.toStdString();
-    const auto response = StatusGo::General::initKeystore(m_keyStoreDir.c_str());
+    const auto response = StatusGo::General::initKeystore(QString::fromWCharArray(m_keyStoreDir.c_str()).toUtf8().data());
     return !response.containsError();
 }
 
@@ -132,7 +132,7 @@ QString AccountsService::login(MultiAccount account, const QString& password)
     if(!setKeyStoreDir(account.keyUid)) return QString("Failed to initialize keystore before logging in");
 
     // This initialize the DB if first time running. Required before logging in
-    if(StatusGo::Accounts::openAccounts(m_statusgoDataDir.c_str()).containsError())
+    if(StatusGo::Accounts::openAccounts(QString::fromWCharArray(m_statusgoDataDir.c_str()).toUtf8().data()).containsError())
         return QString("Failed to open accounts before logging in");
 
     const auto hashedPassword(Utils::hashPassword(password));
@@ -386,8 +386,8 @@ QJsonObject AccountsService::getDefaultNodeConfig(const QString& installationId)
             templateNodeConfigJsonStr.replace("%INSTALLATIONID%", installationId)
                 .replace("%INFURA_TOKEN_RESOLVED%", infuraKey)
                 .replace("%DEFAULT_TORRENT_CONFIG_PORT%", QString::number(DEFAULT_TORRENT_CONFIG_PORT))
-                .replace("%DEFAULT_TORRENT_CONFIG_DATADIR%", DEFAULT_TORRENT_CONFIG_DATADIR.c_str())
-                .replace("%DEFAULT_TORRENT_CONFIG_TORRENTDIR%", DEFAULT_TORRENT_CONFIG_TORRENTDIR.c_str())
+                .replace("%DEFAULT_TORRENT_CONFIG_DATADIR%", QString::fromWCharArray(DEFAULT_TORRENT_CONFIG_DATADIR.c_str()))
+                .replace("%DEFAULT_TORRENT_CONFIG_TORRENTDIR%", QString::fromWCharArray(DEFAULT_TORRENT_CONFIG_TORRENTDIR.c_str()))
                 .replace("%DEFAULT_WAKUV2_CONFIG_PORT%", wakuV2Port);
 
         QJsonObject nodeConfigJson = QJsonDocument::fromJson(nodeConfigJsonStr.toUtf8()).object();

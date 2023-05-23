@@ -3,7 +3,7 @@
 #include "Metadata/api_response.h"
 #include "Utils.h"
 
-#include <libstatus.h>
+#include "StatusGoWrapper.h"
 
 #include <nlohmann/json.hpp>
 
@@ -79,7 +79,7 @@ void deleteAccount(const EOAddress& address)
 void deleteMultiaccount(const QString& keyUID, const fs::path& keyStoreDir)
 {
     // We know go bridge won't misbehave with the input arguments
-    auto result = DeleteMultiaccount(const_cast<char*>(keyUID.toStdString().c_str()),
+    auto result = StatusGoWrapper::DeleteMultiaccount(const_cast<char*>(keyUID.toStdString().c_str()),
                                      const_cast<char*>(keyStoreDir.string().c_str()));
     auto resultJson = json::parse(result);
     checkApiError(resultJson);

@@ -34,6 +34,7 @@ class OnboardingModule : public QObject, public QQmlParserStatus
 public:
     explicit OnboardingModule(const fs::path& userDataPath, QObject* parent = nullptr);
     explicit OnboardingModule(QObject* parent = nullptr);
+    virtual ~OnboardingModule(){};
 
     OnboardingController* controller() const;
 

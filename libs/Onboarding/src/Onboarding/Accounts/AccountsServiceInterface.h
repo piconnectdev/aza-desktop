@@ -13,7 +13,7 @@ namespace Status::Onboarding
 class AccountsServiceInterface
 {
 public:
-    virtual ~AccountsServiceInterface() = default;
+    virtual ~AccountsServiceInterface(){};
 
     /// Generates and cache addresses accessible by \c generatedAccounts
     virtual bool init(const fs::path& statusgoDataDir) = 0;

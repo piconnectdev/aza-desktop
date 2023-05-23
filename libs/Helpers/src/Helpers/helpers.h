@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Helpers/BuildConfiguration.h"
+//#include "Helpers/BuildConfiguration.h"
 
 #include <QObject>
 

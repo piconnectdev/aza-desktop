@@ -3,8 +3,6 @@
 #include "Metadata/api_response.h"
 #include "Utils.h"
 
-#include <libstatus.h>
-
 #include <nlohmann/json.hpp>
 
 using json = nlohmann::json;

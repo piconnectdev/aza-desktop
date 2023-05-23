@@ -1,8 +1,12 @@
 #pragma once
-
+#
 #include <QQmlParserStatus>
 #include <QRegularExpression>
 #include <QSyntaxHighlighter>
+#include <QQuickTextDocument>
+#include <QTextCharFormat>
+#include <QVector>
+#include <QColor>
 
 class QQuickTextDocument;
 class QTextCharFormat;
@@ -22,7 +26,7 @@ class StatusSyntaxHighlighter : public QSyntaxHighlighter, public QQmlParserStat
 
 public:
     explicit StatusSyntaxHighlighter(QObject* parent = nullptr);
-
+    virtual ~StatusSyntaxHighlighter() {}
     QQuickTextDocument* quickTextDocument() const;
     void setQuickTextDocument(QQuickTextDocument* quickTextDocument);
 

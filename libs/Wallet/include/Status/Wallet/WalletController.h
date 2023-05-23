@@ -1,6 +1,10 @@
 #pragma once
 
 #include "Status/Wallet/WalletAccount.h"
+#include "NewWalletAccountController.h"
+#include "AccountAssetsController.h"
+#include "SavedAddressesController.h"
+#include "WalletAccount.h"
 
 #include <Helpers/QObjectVectorModel.h>
 
@@ -29,7 +33,8 @@ class WalletController : public QObject
     Q_PROPERTY(WalletAccount* currentAccount READ currentAccount NOTIFY currentAccountChanged)
 
 public:
-    WalletController();
+    WalletController(QObject* parent = nullptr);
+    virtual ~WalletController(){};
 
     /// Called by QML engine to register the instance. QML takes ownership of the instance
     [[nodiscard]] static WalletController* create(QQmlEngine* qmlEngine, QJSEngine* jsEngine);

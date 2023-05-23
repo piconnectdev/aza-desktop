@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QImage>
+#include <QUrl>
 
 class QClipboard;
 class QJSEngine;
@@ -27,6 +28,7 @@ class QClipboardProxy : public QObject
     Q_PROPERTY(QList<QUrl> urls READ urls NOTIFY contentChanged)
 
     QClipboardProxy();
+    virtual ~QClipboardProxy(){}
 
     bool hasText() const;
     QString text() const;

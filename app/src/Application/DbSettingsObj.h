@@ -1,5 +1,6 @@
 #pragma once
-
+#include <QObject>
+#include <QString>
 #include <StatusGo/SettingsAPI>
 
 #include <QtCore/QtCore>
@@ -18,7 +19,8 @@ class DbSettingsObj : public QObject
     Q_PROPERTY(QString publicKey READ publicKey NOTIFY publicKeyChanged)
 
 public:
-    explicit DbSettingsObj(StatusGo::Settings::SettingsDto rawData);
+    explicit DbSettingsObj(StatusGo::Settings::SettingsDto rawData, QObject *parent = nullptr);
+    virtual ~DbSettingsObj(){}
 
     [[nodiscard]] QString address() const;
     void setAddress(const QString& address);

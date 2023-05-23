@@ -38,7 +38,7 @@ class NewAccountController : public QObject
 
 public:
     explicit NewAccountController(std::shared_ptr<AccountsServiceInterface> accountsService, QObject* parent = nullptr);
-
+    virtual ~NewAccountController(){};
     Q_INVOKABLE void createAccount();
 
     const QString& password() const;

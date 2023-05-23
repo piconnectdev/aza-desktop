@@ -21,7 +21,7 @@ class UserConfiguration : public QObject
 
 public:
     explicit UserConfiguration(QObject* parent = nullptr);
-
+    virtual ~UserConfiguration() = default;
     const QString qmlUserDataFolder() const;
     const fs::path& userDataFolder() const;
     void setUserDataFolder(const QString& newUserDataFolder);

@@ -21,6 +21,7 @@ class WalletAccount : public QObject
 
 public:
     explicit WalletAccount(const GoAccounts::ChatOrWalletAccount rawAccount, QObject* parent = nullptr);
+    virtual ~WalletAccount(){};
 
     const QString& name() const;
 

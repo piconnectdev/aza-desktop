@@ -20,6 +20,7 @@ class DerivedWalletAddress : public QObject
 
 public:
     explicit DerivedWalletAddress(WalletGo::DerivedAddress address, QObject* parent = nullptr);
+    virtual ~DerivedWalletAddress(){};
 
     QString address() const;
 

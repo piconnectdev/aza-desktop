@@ -1,11 +1,12 @@
 #pragma once
 
 #include <QtQmlIntegration>
+#include "Accounts/MultiAccount.h"
 
 namespace Status::Onboarding
 {
 
-class MultiAccount;
+struct MultiAccount;
 
 /*!
  * \brief Represents a user account in Onboarding Presentation Layer
@@ -22,7 +23,7 @@ class UserAccount : public QObject
     Q_PROPERTY(QString name READ name NOTIFY nameChanged)
 public:
     explicit UserAccount(std::unique_ptr<MultiAccount> data);
-
+    virtual ~UserAccount(){};
     const QString& name() const;
 
     const MultiAccount& accountData() const;

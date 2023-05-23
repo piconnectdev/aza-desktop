@@ -22,6 +22,7 @@ class AccountsService : public AccountsServiceInterface
 {
 public:
     AccountsService();
+    virtual ~AccountsService(){};
 
     /// \see ServiceInterface
     bool init(const fs::path& statusgoDataDir) override;

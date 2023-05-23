@@ -4,6 +4,11 @@
 #include <QJSValue>
 
 #include "ContextPropertiesModel.h"
+#include <QQmlApplicationEngine>
+#include <QQmlEngine>
+#include <QJSEngine>
+#include <QVariant>
+#include <QString>
 
 class QQmlApplicationEngine;
 class QQmlEngine;
@@ -18,6 +23,7 @@ class Monitor : public QObject
     Monitor() = default;
 
 public:
+    virtual ~Monitor(){}
     void initialize(QQmlApplicationEngine *engine);
     ContextPropertiesModel* contexPropertiesModel();
     void addContextPropertyName(const QString &contextPropertyName);

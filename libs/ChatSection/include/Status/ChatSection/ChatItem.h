@@ -20,7 +20,7 @@ class ChatItem : public QObject
 
 public:
     explicit ChatItem(StatusGo::Chats::ChatDto rawData);
-
+    virtual ~ChatItem(){};
     [[nodiscard]] QString id() const;
 
     [[nodiscard]] QString name() const;

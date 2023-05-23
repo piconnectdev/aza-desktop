@@ -27,6 +27,7 @@ public:
     Q_ENUM(Error)
 
     explicit SavedAddressesController(QObject* parent = nullptr);
+    virtual ~SavedAddressesController(){};
 
     QAbstractListModel* savedAddresses() const;
 

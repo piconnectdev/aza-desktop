@@ -12,7 +12,7 @@ class ChatDataProvider : public QObject
 
 public:
     ChatDataProvider();
-
+    virtual ~ChatDataProvider(){};
     StatusGo::Chats::ChannelGroupDto getSectionData(const QString& sectionId) const;
 };
 } // namespace Status::ChatSection

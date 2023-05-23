@@ -2,7 +2,7 @@
 
 #include "Utils.h"
 
-#include <libstatus.h>
+#include "StatusGoWrapper.h"
 
 const int NUMBER_OF_ADDRESSES_TO_GENERATE = 5;
 const int MNEMONIC_PHRASE_LENGTH = 12;
@@ -19,7 +19,7 @@ RpcResponse<QJsonArray> generateAddresses(const std::vector<Accounts::Derivation
 
     try
     {
-        auto result = MultiAccountGenerateAndDeriveAddresses(Utils::jsonToByteArray(std::move(payload)).data());
+        auto result = StatusGoWrapper::MultiAccountGenerateAndDeriveAddresses(Utils::jsonToByteArray(std::move(payload)).data());
         QJsonArray jsonResult;
         if(!Utils::checkReceivedResponse(result, jsonResult))
         {
@@ -50,7 +50,7 @@ RpcResponse<QString> generateAlias(const QString& publicKey)
         QString alias;
         if(!publicKey.isEmpty())
         {
-            alias = GenerateAlias(publicKey.toUtf8().data());
+            alias = StatusGoWrapper::GenerateAlias(publicKey.toUtf8().data());
         }
 
         return Utils::buildPrivateRPCResponse(alias);
@@ -71,7 +71,7 @@ RpcResponse<QJsonObject> storeDerivedAccounts(const QString& id,
 
     try
     {
-        auto result = MultiAccountStoreDerivedAccounts(Utils::jsonToByteArray(std::move(payload)).data());
+        auto result = StatusGoWrapper::MultiAccountStoreDerivedAccounts(Utils::jsonToByteArray(std::move(payload)).data());
         QJsonObject jsonResult;
         if(!Utils::checkReceivedResponse(result, jsonResult))
         {
@@ -103,7 +103,7 @@ RpcResponse<QJsonObject> storeAccount(const QString& id, const HashedPassword& p
 
     try
     {
-        auto result = MultiAccountStoreAccount(Utils::jsonToByteArray(std::move(payload)).data());
+        auto result = StatusGoWrapper::MultiAccountStoreAccount(Utils::jsonToByteArray(std::move(payload)).data());
         QJsonObject jsonResult;
         if(!Utils::checkReceivedResponse(result, jsonResult))
         {
@@ -137,7 +137,7 @@ bool saveAccountAndLogin(const HashedPassword& password,
 {
     try
     {
-        auto result = SaveAccountAndLogin(Utils::jsonToByteArray(account).data(),
+        auto result = StatusGoWrapper::SaveAccountAndLogin(Utils::jsonToByteArray(account).data(),
                                           password.get().toUtf8().data(),
                                           Utils::jsonToByteArray(settings).data(),
                                           Utils::jsonToByteArray(nodeConfig).data(),
@@ -166,7 +166,7 @@ RpcResponse<QJsonArray> openAccounts(const char* dataDirPath)
 {
     try
     {
-        auto result = QString(OpenAccounts(const_cast<char*>(dataDirPath)));
+        auto result = QString(StatusGoWrapper::OpenAccounts(const_cast<char*>(dataDirPath)));
         if(result == "null") return RpcResponse<QJsonArray>(QJsonArray());
 
         QJsonArray jsonResult;
@@ -208,7 +208,7 @@ RpcResponse<QJsonObject> login(const QString& name,
     try
     {
         auto payloadData = Utils::jsonToByteArray(std::move(payload));
-        auto result = Login(payloadData.data(), password.get().toUtf8().data());
+        auto result = StatusGoWrapper::Login(payloadData.data(), password.get().toUtf8().data());
         QJsonObject jsonResult;
         if(!Utils::checkReceivedResponse(result, jsonResult))
         {
@@ -254,7 +254,7 @@ RpcResponse<QJsonObject> loginWithConfig(const QString& name,
     {
         auto payloadData = Utils::jsonToByteArray(std::move(payload));
         auto nodeConfigData = Utils::jsonToByteArray(nodeConfig);
-        auto result = LoginWithConfig(payloadData.data(), password.get().toUtf8().data(), nodeConfigData.data());
+        auto result = StatusGoWrapper::LoginWithConfig(payloadData.data(), password.get().toUtf8().data(), nodeConfigData.data());
         QJsonObject jsonResult;
         if(!Utils::checkReceivedResponse(result, jsonResult))
         {
@@ -282,7 +282,7 @@ RpcResponse<QJsonObject> logout()
 {
     try
     {
-        auto result = Logout();
+        auto result = StatusGoWrapper::Logout();
         QJsonObject jsonResult;
         if(!Utils::checkReceivedResponse(result, jsonResult))
         {

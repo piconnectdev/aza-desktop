@@ -18,7 +18,7 @@ class ChatSectionController : public QObject
 
 public:
     ChatSectionController();
-
+    virtual ~ChatSectionController(){};
     QAbstractListModel* chatsModel() const;
     ChatItem* currentChat() const;
 

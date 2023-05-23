@@ -18,6 +18,7 @@ class SavedAddress : public QObject
 
 public:
     SavedAddress(const QString& address = QString(), const QString& name = QString(), QObject* parent = nullptr);
+    virtual ~SavedAddress() {};
 
     const QString& address() const;
     const QString& name() const;

@@ -5,6 +5,11 @@
 #include <QQmlApplicationEngine>
 #include <QQmlComponent>
 #include <QQuickWindow>
+#include <QList>
+#include <QUrl>
+#include <QAbstractItemModel>
+#include <QJSEngine>
+#include <QQmlEngine>
 
 void Monitor::initialize(QQmlApplicationEngine* engine) {
     QObject::connect(engine, &QQmlApplicationEngine::objectCreated, this,
@@ -17,7 +22,7 @@ void Monitor::initialize(QQmlApplicationEngine* engine) {
 
         QQuickWindow* window = qobject_cast<QQuickWindow*>(obj);
         QQmlComponent cmp(engine, QCoreApplication::applicationDirPath()
-                          + QStringLiteral(MONITORING_QML_ENTRY_POINT), window);
+                          + QStringLiteral("Monitor"), window);
 
         cmp.create(qmlContext(window));
 

@@ -2,7 +2,7 @@
 
 #include "Utils.h"
 
-#include <libstatus.h>
+#include "StatusGoWrapper.h"
 
 namespace Status::StatusGo::General
 {
@@ -11,7 +11,7 @@ RpcResponse<QJsonObject> initKeystore(const char* keystoreDir)
 {
     try
     {
-        auto result = InitKeystore(const_cast<char*>(keystoreDir));
+        auto result = StatusGoWrapper::InitKeystore(const_cast<char*>(keystoreDir));
         QJsonObject jsonResult;
         if(!Utils::checkReceivedResponse(result, jsonResult))
         {

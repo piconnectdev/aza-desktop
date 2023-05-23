@@ -51,7 +51,7 @@ struct adl_serializer<GoWallet::BigInt>
         if(j.is_number())
             num = GoWallet::BigInt(j.get<long long>());
         else
-            num = GoWallet::BigInt(j.get<std::string>());
+            num = GoWallet::parseHex(j.get<std::string>());
     }
 };
 

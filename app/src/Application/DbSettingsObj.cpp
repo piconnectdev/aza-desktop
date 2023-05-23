@@ -2,8 +2,8 @@
 
 using namespace Status::Application;
 
-DbSettingsObj::DbSettingsObj(StatusGo::Settings::SettingsDto rawData)
-    : QObject(nullptr)
+DbSettingsObj::DbSettingsObj(StatusGo::Settings::SettingsDto rawData, QObject* parent)
+    : QObject(parent)
     , m_data(std::move(rawData))
 { }
 

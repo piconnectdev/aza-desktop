@@ -12,7 +12,7 @@ namespace Status::Onboarding
 namespace StatusGo = Status::StatusGo;
 
 NewAccountController::NewAccountController(AccountsServiceInterfacePtr accountsService, QObject* parent)
-    : m_accountsService(accountsService)
+    :QObject(parent), m_accountsService(accountsService)
 {
     connect(this, &NewAccountController::passwordChanged, this, &NewAccountController::checkAndUpdateDataValidity);
     connect(this,

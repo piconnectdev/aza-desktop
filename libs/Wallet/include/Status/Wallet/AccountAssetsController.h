@@ -28,6 +28,7 @@ class AccountAssetsController : public QObject
 
 public:
     AccountAssetsController(WalletAccount* address, QObject* parent = nullptr);
+    virtual ~AccountAssetsController(){};
 
     QAbstractItemModel* assetsModel() const;
 

@@ -35,7 +35,6 @@ public:
 
 signals:
     void statusAccountChanged();
-
 private:
     QObject* m_statusAccount{};
     std::unique_ptr<DataProvider> m_dataProvider;

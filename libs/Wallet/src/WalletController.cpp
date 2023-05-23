@@ -26,8 +26,8 @@ namespace StatusGo = Status::StatusGo;
 namespace Status::Wallet
 {
 
-WalletController::WalletController()
-    : m_accounts(Helpers::makeSharedQObject<AccountsModel>(std::move(getWalletAccounts()), "account"))
+WalletController::WalletController(QObject* parent)
+    : QObject(parent), m_accounts(Helpers::makeSharedQObject<AccountsModel>(std::move(getWalletAccounts()), "account"))
     , m_currentAccount(m_accounts->get(0))
 { }
 

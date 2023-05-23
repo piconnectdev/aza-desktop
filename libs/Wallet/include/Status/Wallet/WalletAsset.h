@@ -24,6 +24,7 @@ class WalletAsset : public QObject
 
 public:
     explicit WalletAsset(const WalletGo::TokenPtr token, StatusGo::Wallet::BigInt balance, QObject* parent = nullptr);
+    virtual ~WalletAsset(){};
 
     const QString name() const;
 

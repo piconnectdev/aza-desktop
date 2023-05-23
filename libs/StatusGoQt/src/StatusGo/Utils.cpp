@@ -1,6 +1,6 @@
 #include "Utils.h"
 
-#include <libstatus.h>
+#include "StatusGoWrapper.h"
 
 #include <QtCore>
 
@@ -18,7 +18,7 @@ QJsonArray toJsonArray(const std::vector<Accounts::DerivationPath>& value)
 const char* statusGoCallPrivateRPC(const char* inputJSON)
 {
     // Evil done here! status-go API doesn't follow the proper const conventions
-    return CallPrivateRPC(const_cast<char*>(inputJSON));
+    return StatusGoWrapper::CallPrivateRPC(const_cast<char*>(inputJSON));
 }
 
 HashedPassword hashPassword(const QString& str)

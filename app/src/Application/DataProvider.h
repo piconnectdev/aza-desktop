@@ -12,7 +12,7 @@ class DataProvider : public QObject
 
 public:
     DataProvider();
-
+    virtual ~DataProvider(){}
     StatusGo::Settings::SettingsDto getSettings() const;
 };
 } // namespace Status::Application

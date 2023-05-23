@@ -38,6 +38,7 @@ class EventData final : public QObject
 
 public:
     explicit EventData(nlohmann::json eventInfo, bool error);
+    virtual ~EventData() = default;
 
     const nlohmann::json& eventInfo() const
     {

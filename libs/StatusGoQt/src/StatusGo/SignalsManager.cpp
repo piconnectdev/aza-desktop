@@ -3,7 +3,7 @@
 
 #include <QtConcurrent>
 
-#include <libstatus.h>
+#include "StatusGoWrapper.h"
 
 #include <chrono>
 #include <thread>
@@ -35,7 +35,7 @@ SignalsManager::SignalsManager()
     // Don't allow async signal processing in attept to debug the the linux running tests issue
     m_threadPool.setMaxThreadCount(1);
 
-    SetSignalEventCallback((void*)&SignalsManager::signalCallback);
+    StatusGoWrapper::SetSignalEventCallback((void*)&SignalsManager::signalCallback);
 
     signalMap = {
         {"node.ready"s, SignalType::NodeReady},
@@ -93,7 +93,7 @@ void SignalsManager::processSignal(const char* statusSignalData)
 void SignalsManager::dispatch(const std::string& type, json signalEvent, const QString& signalError)
 {
     SignalType signalType(Unknown);
-    if(!signalMap.contains(type))
+    if(signalMap.find(type) == signalMap.begin())
     {
         qWarning() << "Unknown signal received: " << type.c_str();
         return;

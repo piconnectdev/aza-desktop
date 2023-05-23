@@ -33,6 +33,7 @@ public:
 
     /// \note On account creation \c accounts are updated with the newly created wallet account
     NewWalletAccountController(std::shared_ptr<AccountsModel> accounts);
+    virtual ~NewWalletAccountController(){};
 
     QAbstractListModel* mainAccountsModel();
     QAbstractItemModel* currentDerivedAddressModel();
