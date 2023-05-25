@@ -6,9 +6,10 @@ import StatusQ.Core.Theme 0.1
 import StatusQ.Controls 0.1
 import StatusQ.Controls.Validators 0.1
 import StatusQ.Components 0.1
-import StatusQ.Core.Utils 0.1
+import StatusQ.Core.Utils 0.1 as SQUtils
 
 import utils 1.0
+
 
 import AppLayouts.Wallet.controls 1.0
 import shared.panels 1.0
@@ -18,20 +19,27 @@ StatusScrollView {
     id: root
 
     property int viewWidth: 560 // by design
+    property bool isAssetView: false
 
-    // Collectible properties
+    // Token properties
     readonly property alias name: nameInput.text
     readonly property alias symbol: symbolInput.text
     readonly property alias description: descriptionInput.text
     readonly property alias infiniteSupply: unlimitedSupplyChecker.checked
-    readonly property alias notTransferable: transferableChecker.checked
-    readonly property alias selfDestruct: selfDestructChecker.checked
     readonly property int supplyAmount: supplyInput.text ? parseInt(supplyInput.text) : 0
     property alias artworkSource: dropAreaItem.artworkSource
     property alias artworkCropRect: dropAreaItem.artworkCropRect
     property int chainId
     property string chainName
     property string chainIcon
+    property var tokensModel
+
+    // Collectible properties
+    readonly property alias notTransferable: transferableChecker.checked
+    readonly property alias selfDestruct: selfDestructChecker.checked
+
+    // Asset properties
+    readonly property int assetDecimals: assetDecimalsInput.text ? parseInt(assetDecimalsInput.text) : 0
 
     // Network related properties:
     property var layer1Networks
@@ -52,15 +60,14 @@ StatusScrollView {
     QtObject {
         id: d
 
-        property bool isAssetView: (optionsTab.currentIndex === 1)
         readonly property bool isFullyFilled: root.artworkSource.toString().length > 0
-                                              && !!root.name
-                                              && !!root.symbol
-                                              && !!root.description
+                                              && nameInput.valid
+                                              && descriptionInput.valid
+                                              && symbolInput.valid
                                               && (root.infiniteSupply || (!root.infiniteSupply && root.supplyAmount > 0))
+                                              && (!root.isAssetView  || (root.isAssetView&& assetDecimalsInput.valid))
 
-
-        readonly property int imageSelectorRectWidth: d.isAssetView ? 128 : 290
+        readonly property int imageSelectorRectWidth: root.isAssetView ? 128 : 290
     }
 
     contentWidth: mainLayout.width
@@ -73,39 +80,23 @@ StatusScrollView {
         width: root.viewWidth
         spacing: Style.current.padding
 
-        StatusTabBar {
-            //TODO replace with tab bar from design when this
-            //https://github.com/status-im/status-desktop/issues/10623 is done
-            id: optionsTab
-            StatusTabButton {
-                id: assetBtn
-                width: implicitWidth
-                text: qsTr("Collectibles")
-            }
-            StatusTabButton {
-                id: collectiblesBtn
-                width: implicitWidth
-                text: qsTr("Assets")
-            }
-        }
-
         StatusBaseText {
             elide: Text.ElideRight
             font.pixelSize: Theme.primaryTextFontSize
-            text: qsTr("Artwork")
+            text: root.isAssetView ? qsTr("Icon") : qsTr("Artwork")
         }
 
         DropAndEditImagePanel {
             id: dropAreaItem
             Layout.fillWidth: true
             Layout.preferredHeight: d.imageSelectorRectWidth
-            editorAnchorLeft: !d.isAssetView
-            editorRoundedImage: d.isAssetView
-            uploadTextLabel.uploadText: d.isAssetView ? qsTr("Upload") : qsTr("Drag and Drop or Upload Artwork")
+            editorAnchorLeft: !root.isAssetView
+            editorRoundedImage: root.isAssetView
+            uploadTextLabel.uploadText: root.isAssetView ? qsTr("Upload") : qsTr("Drag and Drop or Upload Artwork")
             uploadTextLabel.additionalText: qsTr("Images only")
-            uploadTextLabel.showAdditionalInfo: !d.isAssetView
-            editorTitle: qsTr("Collectible artwork")
-            acceptButtonText: qsTr("Upload collectible artwork")
+            uploadTextLabel.showAdditionalInfo: !root.isAssetView
+            editorTitle: root.isAssetView ? qsTr("Asset icon") : qsTr("Collectible artwork")
+            acceptButtonText: root.isAssetView ? qsTr("Upload asset icon") : qsTr("Upload collectible artwork")
         }
 
         CustomStatusInput {
@@ -114,7 +105,10 @@ StatusScrollView {
             label: qsTr("Name")
             charLimit: 15
             placeholderText: qsTr("Name")
-            errorText: qsTr("Collectible name")
+            minLengthValidator.errorMessage: qsTr("Please name your token name (use A-Z and 0-9, hyphens and underscores only)")
+            regexValidator.errorMessage: qsTr("Your token name contains invalid characters (use A-Z and 0-9, hyphens and underscores only)")
+            extraValidator.validate: function (value) { return !SQUtils.ModelUtils.contains(root.tokensModel, "name", nameInput.text) }
+            extraValidator.errorMessage: qsTr("You have used this token name before")
         }
 
         CustomStatusInput {
@@ -122,13 +116,15 @@ StatusScrollView {
 
             label: qsTr("Description")
             charLimit: 280
-            placeholderText: qsTr("Describe your collectible")
+            placeholderText: root.isAssetView ? qsTr("Describe your asset") : qsTr("Describe your collectible")
             input.multiline: true
             input.verticalAlignment: Qt.AlignTop
             input.placeholder.verticalAlignment: Qt.AlignTop
             minimumHeight: 108
             maximumHeight: minimumHeight
-            errorText: qsTr("Collectible description")
+            minLengthValidator.errorMessage: qsTr("Please enter a token description")
+            regexValidator.regularExpression: Constants.regularExpressions.asciiPrintable
+            regexValidator.errorMessage: qsTr("Only A-Z, 0-9 and standard punctuation allowed")
         }
 
         CustomStatusInput {
@@ -137,8 +133,11 @@ StatusScrollView {
             label: qsTr("Symbol")
             charLimit: 6
             placeholderText: qsTr("e.g. DOODLE")
-            errorText: qsTr("Collectible symbol")
-            validator.regularExpression: Constants.regularExpressions.asciiPrintable
+            minLengthValidator.errorMessage: qsTr("Please enter your token symbol (use A-Z only)")
+            regexValidator.errorMessage: qsTr("Your token symbol contains invalid characters (use A-Z only)")
+            regexValidator.regularExpression: Constants.regularExpressions.capitalOnly
+            extraValidator.validate: function (value) { return !SQUtils.ModelUtils.contains(root.tokensModel, "symbol", symbolInput.text) }
+            extraValidator.errorMessage: qsTr("You have used this token symbol before")
         }
 
         CustomLabelDescriptionComponent {
@@ -150,7 +149,7 @@ StatusScrollView {
         StatusEmojiAndColorComboBox {
             id: accountsComboBox
 
-            readonly property string address: ModelUtils.get(root.accounts, currentIndex, "address")
+            readonly property string address: SQUtils.ModelUtils.get(root.accounts, currentIndex, "address")
 
             Layout.fillWidth: true
             model: root.accounts
@@ -175,18 +174,23 @@ StatusScrollView {
             onCheckedChanged: if(!checked) supplyInput.forceActiveFocus()
         }
 
-        StatusInput {
+        CustomStatusInput {
             id: supplyInput
 
             visible: !unlimitedSupplyChecker.checked
             label: qsTr("Total finite supply")
             placeholderText: qsTr("e.g. 300")
-            validators: StatusIntValidator{bottom: 1; top: 999999999;}
+            minLengthValidator.errorMessage: qsTr("Please enter a total finite supply")
+            regexValidator.errorMessage: qsTr("Your total finite supply contains invalid characters (use 0-9 only)")
+            regexValidator.regularExpression: Constants.regularExpressions.numerical
+            extraValidator.validate: function (value) { return  parseInt(value) > 0 && parseInt(value) <= 999999999 }
+            extraValidator.errorMessage: qsTr("Enter a number between 0 and 999,999,999")
         }
 
         CustomSwitchRowComponent {
             id: transferableChecker
-            visible: (optionsTab.currentIndex === 0)
+
+            visible: !root.isAssetView
             label: checked ? qsTr("Not transferable (Soulbound)") : qsTr("Transferable")
             description: qsTr("If enabled, the token is locked to the first address it is sent to and can never be transferred to another address. Useful for tokens that represent Admin permissions")
             checked: true
@@ -194,17 +198,26 @@ StatusScrollView {
 
         CustomSwitchRowComponent {
             id: selfDestructChecker
-            visible: (optionsTab.currentIndex === 0)
+
+            visible: !root.isAssetView
             label: qsTr("Remotely destructible")
             description: qsTr("Enable to allow you to destroy tokens remotely. Useful for revoking permissions from individuals")
             checked: true
         }
 
         CustomStatusInput {
-            visible: (optionsTab.currentIndex === 1)
+            id: assetDecimalsInput
+
+            visible: root.isAssetView
             label: qsTr("Decimals")
-            secondaryLabel: "Max 10"
-            placeholderText: qsTr("2")
+            charLimit: 2
+            charLimitLabel: qsTr("Max 10")
+            placeholderText: "2"
+            text: "2" // Default value
+            validationMode: StatusInput.ValidationMode.Always
+            minLengthValidator.errorMessage: qsTr("Please enter how many decimals your token should have")
+            regexValidator.errorMessage: qsTr("Your decimal amount contains invalid characters (use 0-9 only)")
+            regexValidator.regularExpression: Constants.regularExpressions.numerical
         }
 
         StatusButton {
@@ -224,20 +237,22 @@ StatusScrollView {
     component CustomStatusInput: StatusInput {
         id: customInput
 
-        property string errorText
-        property alias validator: regexValidator
+        property alias minLengthValidator: minLengthValidatorItem
+        property alias regexValidator: regexValidatorItem
+        property alias extraValidator: extraValidatorItem
 
         Layout.fillWidth: true
         validators: [
             StatusMinLengthValidator {
+                id: minLengthValidatorItem
                 minLength: 1
-                errorMessage: Utils.getErrorMessage(customInput.errors,
-                                                    customInput.errorText)
             },
             StatusRegularExpressionValidator {
-                id: regexValidator
-                regularExpression: Constants.regularExpressions.ascii
-                errorMessage: Constants.errorMessages.asciiRegExp
+                id: regexValidatorItem
+                regularExpression: Constants.regularExpressions.alphanumerical
+            },
+            StatusValidator {
+                id: extraValidatorItem
             }
         ]
     }
