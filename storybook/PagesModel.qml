@@ -150,6 +150,10 @@ ListModel {
         section: "Panels"
     }
     ListElement {
+         title: "BurnTokensPopup"
+         section: "Popups"
+    }
+    ListElement {
         title: "InviteFriendsToCommunityPopup"
         section: "Popups"
     }
@@ -178,7 +182,7 @@ ListModel {
          section: "Popups"
     }
     ListElement {
-         title: "SignMintTokenTransactionPopup"
+         title: "SignTokenTransactionsPopup"
          section: "Popups"
     }
     ListElement {

@@ -29,19 +29,18 @@ SplitView {
                 onClicked: dialog.open()
             }
 
-            SignMintTokenTransactionPopup {
+            BurnTokensPopup {
                 id: dialog
 
                 anchors.centerIn: parent
-                accountName: editorAccount.text
-                collectibleName: editorCollectible.text
-                networkName: editorNetwork.text
-                feeText: editorFee.text
-                isFeeLoading: editorFeeLoader.checked
+                communityName: editorCommunity.text
+                tokenName: editorToken.text
+                remainingTokens: editorAmount.text
+                isAsset: assetButton.checked
+                tokenSource: assetButton.checked ? ModelsData.assets.socks :  ModelsData.collectibles.kitty1Big
 
-                onSignTransactionClicked: logs.logEvent("SignMintTokenTransactionPopup::onSignTransactionClicked")
-                onCancelClicked: logs.logEvent("SignMintTokenTransactionPopup::onCancelClicked")
-
+                onBurnClicked: logs.logEvent("BurnTokensPopup::onBurnClicked --> Burn amount: " + burnAmount)
+                onCancelClicked: logs.logEvent("BurnTokensPopup::onCancelClicked")
             }
         }
 
@@ -63,23 +62,25 @@ SplitView {
 
             Label {
                 Layout.fillWidth: true
-                text: "Account name"
+                text: "Community name:"
             }
 
             TextField {
-                id: editorAccount
+                id: editorCommunity
                 background: Rectangle { border.color: 'lightgrey' }
                 Layout.preferredWidth: 200
-                text: "helloworld"
+                text: "Community lovers"
             }
 
             Label {
                 Layout.fillWidth: true
-                text: "Collectible name"
+                Layout.topMargin: 16
+
+                text: "Token name:"
             }
 
             TextField {
-                id: editorCollectible
+                id: editorToken
                 background: Rectangle { border.color: 'lightgrey' }
                 Layout.preferredWidth: 200
                 text: "Anniversary"
@@ -87,32 +88,36 @@ SplitView {
 
             Label {
                 Layout.fillWidth: true
-                text: "Network name"
+                Layout.topMargin: 16
+
+                text: "Amount to burn:"
             }
 
             TextField {
-                id: editorNetwork
+                id: editorAmount
                 background: Rectangle { border.color: 'lightgrey' }
                 Layout.preferredWidth: 200
-                text: "Optimism"
+                text: "123"
             }
 
             Label {
                 Layout.fillWidth: true
-                text: "Network name"
+                Layout.topMargin: 16
+
+                text: "Token source:"
             }
 
-            TextField {
-                id: editorFee
-                background: Rectangle { border.color: 'lightgrey' }
-                Layout.preferredWidth: 200
-                text: "0.0015 ETH ($75.34)"
+            RadioButton {
+                id: assetButton
+
+                text: "Asset"
+                checked: true
             }
 
-            Switch {
-                id: editorFeeLoader
-                text: "Is fee loading?"
-                checked: false
+            RadioButton {
+                id: collectibleButton
+
+                text: "Collectible"
             }
         }
     }
