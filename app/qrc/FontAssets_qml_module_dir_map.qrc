@@ -1,0 +1,6 @@
+<RCC>
+  <qresource prefix="/">
+    <file alias="/Status/FontsAssets">../build/Status/FontsAssets</file>
+
+  </qresource>
+</RCC>

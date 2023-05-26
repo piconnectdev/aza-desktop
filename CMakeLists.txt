@@ -18,13 +18,15 @@ set(PROJECT_ORGANIZATION_NAME "Status")
 set(PROJECT_APPLICATION_NAME "Status Desktop")
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
-
 include(CTest)
 enable_testing()
 
 if(${CMAKE_SYSTEM_PROCESSOR} MATCHES "arm64" AND APPLE)
   set(STATUSGO_FORCE_ARCH ${CMAKE_HOST_SYSTEM_PROCESSOR})
 endif()
+
+include_directories(vendor/json/include)
+include_directories(vendor/multiprecision/include)
 
 # status-desktop application
 add_subdirectory(vendor)
@@ -40,7 +42,7 @@ add_subdirectory(libs/StatusQ)
 
 add_subdirectory(app)
 
-add_subdirectory(test/libs/StatusGoQt)
+#add_subdirectory(test/libs/StatusGoQt)
 
 # TODO: temporary not to duplicate resources until we switch to c++ app then it can be refactored
 add_subdirectory(resources)

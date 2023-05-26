@@ -1,0 +1,9 @@
+<RCC>
+  <qresource prefix="/Status/StaticConfig/">
+    <file alias="default-networks.json">/Users/ha/work/Qt/aza-desktop/resources/default-networks.json</file>
+    <file alias="fleets.json">/Users/ha/work/Qt/aza-desktop/resources/fleets.json</file>
+    <file alias="infura_key">/Users/ha/work/Qt/aza-desktop/resources/infura_key</file>
+    <file alias="node-config.json">/Users/ha/work/Qt/aza-desktop/resources/node-config.json</file>
+  </qresource>
+</RCC>
+

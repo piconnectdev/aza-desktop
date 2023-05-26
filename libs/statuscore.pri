@@ -45,18 +45,22 @@ SOURCES += $$files("$$PWD/Helpers/*.cpp", true)
 SOURCES += $$files("$$PWD/StatusGoQt/src/*.cpp", true)
 SOURCES += $$files("$$PWD/Wallet/src/*.cpp", true)
 
-QML_IMPORT_PATH += $$PWD/ApplicationCore \
-                  $$PWD/ChatSection \
-                  $$PWD/Helpers \
-                  $$PWD/Onboarding \
-                  $$PWD/StatusGoQt \
-                  $$PWD/Wallet
+enable_qml_internal {
+#QML_IMPORT_PATH += $$PWD/ApplicationCore \
+#                  $$PWD/ChatSection \
+#                  $$PWD/Helpers \
+#                  $$PWD/Onboarding \
+#                  $$PWD/StatusGoQt \
+#                  $$PWD/Wallet
 
-OTHER_FILES += $$files("$$PWD/*qmldir", true)
-OTHER_FILES += $$files("$$PWD/*.qml", true)
-OTHER_FILES += $$files("$$PWD/*.js", true)
+#OTHER_FILES += $$files("$$PWD/*qmldir", true)
+#OTHER_FILES += $$files("$$PWD/*.qml", true)
+#OTHER_FILES += $$files("$$PWD/*.js", true)
+}
+#OTHER_FILES += $$files("$$PWD/Assets/*qmldir", true)
+#OTHER_FILES += $$files("$$PWD/Assets/*.qml", true)
+#OTHER_FILES += $$files("$$PWD/Assets/*.js", true)
 
-#OTHER_FILES += $$files("$$PWD/Assets/qml/*.qml", true)
 #OTHER_FILES += $$files("$$PWD/ApplicationCore/*qmldir", true)
 #OTHER_FILES += $$files("$$PWD/ApplicationCore/*.qml", true)
 #OTHER_FILES += $$files("$$PWD/ApplicationCore/*.js", true)
@@ -81,9 +85,4 @@ OTHER_FILES += $$files("$$PWD/*.js", true)
 #OTHER_FILES += $$files("$$PWD/Wallet/*.qml", true)
 #OTHER_FILES += $$files("$$PWD/Wallet/*.js", true)
 
-OTHER_FILES += $$PWD/ApplicationCore/CMakeLists.txt
-OTHER_FILES += $$PWD/ChatSection/CMakeLists.txt
-OTHER_FILES += $$PWD/Helpers/CMakeLists.txt
-OTHER_FILES += $$PWD/Onboarding/CMakeLists.txt
-OTHER_FILES += $$PWD/StatusGoQt/CMakeLists.txt
-OTHER_FILES += $$PWD/Wallet/CMakeLists.txt
+OTHER_FILES += $$files("$$PWD/CMakeLists.txt", true)

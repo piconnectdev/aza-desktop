@@ -1,0 +1,15 @@
+<RCC>
+  <qresource prefix="/Status/Application/">
+    <file alias="qml/main.qml">/Users/ha/work/Qt/aza-desktop/app/qml/main.qml</file>
+    <file alias="qml/Status/Application/Decorators/SplashScreen.qml">/Users/ha/work/Qt/aza-desktop/app/qml/Status/Application/Decorators/SplashScreen.qml</file>
+    <file alias="qml/Status/Application/MainView/MainView.qml">/Users/ha/work/Qt/aza-desktop/app/qml/Status/Application/MainView/MainView.qml</file>
+    <file alias="qml/Status/Application/MainView/StatusApplicationSections.qml">/Users/ha/work/Qt/aza-desktop/app/qml/Status/Application/MainView/StatusApplicationSections.qml</file>
+    <file alias="qml/Status/Application/Settings/ApplicationSettings.qml">/Users/ha/work/Qt/aza-desktop/app/qml/Status/Application/Settings/ApplicationSettings.qml</file>
+    <file alias="qml/Status/Application/System/StatusTrayIcon.qml">/Users/ha/work/Qt/aza-desktop/app/qml/Status/Application/System/StatusTrayIcon.qml</file>
+    <file alias="qml/Status/Application/Workflows/CloseApplicationHandler.qml">/Users/ha/work/Qt/aza-desktop/app/qml/Status/Application/Workflows/CloseApplicationHandler.qml</file>
+    <file alias="qml/Status/Application/StatusContentView.qml">/Users/ha/work/Qt/aza-desktop/app/qml/Status/Application/StatusContentView.qml</file>
+    <file alias="qml/Status/Application/MainShortcuts.qml">/Users/ha/work/Qt/aza-desktop/app/qml/Status/Application/MainShortcuts.qml</file>
+    <file alias="qml/Status/Application/StatusWindow.qml">/Users/ha/work/Qt/aza-desktop/app/qml/Status/Application/StatusWindow.qml</file>
+  </qresource>
+</RCC>
+

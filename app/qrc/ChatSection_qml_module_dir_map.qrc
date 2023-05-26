@@ -1,0 +1,6 @@
+<RCC>
+  <qresource prefix="/">
+    <file alias="/Status/ChatSection">../build/Status/ChatSection</file>
+
+  </qresource>
+</RCC>

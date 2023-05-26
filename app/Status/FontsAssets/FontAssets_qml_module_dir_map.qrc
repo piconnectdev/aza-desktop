@@ -1,0 +1,6 @@
+<RCC>
+  <qresource prefix="/">
+    <file alias="/Status/FontsAssets">/Users/ha/work/Qt/aza-desktop/build/Status/FontsAssets</file>
+
+  </qresource>
+</RCC>

@@ -1,0 +1,6 @@
+<RCC>
+  <qresource prefix="/Status/TestHelpers">
+    <file alias="qmldir">../build/Status/TestHelpers/qmldir</file>
+  </qresource>
+</RCC>
+

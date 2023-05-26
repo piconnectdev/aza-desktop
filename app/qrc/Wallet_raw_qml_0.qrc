@@ -1,0 +1,14 @@
+<RCC>
+  <qresource prefix="/Status/Wallet/">
+    <file alias="qml/Status/Wallet/NewAccount/AddWatchOnlyAccountView.qml">/Users/ha/work/Qt/aza-desktop/libs/Wallet/qml/Status/Wallet/NewAccount/AddWatchOnlyAccountView.qml</file>
+    <file alias="qml/Status/Wallet/NewAccount/NewWalletAccountView.qml">/Users/ha/work/Qt/aza-desktop/libs/Wallet/qml/Status/Wallet/NewAccount/NewWalletAccountView.qml</file>
+    <file alias="qml/Status/Wallet/NewAccount/TmpColorComboBox.qml">/Users/ha/work/Qt/aza-desktop/libs/Wallet/qml/Status/Wallet/NewAccount/TmpColorComboBox.qml</file>
+    <file alias="qml/Status/Wallet/AssetsPanel.qml">/Users/ha/work/Qt/aza-desktop/libs/Wallet/qml/Status/Wallet/AssetsPanel.qml</file>
+    <file alias="qml/Status/Wallet/AssetView.qml">/Users/ha/work/Qt/aza-desktop/libs/Wallet/qml/Status/Wallet/AssetView.qml</file>
+    <file alias="qml/Status/Wallet/WalletContentView.qml">/Users/ha/work/Qt/aza-desktop/libs/Wallet/qml/Status/Wallet/WalletContentView.qml</file>
+    <file alias="qml/Status/Wallet/WalletView.qml">/Users/ha/work/Qt/aza-desktop/libs/Wallet/qml/Status/Wallet/WalletView.qml</file>
+    <file alias="qml/Status/Wallet/SavedAddresses/SavedAddressesView.qml">/Users/ha/work/Qt/aza-desktop/libs/Wallet/qml/Status/Wallet/SavedAddresses/SavedAddressesView.qml</file>
+    <file alias="qml/Status/Wallet/SavedAddresses/AddSavedAddressesView.qml">/Users/ha/work/Qt/aza-desktop/libs/Wallet/qml/Status/Wallet/SavedAddresses/AddSavedAddressesView.qml</file>
+  </qresource>
+</RCC>
+

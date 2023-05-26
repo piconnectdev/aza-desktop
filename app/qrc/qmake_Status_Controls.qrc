@@ -1,0 +1,6 @@
+<RCC>
+  <qresource prefix="/Status/Controls">
+    <file alias="qmldir">../build/Status/Controls/qmldir</file>
+  </qresource>
+</RCC>
+

@@ -1,0 +1,8 @@
+module Status.Assets
+linktarget Assetsplugin
+optional plugin Assetsplugin
+classname Status_AssetsPlugin
+typeinfo Assets.qmltypes
+prefer :/Status/Assets/
+singleton Resources 1.0 qml/Status/Assets/Resources.qml
+

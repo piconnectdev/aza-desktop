@@ -1,0 +1,6 @@
+<RCC>
+  <qresource prefix="/Status/Controls/">
+    <file alias="StatusBanner.qml">/Users/ha/work/Qt/aza-desktop/libs/StatusQ/qml/Status/Controls/StatusBanner.qml</file>
+  </qresource>
+</RCC>
+

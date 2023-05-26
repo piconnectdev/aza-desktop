@@ -1,0 +1,6 @@
+<RCC>
+  <qresource prefix="/Status/FontsAssets">
+    <file alias="qmldir">../build/Status/FontsAssets/qmldir</file>
+  </qresource>
+</RCC>
+

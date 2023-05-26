@@ -1,0 +1,17 @@
+module Status.Onboarding
+linktarget Onboardingplugin
+optional plugin Onboardingplugin
+classname Status_OnboardingPlugin
+typeinfo Onboarding.qmltypes
+prefer :/Status/Onboarding/
+SetupNewProfilePageBase 1.0 qml/Status/Onboarding/base/SetupNewProfilePageBase.qml
+OnboardingPageBase 1.0 qml/Status/Onboarding/base/OnboardingPageBase.qml
+ConfirmPasswordPage 1.0 qml/Status/Onboarding/ConfirmPasswordPage.qml
+CreatePasswordPage 1.0 qml/Status/Onboarding/CreatePasswordPage.qml
+LoginView 1.0 qml/Status/Onboarding/LoginView.qml
+OnboardingView 1.0 qml/Status/Onboarding/OnboardingView.qml
+SetupNewProfileView 1.0 qml/Status/Onboarding/SetupNewProfileView.qml
+SetUserNameAndPicturePage 1.0 qml/Status/Onboarding/SetUserNameAndPicturePage.qml
+TempTextInput 1.0 qml/Status/Onboarding/TempTextInput.qml
+WelcomeView 1.0 qml/Status/Onboarding/WelcomeView.qml
+

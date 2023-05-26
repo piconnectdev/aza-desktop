@@ -1,0 +1,6 @@
+<RCC>
+  <qresource prefix="/Status/OnboardingTestHelpers">
+    <file alias="qmldir">../build/Status/OnboardingTestHelpers/qmldir</file>
+  </qresource>
+</RCC>
+

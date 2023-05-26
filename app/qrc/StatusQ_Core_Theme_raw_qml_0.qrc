@@ -1,0 +1,16 @@
+<RCC>
+  <qresource prefix="/Status/Core/Theme/">
+    <file alias="StatusColors.qml">/Users/ha/work/Qt/aza-desktop/libs/StatusQ/qml/Status/Core/Theme/StatusColors.qml</file>
+    <file alias="StatusDarkPalette.qml">/Users/ha/work/Qt/aza-desktop/libs/StatusQ/qml/Status/Core/Theme/StatusDarkPalette.qml</file>
+    <file alias="StatusDarkTheme.qml">/Users/ha/work/Qt/aza-desktop/libs/StatusQ/qml/Status/Core/Theme/StatusDarkTheme.qml</file>
+    <file alias="StatusLayouting.qml">/Users/ha/work/Qt/aza-desktop/libs/StatusQ/qml/Status/Core/Theme/StatusLayouting.qml</file>
+    <file alias="StatusLightPalette.qml">/Users/ha/work/Qt/aza-desktop/libs/StatusQ/qml/Status/Core/Theme/StatusLightPalette.qml</file>
+    <file alias="StatusLightTheme.qml">/Users/ha/work/Qt/aza-desktop/libs/StatusQ/qml/Status/Core/Theme/StatusLightTheme.qml</file>
+    <file alias="StatusPalette.qml">/Users/ha/work/Qt/aza-desktop/libs/StatusQ/qml/Status/Core/Theme/StatusPalette.qml</file>
+    <file alias="StatusTheme.qml">/Users/ha/work/Qt/aza-desktop/libs/StatusQ/qml/Status/Core/Theme/StatusTheme.qml</file>
+    <file alias="Style.qml">/Users/ha/work/Qt/aza-desktop/libs/StatusQ/qml/Status/Core/Theme/Style.qml</file>
+    <file alias="Theme.qml">/Users/ha/work/Qt/aza-desktop/libs/StatusQ/qml/Status/Core/Theme/Theme.qml</file>
+    <file alias="Utils.qml">/Users/ha/work/Qt/aza-desktop/libs/StatusQ/qml/Status/Core/Theme/Utils.qml</file>
+  </qresource>
+</RCC>
+

@@ -1,0 +1,7 @@
+<RCC>
+  <qresource prefix="/Status/Application/Navigation/">
+    <file alias="NavigationBarButton.qml">/Users/ha/work/Qt/aza-desktop/app/qml/Status/Application/Navigation/NavigationBarButton.qml</file>
+    <file alias="SimpleNavBarSection.qml">/Users/ha/work/Qt/aza-desktop/app/qml/Status/Application/Navigation/SimpleNavBarSection.qml</file>
+  </qresource>
+</RCC>
+

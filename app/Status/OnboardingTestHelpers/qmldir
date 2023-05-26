@@ -1,0 +1,7 @@
+module Status.OnboardingTestHelpers
+linktarget OnboardingTestHelpersplugin
+optional plugin OnboardingTestHelpersplugin
+classname Status_OnboardingTestHelpersPlugin
+typeinfo OnboardingTestHelpers.qmltypes
+prefer :/Status/OnboardingTestHelpers/
+

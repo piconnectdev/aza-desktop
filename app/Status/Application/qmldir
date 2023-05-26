@@ -1,0 +1,13 @@
+module Status.Application
+typeinfo status-desktop.qmltypes
+prefer :/Status/Application/
+SplashScreen 1.0 qml/Status/Application/Decorators/SplashScreen.qml
+MainView 1.0 qml/Status/Application/MainView/MainView.qml
+StatusApplicationSections 1.0 qml/Status/Application/MainView/StatusApplicationSections.qml
+ApplicationSettings 1.0 qml/Status/Application/Settings/ApplicationSettings.qml
+StatusTrayIcon 1.0 qml/Status/Application/System/StatusTrayIcon.qml
+CloseApplicationHandler 1.0 qml/Status/Application/Workflows/CloseApplicationHandler.qml
+StatusContentView 1.0 qml/Status/Application/StatusContentView.qml
+MainShortcuts 1.0 qml/Status/Application/MainShortcuts.qml
+StatusWindow 1.0 qml/Status/Application/StatusWindow.qml
+

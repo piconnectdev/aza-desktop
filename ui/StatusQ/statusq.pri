@@ -1,4 +1,3 @@
-#VERSION = 3.3
 CONFIG += \
           enable_decoder_1d_barcodes \
           enable_decoder_qr_code \
@@ -24,16 +23,15 @@ include($$PWD/../../vendor/qzxing/src/QZXing-components.pri)
 INCLUDEPATH+=$$PWD/../../vendor/SortFilterProxyModel
 include($$PWD/../../vendor/SortFilterProxyModel/SortFilterProxyModel.pri)
 
-
 INCLUDEPATH+=$$PWD/include
 HEADERS += $$files("$$PWD/include/*h", true)
 SOURCES += $$files("$$PWD/src/*.cpp", true)
 
 OTHER_FILES += $$files("$$PWD/*qmldir", true)
 OTHER_FILES += $$files("$$PWD/src/*.qml", true)
-#OTHER_FILES += $$files("$$PWD/*.js", true)
+OTHER_FILES += $$files("$$PWD/*.js", true)
 
-OTHER_FILES += $$PWD/CMakeLists.txt
+OTHER_FILES += $$files("$$PWD/CMakeLists.txt", true)
 
 RESOURCES+=$$PWD/src/assets.qrc
 RESOURCES+=$$PWD/src/statusq.qrc

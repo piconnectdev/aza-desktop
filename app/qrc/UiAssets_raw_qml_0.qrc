@@ -1,0 +1,15 @@
+<RCC>
+  <qresource prefix="/Status/UiAssets/">
+    <file alias="icons/status-logo-icon.svg">/Users/ha/work/Qt/aza-desktop/ui/imports/assets/icons/status-logo-icon.svg</file>
+    <file alias="icons/status-logo-dark.svg">/Users/ha/work/Qt/aza-desktop/ui/imports/assets/icons/status-logo-dark.svg</file>
+    <file alias="icons/status-logo-circle.svg">/Users/ha/work/Qt/aza-desktop/ui/imports/assets/icons/status-logo-circle.svg</file>
+    <file alias="png/traffic_lights/close.png">/Users/ha/work/Qt/aza-desktop/ui/imports/assets/png/traffic_lights/close.png</file>
+    <file alias="png/traffic_lights/close_pressed.png">/Users/ha/work/Qt/aza-desktop/ui/imports/assets/png/traffic_lights/close_pressed.png</file>
+    <file alias="png/traffic_lights/maximize.png">/Users/ha/work/Qt/aza-desktop/ui/imports/assets/png/traffic_lights/maximize.png</file>
+    <file alias="png/traffic_lights/maximize_pressed.png">/Users/ha/work/Qt/aza-desktop/ui/imports/assets/png/traffic_lights/maximize_pressed.png</file>
+    <file alias="png/traffic_lights/minimise.png">/Users/ha/work/Qt/aza-desktop/ui/imports/assets/png/traffic_lights/minimise.png</file>
+    <file alias="png/traffic_lights/minimise_pressed.png">/Users/ha/work/Qt/aza-desktop/ui/imports/assets/png/traffic_lights/minimise_pressed.png</file>
+    <file alias="png/status-logo.png">/Users/ha/work/Qt/aza-desktop/ui/imports/assets/png/status-logo.png</file>
+  </qresource>
+</RCC>
+

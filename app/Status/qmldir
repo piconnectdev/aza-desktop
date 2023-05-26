@@ -1,0 +1,7 @@
+module Status
+linktarget StatusQplugin
+optional plugin StatusQplugin
+classname StatusPlugin
+typeinfo StatusQ.qmltypes
+prefer :/Status/
+

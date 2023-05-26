@@ -1,0 +1,15 @@
+<RCC>
+  <qresource prefix="/Status/Onboarding/">
+    <file alias="qml/Status/Onboarding/base/SetupNewProfilePageBase.qml">/Users/ha/work/Qt/aza-desktop/libs/Onboarding/qml/Status/Onboarding/base/SetupNewProfilePageBase.qml</file>
+    <file alias="qml/Status/Onboarding/base/OnboardingPageBase.qml">/Users/ha/work/Qt/aza-desktop/libs/Onboarding/qml/Status/Onboarding/base/OnboardingPageBase.qml</file>
+    <file alias="qml/Status/Onboarding/ConfirmPasswordPage.qml">/Users/ha/work/Qt/aza-desktop/libs/Onboarding/qml/Status/Onboarding/ConfirmPasswordPage.qml</file>
+    <file alias="qml/Status/Onboarding/CreatePasswordPage.qml">/Users/ha/work/Qt/aza-desktop/libs/Onboarding/qml/Status/Onboarding/CreatePasswordPage.qml</file>
+    <file alias="qml/Status/Onboarding/LoginView.qml">/Users/ha/work/Qt/aza-desktop/libs/Onboarding/qml/Status/Onboarding/LoginView.qml</file>
+    <file alias="qml/Status/Onboarding/OnboardingView.qml">/Users/ha/work/Qt/aza-desktop/libs/Onboarding/qml/Status/Onboarding/OnboardingView.qml</file>
+    <file alias="qml/Status/Onboarding/SetupNewProfileView.qml">/Users/ha/work/Qt/aza-desktop/libs/Onboarding/qml/Status/Onboarding/SetupNewProfileView.qml</file>
+    <file alias="qml/Status/Onboarding/SetUserNameAndPicturePage.qml">/Users/ha/work/Qt/aza-desktop/libs/Onboarding/qml/Status/Onboarding/SetUserNameAndPicturePage.qml</file>
+    <file alias="qml/Status/Onboarding/TempTextInput.qml">/Users/ha/work/Qt/aza-desktop/libs/Onboarding/qml/Status/Onboarding/TempTextInput.qml</file>
+    <file alias="qml/Status/Onboarding/WelcomeView.qml">/Users/ha/work/Qt/aza-desktop/libs/Onboarding/qml/Status/Onboarding/WelcomeView.qml</file>
+  </qresource>
+</RCC>
+

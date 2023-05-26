@@ -1,0 +1,6 @@
+<RCC>
+  <qresource prefix="/">
+    <file alias="/Status/StaticConfig">/Users/ha/work/Qt/aza-desktop/build/Status/StaticConfig</file>
+
+  </qresource>
+</RCC>

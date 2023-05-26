@@ -1,0 +1,6 @@
+<RCC>
+  <qresource prefix="/">
+    <file alias="/Status/OnboardingTestHelpers">/Users/ha/work/Qt/aza-desktop/build/Status/OnboardingTestHelpers</file>
+
+  </qresource>
+</RCC>

@@ -1,0 +1,8 @@
+module Status.Containers
+linktarget StatusQ_Containersplugin
+optional plugin StatusQ_Containersplugin
+classname Status_ContainersPlugin
+typeinfo StatusQ_Containers.qmltypes
+prefer :/Status/Containers/
+LayoutSpacer 1.0 LayoutSpacer.qml
+

@@ -1,0 +1,8 @@
+module Status.Core
+linktarget StatusQ_Coreplugin
+optional plugin StatusQ_Coreplugin
+classname Status_CorePlugin
+typeinfo StatusQ_Core.qmltypes
+prefer :/Status/Core/
+StatusBaseText 1.0 StatusBaseText.qml
+

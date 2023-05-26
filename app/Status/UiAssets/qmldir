@@ -1,0 +1,7 @@
+module Status.UiAssets
+linktarget UiAssetsplugin
+optional plugin UiAssetsplugin
+classname Status_UiAssetsPlugin
+typeinfo UiAssets.qmltypes
+prefer :/Status/UiAssets/
+

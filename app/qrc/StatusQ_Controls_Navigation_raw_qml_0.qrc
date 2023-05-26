@@ -1,0 +1,12 @@
+<RCC>
+  <qresource prefix="/Status/Controls/Navigation/">
+    <file alias="ApplicationContentView.qml">/Users/ha/work/Qt/aza-desktop/libs/StatusQ/qml/Status/Controls/Navigation/ApplicationContentView.qml</file>
+    <file alias="ApplicationSection.qml">/Users/ha/work/Qt/aza-desktop/libs/StatusQ/qml/Status/Controls/Navigation/ApplicationSection.qml</file>
+    <file alias="ApplicationState.qml">/Users/ha/work/Qt/aza-desktop/libs/StatusQ/qml/Status/Controls/Navigation/ApplicationState.qml</file>
+    <file alias="MacTrafficLights.qml">/Users/ha/work/Qt/aza-desktop/libs/StatusQ/qml/Status/Controls/Navigation/MacTrafficLights.qml</file>
+    <file alias="NavigationBar.qml">/Users/ha/work/Qt/aza-desktop/libs/StatusQ/qml/Status/Controls/Navigation/NavigationBar.qml</file>
+    <file alias="NavigationBarSection.qml">/Users/ha/work/Qt/aza-desktop/libs/StatusQ/qml/Status/Controls/Navigation/NavigationBarSection.qml</file>
+    <file alias="PanelAndContentBase.qml">/Users/ha/work/Qt/aza-desktop/libs/StatusQ/qml/Status/Controls/Navigation/PanelAndContentBase.qml</file>
+  </qresource>
+</RCC>
+

@@ -1,0 +1,8 @@
+<RCC>
+  <qresource prefix="/Status/ChatSection/">
+    <file alias="qml/Status/ChatSection/NavigationView.qml">/Users/ha/work/Qt/aza-desktop/libs/ChatSection/qml/Status/ChatSection/NavigationView.qml</file>
+    <file alias="qml/Status/ChatSection/ContentView.qml">/Users/ha/work/Qt/aza-desktop/libs/ChatSection/qml/Status/ChatSection/ContentView.qml</file>
+    <file alias="qml/Status/ChatSection/MainView.qml">/Users/ha/work/Qt/aza-desktop/libs/ChatSection/qml/Status/ChatSection/MainView.qml</file>
+  </qresource>
+</RCC>
+

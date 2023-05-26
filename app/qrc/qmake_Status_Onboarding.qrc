@@ -1,0 +1,6 @@
+<RCC>
+  <qresource prefix="/Status/Onboarding">
+    <file alias="qmldir">../build/Status/Onboarding/qmldir</file>
+  </qresource>
+</RCC>
+

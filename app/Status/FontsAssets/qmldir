@@ -1,0 +1,7 @@
+module Status.FontsAssets
+linktarget FontAssetsplugin
+optional plugin FontAssetsplugin
+classname Status_FontsAssetsPlugin
+typeinfo FontAssets.qmltypes
+prefer :/Status/FontsAssets/
+

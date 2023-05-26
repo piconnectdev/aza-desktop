@@ -1,0 +1,18 @@
+module Status.Core.Theme
+linktarget StatusQ_Core_Themeplugin
+optional plugin StatusQ_Core_Themeplugin
+classname Status_Core_ThemePlugin
+typeinfo StatusQ_Core_Theme.qmltypes
+prefer :/Status/Core/Theme/
+singleton StatusColors 1.0 StatusColors.qml
+StatusDarkPalette 1.0 StatusDarkPalette.qml
+StatusDarkTheme 1.0 StatusDarkTheme.qml
+StatusLayouting 1.0 StatusLayouting.qml
+StatusLightPalette 1.0 StatusLightPalette.qml
+StatusLightTheme 1.0 StatusLightTheme.qml
+StatusPalette 1.0 StatusPalette.qml
+StatusTheme 1.0 StatusTheme.qml
+singleton Style 1.0 Style.qml
+singleton Theme 1.0 Theme.qml
+singleton Utils 1.0 Utils.qml
+

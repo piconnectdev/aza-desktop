@@ -6,7 +6,7 @@
 
 #include <iostream>
 
-#include "BuildConfiguration.h"
+//#include "BuildConfiguration.h"
 
 namespace Status::Helpers
 {

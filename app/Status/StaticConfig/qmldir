@@ -1,0 +1,7 @@
+module Status.StaticConfig
+linktarget StatusGoConfigplugin
+optional plugin StatusGoConfigplugin
+classname Status_StaticConfigPlugin
+typeinfo StatusGoConfig.qmltypes
+prefer :/Status/StaticConfig/
+

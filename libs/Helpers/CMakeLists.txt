@@ -6,7 +6,7 @@ project(Helpers
     VERSION 0.1.0
     LANGUAGES CXX)
 
-find_package(nlohmann_json 3.10.5 REQUIRED)
+#find_package(nlohmann_json 3.10.5 REQUIRED)
 
 set(QT_NO_CREATE_VERSIONLESS_FUNCTIONS true)
 
@@ -51,7 +51,7 @@ target_include_directories(Helpers
 
 target_link_libraries(Helpers
     PUBLIC
-        nlohmann_json::nlohmann_json
+    #nlohmann_json::nlohmann_json
 
     PRIVATE
         Qt6::Quick

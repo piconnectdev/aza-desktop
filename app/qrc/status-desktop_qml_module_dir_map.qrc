@@ -1,0 +1,6 @@
+<RCC>
+  <qresource prefix="/">
+    <file alias="/Status/Application">../build/Status/Application</file>
+
+  </qresource>
+</RCC>

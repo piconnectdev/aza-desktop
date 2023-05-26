@@ -1,0 +1,16 @@
+module Status.Wallet
+linktarget Walletplugin
+optional plugin Walletplugin
+classname Status_WalletPlugin
+typeinfo Wallet.qmltypes
+prefer :/Status/Wallet/
+AddWatchOnlyAccountView 1.0 qml/Status/Wallet/NewAccount/AddWatchOnlyAccountView.qml
+NewWalletAccountView 1.0 qml/Status/Wallet/NewAccount/NewWalletAccountView.qml
+TmpColorComboBox 1.0 qml/Status/Wallet/NewAccount/TmpColorComboBox.qml
+AssetsPanel 1.0 qml/Status/Wallet/AssetsPanel.qml
+AssetView 1.0 qml/Status/Wallet/AssetView.qml
+WalletContentView 1.0 qml/Status/Wallet/WalletContentView.qml
+WalletView 1.0 qml/Status/Wallet/WalletView.qml
+SavedAddressesView 1.0 qml/Status/Wallet/SavedAddresses/SavedAddressesView.qml
+AddSavedAddressesView 1.0 qml/Status/Wallet/SavedAddresses/AddSavedAddressesView.qml
+

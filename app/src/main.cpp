@@ -13,7 +13,12 @@
 using namespace Status;
 
 void setApplicationInformation(QGuiApplication& app);
-
+#if !defined BUILD_PROJECT_ORGANIZATION_NAME
+#define BUILD_PROJECT_NAME "Status"
+#define BUILD_PROJECT_ORGANIZATION_NAME "Status"
+#define BUILD_PROJECT_ORGANIZATION_DOMAIN "Status"
+#define BUILD_PROJECT_APPLICATION_NAME "Status"
+#endif
 int main(int argc, char* argv[])
 {
     //qInstallMessageHandler(Helpers::logFormatter);

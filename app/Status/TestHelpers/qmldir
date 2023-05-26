@@ -1,0 +1,7 @@
+module Status.TestHelpers
+linktarget TestHelpersplugin
+optional plugin TestHelpersplugin
+classname Status_TestHelpersPlugin
+typeinfo TestHelpers.qmltypes
+prefer :/Status/TestHelpers/
+

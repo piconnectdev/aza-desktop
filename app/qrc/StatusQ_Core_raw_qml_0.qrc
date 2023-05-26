@@ -1,0 +1,6 @@
+<RCC>
+  <qresource prefix="/Status/Core/">
+    <file alias="StatusBaseText.qml">/Users/ha/work/Qt/aza-desktop/libs/StatusQ/qml/Status/Core/StatusBaseText.qml</file>
+  </qresource>
+</RCC>
+

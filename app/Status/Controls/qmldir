@@ -1,0 +1,8 @@
+module Status.Controls
+linktarget StatusQ_Controlsplugin
+optional plugin StatusQ_Controlsplugin
+classname Status_ControlsPlugin
+typeinfo StatusQ_Controls.qmltypes
+prefer :/Status/Controls/
+StatusBanner 1.0 StatusBanner.qml
+

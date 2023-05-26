@@ -1,0 +1,14 @@
+module Status.Controls.Navigation
+linktarget StatusQ_Controls_Navigationplugin
+optional plugin StatusQ_Controls_Navigationplugin
+classname Status_Controls_NavigationPlugin
+typeinfo StatusQ_Controls_Navigation.qmltypes
+prefer :/Status/Controls/Navigation/
+ApplicationContentView 1.0 ApplicationContentView.qml
+ApplicationSection 1.0 ApplicationSection.qml
+ApplicationState 1.0 ApplicationState.qml
+MacTrafficLights 1.0 MacTrafficLights.qml
+NavigationBar 1.0 NavigationBar.qml
+NavigationBarSection 1.0 NavigationBarSection.qml
+PanelAndContentBase 1.0 PanelAndContentBase.qml
+

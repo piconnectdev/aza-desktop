@@ -1,0 +1,6 @@
+<RCC>
+  <qresource prefix="/Status/Containers/">
+    <file alias="LayoutSpacer.qml">/Users/ha/work/Qt/aza-desktop/libs/StatusQ/qml/Status/Containers/LayoutSpacer.qml</file>
+  </qresource>
+</RCC>
+

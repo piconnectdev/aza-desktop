@@ -1,0 +1,6 @@
+<RCC>
+  <qresource prefix="/Status/Application">
+    <file alias="qmldir">../build/Status/Application/qmldir</file>
+  </qresource>
+</RCC>
+

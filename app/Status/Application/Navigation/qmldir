@@ -1,0 +1,9 @@
+module Status.Application.Navigation
+linktarget Status_Application_Navigationplugin
+optional plugin Status_Application_Navigationplugin
+classname Status_Application_NavigationPlugin
+typeinfo Status_Application_Navigation.qmltypes
+prefer :/Status/Application/Navigation/
+NavigationBarButton 1.0 NavigationBarButton.qml
+SimpleNavBarSection 1.0 SimpleNavBarSection.qml
+

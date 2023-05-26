@@ -1,0 +1,6 @@
+<RCC>
+  <qresource prefix="/Status/FontsAssets/">
+    <file alias="Inter/Inter-Regular.otf">/Users/ha/work/Qt/aza-desktop/ui/fonts/Inter/Inter-Regular.otf</file>
+  </qresource>
+</RCC>
+

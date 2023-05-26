@@ -1,0 +1,10 @@
+module Status.ChatSection
+linktarget ChatSectionplugin
+optional plugin ChatSectionplugin
+classname Status_ChatSectionPlugin
+typeinfo ChatSection.qmltypes
+prefer :/Status/ChatSection/
+NavigationView 1.0 qml/Status/ChatSection/NavigationView.qml
+ContentView 1.0 qml/Status/ChatSection/ContentView.qml
+MainView 1.0 qml/Status/ChatSection/MainView.qml
+

@@ -1,0 +1,6 @@
+<RCC>
+  <qresource prefix="/Status/Assets/">
+    <file alias="qml/Status/Assets/Resources.qml">/Users/ha/work/Qt/aza-desktop/libs/Assets/qml/Status/Assets/Resources.qml</file>
+  </qresource>
+</RCC>
+

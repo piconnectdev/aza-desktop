@@ -1,0 +1,7 @@
+module Status.ApplicationCore
+linktarget ApplicationCoreplugin
+optional plugin ApplicationCoreplugin
+classname Status_ApplicationCorePlugin
+typeinfo ApplicationCore.qmltypes
+prefer :/Status/ApplicationCore/
+

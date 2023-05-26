@@ -1,0 +1,6 @@
+<RCC>
+  <qresource prefix="/">
+    <file alias="/Status/Application/Navigation">/Users/ha/work/Qt/aza-desktop/build/Status/Application/Navigation</file>
+
+  </qresource>
+</RCC>
