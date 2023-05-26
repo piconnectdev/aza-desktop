@@ -612,7 +612,7 @@ proc inviteUsersToCommunity*(self: Controller, pubKeys: string, inviteMessage: s
 proc reorderCommunityCategories*(self: Controller, categoryId: string, position: int) =
   self.communityService.reorderCommunityCategories(self.sectionId, categoryId, position)
 
-proc reorderCommunityChat*(self: Controller, categoryId: string, chatId: string, position: int): string =
+proc reorderCommunityChat*(self: Controller, categoryId: string, chatId: string, position: int) =
   self.communityService.reorderCommunityChat(self.sectionId, categoryId, chatId, position)
 
 proc getRenderedText*(self: Controller, parsedTextArray: seq[ParsedText], communityChats: seq[ChatDto]): string =
@@ -637,8 +637,9 @@ proc ownsCollectible*(self: Controller, chainId: int, contractAddress: string, t
   let addresses = self.walletAccountService.getWalletAccounts().filter(a => a.walletType != WalletTypeWatch).map(a => a.address)
 
   for address in addresses:
-    let data = self.collectibleService.getOwnedCollectibles(chainId, address)
-    for collectible in data.collectibles:
+    let data = self.collectibleService.getOwnedCollectibles(chainId, @[address])
+    
+    for collectible in data[0].collectibles:
       if collectible.id.contractAddress == contractAddress.toLowerAscii:
         return true
 

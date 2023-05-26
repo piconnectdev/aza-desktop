@@ -166,6 +166,8 @@ const SIGNAL_ACCEPT_REQUEST_TO_JOIN_LOADING* = "acceptRequestToJoinLoading"
 const SIGNAL_ACCEPT_REQUEST_TO_JOIN_FAILED* = "acceptRequestToJoinFailed"
 const SIGNAL_ACCEPT_REQUEST_TO_JOIN_FAILED_NO_PERMISSION* = "acceptRequestToJoinFailedNoPermission"
 
+const SIGNAL_COMMUNITY_INFO_ALREADY_REQUESTED* = "communityInfoAlreadyRequested"
+
 const TOKEN_PERMISSIONS_ADDED = "tokenPermissionsAdded"
 const TOKEN_PERMISSIONS_MODIFIED = "tokenPermissionsModified"
 
@@ -399,22 +401,22 @@ QtObject:
 
   proc checkForCategoryPropertyUpdates(self: Service, community: CommunityDto, prev_community: CommunityDto) =
     for category in community.categories:
-          # id is present
-          let index = findIndexById(category.id, prev_community.categories)
-          if index == -1:
-            continue
-          # but something is different
-          let prev_category = prev_community.categories[index]
+      # id is present
+      let index = findIndexById(category.id, prev_community.categories)
+      if index == -1:
+        continue
+      # but something is different
+      let prev_category = prev_community.categories[index]
 
-          if category.position != prev_category.position:
-            self.events.emit(SIGNAL_COMMUNITY_CATEGORY_REORDERED,
-              CommunityCategoryOrderArgs(
-                communityId: community.id,
-                categoryId: category.id,
-                position: category.position))
-          if category.name != prev_category.name:
-            self.events.emit(SIGNAL_COMMUNITY_CATEGORY_NAME_EDITED,
-              CommunityCategoryArgs(communityId: community.id, category: category))
+      if category.position != prev_category.position:
+        self.events.emit(SIGNAL_COMMUNITY_CATEGORY_REORDERED,
+          CommunityCategoryOrderArgs(
+            communityId: community.id,
+            categoryId: category.id,
+            position: category.position))
+      if category.name != prev_category.name:
+        self.events.emit(SIGNAL_COMMUNITY_CATEGORY_NAME_EDITED,
+          CommunityCategoryArgs(communityId: community.id, category: category))
 
     
   proc handleCommunityUpdates(self: Service, communities: seq[CommunityDto], updatedChats: seq[ChatDto], removedChats: seq[string]) =
@@ -1313,6 +1315,10 @@ QtObject:
         let error = Json.decode($response.error, RpcError)
         raise newException(RpcException, "Error reordering community category: " & error.message)
 
+      let updatedCommunity = response.result["communities"][0].toCommunityDto()
+      # Update community categories
+      self.checkForCategoryPropertyUpdates(updatedCommunity, self.communities[communityId])
+      self.communities[communityId].categories = updatedCommunity.categories
     except Exception as e:
       error "Error reordering category channel", msg = e.msg, communityId, categoryId, position
 
@@ -1453,6 +1459,7 @@ QtObject:
 
     if communityId in self.requestedCommunityIds:
       info "requestCommunityInfo: skipping as already requested", communityId
+      self.events.emit(SIGNAL_COMMUNITY_INFO_ALREADY_REQUESTED, Args())
       return
 
     self.requestedCommunityIds.incl(communityId)

@@ -174,15 +174,6 @@ QtObject:
   proc getItemIdxById*(self: Model, id: string): int =
     return getItemIdxById(self.items, id)
 
-  proc getClosestCategoryAtIndex*(self: Model, index: int): tuple[categoryIem: Item, categoryIndex: int] =
-    if index > self.items.len:
-      return (Item(), -1)
-    # Count down from the index to 0 and find the first category
-    for i in countdown(index - 1, 0):
-      if self.items[i].isCategory:
-        return (self.items[i], i)
-    return (Item(), -1)
-
   proc cmpChatsAndCats*(x, y: Item): int =
     # Sort proc to compare chats and categories
     # Compares first by categoryPosition, then by position
@@ -532,6 +523,8 @@ QtObject:
       categoryId: string,
       position: int,
     ) =
+    self.beginResetModel()
+
     for i in 0 ..< self.items.len:
       var item = self.items[i]
       if item.categoryId != categoryId:
@@ -539,8 +532,9 @@ QtObject:
       if item.categoryPosition == position:
         continue
       item.categoryPosition = position
-      let modelIndex = self.createIndex(i, 0, nil)
-      self.dataChanged(modelIndex, modelIndex, @[ModelRole.CategoryPosition.int])
+
+    self.items.sort(cmpChatsAndCats)
+    self.endResetModel()
 
   proc clearItems*(self: Model) =
     self.beginResetModel()
