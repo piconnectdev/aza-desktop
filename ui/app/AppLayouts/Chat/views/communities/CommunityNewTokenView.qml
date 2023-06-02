@@ -34,11 +34,11 @@ StatusScrollView {
     property string chainIcon
     property var tokensModel
 
-    // Collectible properties
+    // Collectible properties (ERC721)
     readonly property alias notTransferable: transferableChecker.checked
     readonly property alias selfDestruct: selfDestructChecker.checked
 
-    // Asset properties
+    // Asset properties (ERC20)
     readonly property int assetDecimals: assetDecimalsInput.text ? parseInt(assetDecimalsInput.text) : 0
 
     // Network related properties:
@@ -70,8 +70,6 @@ StatusScrollView {
         readonly property int imageSelectorRectWidth: root.isAssetView ? 128 : 290
     }
 
-    contentWidth: mainLayout.width
-    contentHeight: mainLayout.height
     padding: 0
 
     ColumnLayout {
@@ -209,7 +207,7 @@ StatusScrollView {
             id: assetDecimalsInput
 
             visible: root.isAssetView
-            label: qsTr("Decimals")
+            label: qsTr("Decimals (DP)")
             charLimit: 2
             charLimitLabel: qsTr("Max 10")
             placeholderText: "2"

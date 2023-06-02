@@ -92,7 +92,7 @@ QtObject:
       let data = LocalPairingEventArgs(
         eventType: signalData.eventType,
         action: signalData.action,
-        account: signalData.account,
+        accountData: signalData.accountData,
         installation: signalData.installation,
         error: signalData.error)
       self.updateLocalPairingStatus(data)
@@ -169,7 +169,7 @@ QtObject:
     let data = LocalPairingEventArgs(
       eventType: EventConnectionError,
       action: ActionUnknown,
-      account: AccountDto(),
+      accountData: LocalPairingAccountData(),
       error: errorDescription)
     self.updateLocalPairingStatus(data)
 
@@ -188,6 +188,7 @@ QtObject:
         "timeout": 5 * 60 * 1000,
       }
     }
+    self.localPairingStatus.reset()
     self.localPairingStatus.mode = LocalPairingMode.Sender
     return status_go.getConnectionStringForBootstrappingAnotherDevice($configJSON)
 
@@ -204,6 +205,7 @@ QtObject:
       },
       "clientConfig": %* {}
     }
+    self.localPairingStatus.reset()
     self.localPairingStatus.mode = LocalPairingMode.Receiver
 
     let arg = AsyncInputConnectionStringArg(

@@ -14,9 +14,13 @@ QtObject {
     property var allNetworks: networksModule.all
 
     signal deployFeeUpdated(var ethCurrency, var fiatCurrency, int error)
+    signal selfDestructFeeUpdated(var ethCurrency, var fiatCurrency, int error)
+
     signal deploymentStateChanged(string communityId, int status, string url)
-    signal selfDestructFeeUpdated(string value) // TO BE REMOVED
+
     signal burnFeeUpdated(string value) // TO BE REMOVED
+
+    signal remoteDestructStateChanged(string communityId, string tokenName, int status, string url)
 
     // Minting tokens:
     function deployCollectible(communityId, accountAddress, name, symbol, description, supply,
@@ -29,13 +33,28 @@ QtObject {
                                                     infiniteSupply, transferable, selfDestruct, chainId, artworkSource/*instead: jsonArtworkFile*/)
     }
 
+    function deployAsset(communityId, accountAddress, name, symbol, description, supply,
+                         infiniteSupply, decimals, chainId, artworkSource, accountName, artworkCropRect)
+    {
+        // TODO: Backend needs to create new role `accountName` and update this call accordingly
+        // TODO: Backend needs to modify the call to expect an image JSON file with cropped artwork information:
+        const jsonArtworkFile = Utils.getImageAndCropInfoJson(artworkSource, artworkCropRect)
+        console.log("TODO: Deploy Asset backend!")
+    }
+
     readonly property Connections connections: Connections {
       target: communityTokensModuleInst
       function onDeployFeeUpdated(ethCurrency, fiatCurrency, errorCode) {
           root.deployFeeUpdated(ethCurrency, fiatCurrency, errorCode)
       }
+      function onSelfDestructFeeUpdated(ethCurrency, fiatCurrency, errorCode) {
+          root.selfDestructFeeUpdated(ethCurrency, fiatCurrency, errorCode)
+      }
       function onDeploymentStateChanged(communityId, status, url) {
           root.deploymentStateChanged(communityId, status, url)
+      }
+      function onRemoteDestructStateChanged(communityId, tokenName, status, url) {
+          root.remoteDestructStateChanged(communityId, tokenName, status, url)
       }
     }
 
@@ -43,17 +62,12 @@ QtObject {
         communityTokensModuleInst.computeDeployFee(chainId, accountAddress)
     }
 
-    // Remotely destruct:
-    function computeSelfDestructFee(chainId) {
-        // TODO BACKEND
-        root.selfDestructFeeUpdated("0,0005 ETH")
-        console.warn("TODO: Compute self-destruct fee backend")
+    function computeSelfDestructFee(selfDestructTokensList, contractUniqueKey) {
+        communityTokensModuleInst.computeSelfDestructFee(JSON.stringify(selfDestructTokensList), contractUniqueKey)
     }
 
-    function remoteSelfDestructCollectibles(selfDestructTokensList, chainId, accountName, accountAddress) {
-        // TODO BACKEND
-        // selfDestructTokensList is a js array with properties: `walletAddress` and `amount`
-        console.warn("TODO: Remote self-destruct collectible backend")
+    function remoteSelfDestructCollectibles(communityId, selfDestructTokensList, contractUniqueKey) {
+        communityTokensModuleInst.selfDestructCollectibles(communityId, JSON.stringify(selfDestructTokensList), contractUniqueKey)
     }
 
     // Burn:

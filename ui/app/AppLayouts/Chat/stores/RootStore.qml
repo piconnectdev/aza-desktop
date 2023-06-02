@@ -488,7 +488,7 @@ QtObject {
         const result = getLinkTitleAndCb(link)
 
         return {
-            site: "https://join.status.im",
+            site: Constants.externalStatusLinkWithHttps,
             title: result.title,
             communityId: result.communityId,
             fetching: result.fetching,
@@ -699,7 +699,7 @@ QtObject {
 
         readonly property bool isUserAllowedToSendMessage: {
             if (_d.activeChatType === Constants.chatType.oneToOne && _d.oneToOneChatContact) {
-                return _d.oneToOneChatContact.contactRequestState == Constants.ContactRequestState.Mutual
+                return _d.oneToOneChatContact.contactRequestState === Constants.ContactRequestState.Mutual
             }
             else if(_d.activeChatType === Constants.chatType.privateGroupChat) {
                 return _d.amIMember

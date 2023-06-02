@@ -802,10 +802,11 @@ QtObject {
 
     readonly property int repeatHeaderInterval: 2
 
-    readonly property string deepLinkPrefix: 'status-im://'
-    readonly property string joinStatusLink: 'join.status.im'
-    readonly property string communityLinkPrefix: 'https://join.status.im/c/'
-    readonly property string userLinkPrefix: 'https://join.status.im/u/'
+    readonly property string deepLinkPrefix: 'status-app://'
+    readonly property string externalStatusLink: 'status.app'
+    readonly property string externalStatusLinkWithHttps: 'https://' + externalStatusLink
+    readonly property string communityLinkPrefix: externalStatusLinkWithHttps + '/c/'
+    readonly property string userLinkPrefix: externalStatusLinkWithHttps + '/u/'
     readonly property string statusLinkPrefix: 'https://status.im/'
 
     readonly property int maxUploadFiles: 5
@@ -893,7 +894,8 @@ QtObject {
         Everyone = 4
     }
 
-    enum BackendProcessState {
+    // refers to ContractTransactionStatus and DeployState in Nim
+    enum ContractTransactionStatus {
         Failed,
         InProgress,
         Completed,
@@ -996,5 +998,14 @@ QtObject {
         MembershipRequests,
         RejectedMembers,
         BannedMembers
+    }
+
+    enum MutingVariations {
+        For15min = 1,
+        For1hr = 2,
+        For8hr = 3,
+        For1week = 4,
+        TillUnmuted = 5,
+        For1min = 6
     }
 }

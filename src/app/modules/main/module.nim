@@ -236,7 +236,8 @@ method delete*[T](self: Module[T]) =
 proc createTokenItem[T](self: Module[T], tokenDto: CommunityTokenDto) : TokenItem =
   let network = self.controller.getNetwork(tokenDto.chainId)
   let tokenOwners = self.controller.getCommunityTokenOwners(tokenDto.communityId, tokenDto.chainId, tokenDto.address)
-  result = initTokenItem(tokenDto, network, tokenOwners)
+  let ownerAddressName = self.controller.getCommunityTokenOwnerName(tokenDto.chainId, tokenDto.address)
+  result = initTokenItem(tokenDto, network, tokenOwners, ownerAddressName)
 
 proc createChannelGroupItem[T](self: Module[T], channelGroup: ChannelGroupDto): SectionItem =
   let isCommunity = channelGroup.channelGroupType == ChannelGroupType.Community
@@ -284,17 +285,17 @@ proc createChannelGroupItem[T](self: Module[T], channelGroup: ChannelGroupDto): 
       let contactDetails = self.controller.getContactDetails(member.id)
       result = initMemberItem(
         pubKey = member.id,
-        displayName = contactDetails.details.displayName,
-        ensName = contactDetails.details.name,
-        isEnsVerified = contactDetails.details.ensVerified,
-        localNickname = contactDetails.details.localNickname,
-        alias = contactDetails.details.alias,
+        displayName = contactDetails.dto.displayName,
+        ensName = contactDetails.dto.name,
+        isEnsVerified = contactDetails.dto.ensVerified,
+        localNickname = contactDetails.dto.localNickname,
+        alias = contactDetails.dto.alias,
         icon = contactDetails.icon,
         colorId = contactDetails.colorId,
         colorHash = contactDetails.colorHash,
         onlineStatus = toOnlineStatus(self.controller.getStatusForContactWithId(member.id).statusType),
-        isContact = contactDetails.details.isContact,
-        isVerified = contactDetails.details.isContactVerified(),
+        isContact = contactDetails.dto.isContact,
+        isVerified = contactDetails.dto.isContactVerified(),
         isAdmin = member.admin
         )),
     # pendingRequestsToJoin
@@ -313,17 +314,17 @@ proc createChannelGroupItem[T](self: Module[T], channelGroup: ChannelGroupDto): 
       let contactDetails = self.controller.getContactDetails(bannedMemberId)
       result = initMemberItem(
         pubKey = bannedMemberId,
-        displayName = contactDetails.details.displayName,
-        ensName = contactDetails.details.name,
-        isEnsVerified = contactDetails.details.ensVerified,
-        localNickname = contactDetails.details.localNickname,
-        alias = contactDetails.details.alias,
+        displayName = contactDetails.dto.displayName,
+        ensName = contactDetails.dto.name,
+        isEnsVerified = contactDetails.dto.ensVerified,
+        localNickname = contactDetails.dto.localNickname,
+        alias = contactDetails.dto.alias,
         icon = contactDetails.icon,
         colorId = contactDetails.colorId,
         colorHash = contactDetails.colorHash,
         onlineStatus = toOnlineStatus(self.controller.getStatusForContactWithId(bannedMemberId).statusType),
-        isContact = contactDetails.details.isContact,
-        isVerified = contactDetails.details.isContactVerified()
+        isContact = contactDetails.dto.isContact,
+        isVerified = contactDetails.dto.isContactVerified()
       )
     ),
     # pendingMemberRequests
@@ -331,17 +332,17 @@ proc createChannelGroupItem[T](self: Module[T], channelGroup: ChannelGroupDto): 
       let contactDetails = self.controller.getContactDetails(requestDto.publicKey)
       result = initMemberItem(
         pubKey = requestDto.publicKey,
-        displayName = contactDetails.details.displayName,
-        ensName = contactDetails.details.name,
-        isEnsVerified = contactDetails.details.ensVerified,
-        localNickname = contactDetails.details.localNickname,
-        alias = contactDetails.details.alias,
+        displayName = contactDetails.dto.displayName,
+        ensName = contactDetails.dto.name,
+        isEnsVerified = contactDetails.dto.ensVerified,
+        localNickname = contactDetails.dto.localNickname,
+        alias = contactDetails.dto.alias,
         icon = contactDetails.icon,
         colorId = contactDetails.colorId,
         colorHash = contactDetails.colorHash,
         onlineStatus = toOnlineStatus(self.controller.getStatusForContactWithId(requestDto.publicKey).statusType),
-        isContact = contactDetails.details.isContact,
-        isVerified = contactDetails.details.isContactVerified(),
+        isContact = contactDetails.dto.isContact,
+        isVerified = contactDetails.dto.isContactVerified(),
         requestToJoinId = requestDto.id
       )
     ) else: @[],
@@ -350,17 +351,17 @@ proc createChannelGroupItem[T](self: Module[T], channelGroup: ChannelGroupDto): 
       let contactDetails = self.controller.getContactDetails(requestDto.publicKey)
       result = initMemberItem(
         pubKey = requestDto.publicKey,
-        displayName = contactDetails.details.displayName,
-        ensName = contactDetails.details.name,
-        isEnsVerified = contactDetails.details.ensVerified,
-        localNickname = contactDetails.details.localNickname,
-        alias = contactDetails.details.alias,
+        displayName = contactDetails.dto.displayName,
+        ensName = contactDetails.dto.name,
+        isEnsVerified = contactDetails.dto.ensVerified,
+        localNickname = contactDetails.dto.localNickname,
+        alias = contactDetails.dto.alias,
         icon = contactDetails.icon,
         colorId = contactDetails.colorId,
         colorHash = contactDetails.colorHash,
         onlineStatus = toOnlineStatus(self.controller.getStatusForContactWithId(requestDto.publicKey).statusType),
-        isContact = contactDetails.details.isContact,
-        isVerified = contactDetails.details.isContactVerified(),
+        isContact = contactDetails.dto.isContact,
+        isVerified = contactDetails.dto.isContactVerified(),
         requestToJoinId = requestDto.id
       )
     ) else: @[],
@@ -1029,15 +1030,15 @@ method contactUpdated*[T](self: Module[T], publicKey: string) =
   let contactDetails = self.controller.getContactDetails(publicKey)
   self.view.activeSection().updateMember(
     publicKey,
-    contactDetails.details.displayName,
-    contactDetails.details.name,
-    contactDetails.details.ensVerified,
-    contactDetails.details.localNickname,
-    contactDetails.details.alias,
+    contactDetails.dto.displayName,
+    contactDetails.dto.name,
+    contactDetails.dto.ensVerified,
+    contactDetails.dto.localNickname,
+    contactDetails.dto.alias,
     contactDetails.icon,
-    isContact = contactDetails.details.isContact,
-    isVerified = contactDetails.details.isContactVerified(),
-    isUntrustworthy = contactDetails.details.isContactUntrustworthy(),
+    isContact = contactDetails.dto.isContact,
+    isVerified = contactDetails.dto.isContactVerified(),
+    isUntrustworthy = contactDetails.dto.isContactUntrustworthy(),
     )
 
 method calculateProfileSectionHasNotification*[T](self: Module[T]): bool =

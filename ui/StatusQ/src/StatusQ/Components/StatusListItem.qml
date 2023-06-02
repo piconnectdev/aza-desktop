@@ -137,7 +137,6 @@ Rectangle {
     MouseArea {
         id: sensor
 
-        z: 1 // Gives ability to hide siblings under the MouseArea
         anchors.fill: parent
         cursorShape: containsMouse ? Qt.PointingHandCursor : Qt.ArrowCursor
         acceptedButtons: Qt.NoButton
@@ -289,7 +288,7 @@ Rectangle {
                     objectName: "statusListItemSubTitle"
 
                     Layout.alignment: Qt.AlignVCenter
-                    Layout.preferredWidth: inlineTagModelRepeater.count > 0 ? contentWidth : parent.width
+                    Layout.preferredWidth: inlineTagModelRepeater.count > 0 ? contentWidth : parent.width - subTitleBadgeLoader.width
 
                     text: root.subTitle
                     font.pixelSize: 15
@@ -320,12 +319,8 @@ Rectangle {
                     id: inlineTagModelRepeaterRow
                     Layout.fillWidth: true
                     Layout.alignment: Qt.AlignVCenter
-                    Layout.preferredHeight: row.height
-                    contentHeight: row.height
-                    contentWidth: row.width
                     padding: 0
-                    clip: true
-                    interactive: false
+
                     Row {
                         id: row
                         spacing: 4
@@ -358,15 +353,14 @@ Rectangle {
                 implicitHeight: visible ? 22 : 0
             }
 
-            Flickable {
-                id: tagsFlickable
+            StatusScrollView {
+                id: tagsScrollView
                 visible: tagsRepeater.count > 0
                 anchors.top: statusListItemTertiaryTitle.bottom
                 anchors.topMargin: visible ? 8 : 0
                 width: Math.min(statusListItemTagsSlotInline.width, statusListItemTagsSlotInline.availableWidth)
-                height: visible ? statusListItemTagsSlotInline.height : 0
-                clip: true
-                interactive: contentWidth > width
+                height: visible ? contentHeight : 0
+                padding: 0
 
                 Row {
                     id: statusListItemTagsSlotInline
@@ -381,7 +375,7 @@ Rectangle {
             }
 
             RowLayout {
-                anchors.top: tagsFlickable.bottom
+                anchors.top: tagsScrollView.bottom
                 anchors.topMargin: visible ? 8 : 0
                 width: parent.width
                 visible: !!root.beneathTagsIcon || !!root.beneathTagsTitle

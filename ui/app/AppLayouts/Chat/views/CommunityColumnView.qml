@@ -38,17 +38,6 @@ Item {
     signal infoButtonClicked
     signal manageButtonClicked
 
-    TapHandler {
-        enabled: communityData.amISectionAdmin
-        acceptedButtons: Qt.RightButton
-        onTapped: {
-            adminPopupMenu.showInviteButton = true
-            adminPopupMenu.x = eventPoint.position.x + 4
-            adminPopupMenu.y = eventPoint.position.y + 4
-            adminPopupMenu.open()
-        }
-    }
-
     CommunityColumnHeaderPanel {
         id: communityHeader
 
@@ -196,13 +185,15 @@ Item {
         width: parent.width
 
         ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
-        contentWidth: communityChatListAndCategories.implicitWidth
+
+        contentWidth: availableWidth
         contentHeight: communityChatListAndCategories.height
                        + bannerColumn.height
+                       + bannerColumn.anchors.topMargin
 
         StatusChatListAndCategories {
             id: communityChatListAndCategories
-            anchors.horizontalCenter: parent.horizontalCenter
+            width: scrollView.availableWidth
             draggableItems: communityData.amISectionAdmin
             draggableCategories: communityData.amISectionAdmin
 
@@ -344,7 +335,7 @@ Item {
                 }
 
                 onMuteChat: {
-                    root.communitySectionModule.muteChat(chatId)
+                    root.communitySectionModule.muteChat(chatId, interval)
                 }
 
                 onUnmuteChat: {
@@ -455,6 +446,20 @@ Item {
                 }
             } // Loader
         } // Column
+
+        background: Item {
+            TapHandler {
+                enabled: communityData.amISectionAdmin
+                acceptedButtons: Qt.RightButton
+                onTapped: {
+                    console.log("<<< tapped")
+                    adminPopupMenu.showInviteButton = true
+                    adminPopupMenu.x = eventPoint.position.x + 4
+                    adminPopupMenu.y = eventPoint.position.y + 4
+                    adminPopupMenu.open()
+                }
+            }
+        }
     } // ScrollView
 
     Loader {

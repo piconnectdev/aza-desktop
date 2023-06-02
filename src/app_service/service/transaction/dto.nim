@@ -18,6 +18,7 @@ type
     WalletTransfer = "WalletTransfer"
     CollectibleDeployment = "CollectibleDeployment"
     CollectibleAirdrop = "CollectibleAirdrop"
+    CollectibleRemoteSelfDestruct = "CollectibleRemoteSelfDestruct"
 
 proc event*(self:PendingTransactionTypeDto):string =
   result = "transaction:" & $self
@@ -151,7 +152,7 @@ proc toMultiTransactionDto*(jsonObj: JsonNode): MultiTransactionDto =
   discard jsonObj.getProp("fromAmount", result.fromAmount)
   var multiTxType: int
   discard jsonObj.getProp("type", multiTxType)
-  result.multiTxtype = cast[MultiTransactionType](multiTxType)
+  result.multiTxType = cast[MultiTransactionType](multiTxType)
 
 proc cmpTransactions*(x, y: TransactionDto): int =
   # Sort proc to compare transactions from a single account.

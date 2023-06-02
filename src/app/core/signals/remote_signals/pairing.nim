@@ -1,4 +1,4 @@
-import json, tables
+import json, tables, chronicles
 import base
 import ../../../../app_service/service/accounts/dto/accounts
 import ../../../../app_service/service/devices/dto/installation
@@ -9,7 +9,7 @@ type LocalPairingSignal* = ref object of Signal
   eventType*: EventType
   action*: Action
   error*: string
-  account*: AccountDto
+  accountData*: LocalPairingAccountData
   installation*: InstallationDto
 
 proc fromEvent*(T: type LocalPairingSignal, event: JsonNode): LocalPairingSignal =
@@ -21,11 +21,12 @@ proc fromEvent*(T: type LocalPairingSignal, event: JsonNode): LocalPairingSignal
     result.action = e["action"].getInt().parse()
   if e.contains("error"):
     result.error = e["error"].getStr()
+  debug "local pairing event", `type` = result.eventType, action = result.action, error = result.error, event = $event
   if not e.contains("data"):
     return
   case result.eventType:
     of EventReceivedAccount:
-      result.account = e["data"].toAccountDto()
+      result.accountData = e["data"].toLocalPairingAccountData()
     of EventReceivedInstallation:
       result.installation = e["data"].toInstallationDto()
     else:

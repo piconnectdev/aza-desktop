@@ -46,7 +46,7 @@ ListModel {
          section: "Views"
     }
     ListElement {
-         title: "CommunityCollectibleView"
+         title: "CommunityTokenView"
          section: "Views"
     }
     ListElement {
@@ -63,6 +63,10 @@ ListModel {
     }
     ListElement {
         title: "MessageContextMenu"
+        section: "Views"
+    }
+    ListElement {
+        title: "DeviceSyncingView"
         section: "Views"
     }
     ListElement {
@@ -282,19 +286,7 @@ ListModel {
         section: "Components"
     }
     ListElement {
-        title: "TransactionDelegate"
-        section: "Components"
-    }
-    ListElement {
         title: "CommunityPermissionsRow"
-        section: "Components"
-    }
-    ListElement {
-        title: "TransactionAddress"
-        section: "Components"
-    }
-    ListElement {
-        title: "TransactionAddressTile"
         section: "Components"
     }
     ListElement {
@@ -303,6 +295,14 @@ ListModel {
     }
     ListElement {
         title: "StatusBlockProgressBar"
+        section: "Components"
+    }
+    ListElement {
+        title: "StatusDatePicker"
+        section: "Components"
+    }
+    ListElement {
+        title: "StatusDateRangePicker"
         section: "Components"
     }
     ListElement {
@@ -320,6 +320,22 @@ ListModel {
     ListElement {
         title: "PopupSizing"
         section: "Research / Examples"
+    }
+    ListElement {
+        title: "TransactionDelegate"
+        section: "Wallet"
+    }
+    ListElement {
+        title: "TransactionAddress"
+        section: "Wallet"
+    }
+    ListElement {
+        title: "TransactionAddressTile"
+        section: "Wallet"
+    }
+    ListElement {
+        title: "TransactionDetailView"
+        section: "Wallet"
     }
     ListElement {
         title: "WalletHeader"

@@ -18,6 +18,9 @@ proc hashPassword*(password: string, lower: bool = true): string =
 
   return hashed
 
+proc hashedPasswordToUpperCase*(hashedPassword: string): string =
+  return "0x" & hashedPassword[2 .. ^1].toUpperAscii()
+
 proc prefix*(methodName: string, isExt:bool = true): string =
   result = "waku"
   result = result & (if isExt: "ext_" else: "_")
@@ -81,3 +84,6 @@ proc isPathOutOfTheDefaultStatusDerivationTree*(path: string): bool =
     path.count("/") != 5: 
       return true
   return false
+
+proc contractUniqueKey*(chainId: int, contractAddress: string): string =
+  return $chainId & "_" & contractAddress

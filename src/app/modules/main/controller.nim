@@ -290,7 +290,7 @@ proc init*(self: Controller) =
     var args = TrustArgs(e)
     self.delegate.contactUpdated(args.publicKey)
 
-  self.events.on(SIGNAL_MNEMONIC_REMOVAL) do(e: Args):
+  self.events.on(SIGNAL_MNEMONIC_REMOVED) do(e: Args):
     self.delegate.mnemonicBackedUp()
 
   self.events.on(SIGNAL_MAKE_SECTION_CHAT_ACTIVE) do(e: Args):
@@ -473,6 +473,9 @@ proc getCommunityTokens*(self: Controller, communityId: string): seq[CommunityTo
 
 proc getCommunityTokenOwners*(self: Controller, communityId: string, chainId: int, contractAddress: string): seq[CollectibleOwner] =
   return self.communityTokensService.getCommunityTokenOwners(communityId, chainId, contractAddress)
+
+proc getCommunityTokenOwnerName*(self: Controller, chainId: int, contractAddress: string): string =
+  return self.communityTokensService.contractOwnerName(chainId, contractAddress)
 
 proc getNetwork*(self:Controller, chainId: int): NetworkDto =
   self.networksService.getNetwork(chainId)
