@@ -201,7 +201,8 @@ StatusDialog {
                     id: colorDialog
                     anchors.centerIn: parent
                     property bool colorSelected: root.isEdit && root.channelColor
-                    header.title: qsTr("Channel Colour")
+                    headerSettings.title: qsTr("Channel Colour")
+                    standardColors: Theme.palette.communityColorsArray
                     color: root.isEdit && root.channelColor ? root.channelColor :
                                                               Theme.palette.primaryColor1
                     onAccepted: colorSelected = true

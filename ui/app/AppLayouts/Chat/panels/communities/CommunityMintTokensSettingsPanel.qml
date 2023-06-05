@@ -68,17 +68,21 @@ SettingsPageLayout {
     signal signMintTransactionOpened(int chainId, string accountAddress)
 
     signal signSelfDestructTransactionOpened(var selfDestructTokensList, // [key , amount]
-                                             string contractUniqueKey)
+                                             string tokenKey)
 
     signal remoteSelfDestructCollectibles(var selfDestructTokensList, // [key , amount]
-                                          string contractUniqueKey)
+                                          string tokenKey)
 
     signal signBurnTransactionOpened(int chainId)
 
     signal burnCollectibles(string tokenKey,
                             int amount)
 
-    signal airdropCollectible(string key)
+    signal airdropCollectible(string tokenKey)
+
+    signal deleteToken(string tokenKey)
+
+    signal retryMintToken(string tokenKey)
 
     function setFeeLoading() {
         root.isFeeLoading = true
@@ -96,7 +100,7 @@ SettingsPageLayout {
         readonly property string initialViewState: "WELCOME_OR_LIST_TOKENS"
         readonly property string newTokenViewState: "NEW_TOKEN"
         readonly property string previewTokenViewState: "PREVIEW_TOKEN"
-        readonly property string collectibleViewState: "VIEW_COLLECTIBLE"
+        readonly property string tokenViewState: "VIEW_TOKEN"
 
         readonly property string welcomePageTitle: qsTr("Tokens")
         readonly property string newCollectiblePageTitle: qsTr("Mint collectible")
@@ -114,7 +118,7 @@ SettingsPageLayout {
         property var selfDestructTokensList
         property bool selfDestruct
         property bool burnEnabled
-        //property string tokenKey -- TODO: Backend key role
+        property string tokenKey
         property int burnAmount
         property int remainingTokens
         property url artworkSource
@@ -123,6 +127,8 @@ SettingsPageLayout {
         onInitialItemChanged: updateInitialStackView()
 
         signal airdropClicked()
+
+        signal retryMintClicked()
 
         function updateInitialStackView() {
             if(stackManager.stackView) {
@@ -133,6 +139,8 @@ SettingsPageLayout {
             }
         }
     }
+
+    secondaryHeaderButton.type: StatusBaseButton.Type.Danger
 
     content: StackView {
         anchors.fill: parent
@@ -148,33 +156,42 @@ SettingsPageLayout {
             PropertyChanges {target: root; title: d.welcomePageTitle}
             PropertyChanges {target: root; subTitle: ""}
             PropertyChanges {target: root; previousPageName: ""}
-            PropertyChanges {target: root; headerButtonVisible: true}
-            PropertyChanges {target: root; headerButtonText: d.newTokenButtonText}
-            PropertyChanges {target: root; headerWidth: root.viewWidth}
+            PropertyChanges {target: root; primaryHeaderButton.visible: true}
+            PropertyChanges {target: root; primaryHeaderButton.text: d.newTokenButtonText}
+            PropertyChanges {target: root; secondaryHeaderButton.visible: false}
         },
         State {
             name: d.newTokenViewState
             PropertyChanges {target: root; subTitle: ""}
             PropertyChanges {target: root; previousPageName: d.backButtonText}
-            PropertyChanges {target: root; headerButtonVisible: false}
-            PropertyChanges {target: root; headerWidth: 0}
+            PropertyChanges {target: root; primaryHeaderButton.visible: false}
+            PropertyChanges {target: root; secondaryHeaderButton.visible: false}
         },
         State {
             name: d.previewTokenViewState
             PropertyChanges {target: root; previousPageName: d.backButtonText}
-            PropertyChanges {target: root; headerButtonVisible: false}
-            PropertyChanges {target: root; headerWidth: 0}
+            PropertyChanges {target: root; primaryHeaderButton.visible: false}
+            PropertyChanges {target: root; secondaryHeaderButton.visible: false}
         },
         State {
-            name: d.collectibleViewState
+            name: d.tokenViewState
             PropertyChanges {target: root; previousPageName: d.backButtonText}
-            PropertyChanges {target: root; headerButtonVisible: false}
-            PropertyChanges {target: root; headerWidth: 0}
+            PropertyChanges {target: root; primaryHeaderButton.visible: false}
             PropertyChanges {target: root; footer: mintTokenFooter}
         }
     ]
 
-    onHeaderButtonClicked: stackManager.push(d.newTokenViewState, newTokenView, null, StackView.Immediate)
+    onPrimaryHeaderButtonClicked: {
+        if(root.state == d.initialViewState)
+            stackManager.push(d.newTokenViewState, newTokenView, null, StackView.Immediate)
+        if(root.state == d.tokenViewState)
+            d.retryMintClicked()
+    }
+
+    onSecondaryHeaderButtonClicked: {
+        if(root.state == d.tokenViewState)
+            deleteTokenAlertPopup.open()
+    }
 
     StackViewStates {
         id: stackManager
@@ -226,7 +243,7 @@ SettingsPageLayout {
                 Binding {
                     target: root
                     property: "title"
-                    value: optionsTab.currentItem == collectiblesTab ? d.newCollectiblePageTitle : d.newAssetPageTitle
+                    value: optionsTab.currentItem === collectiblesTab ? d.newCollectiblePageTitle : d.newAssetPageTitle
                 }
             }
 
@@ -234,7 +251,7 @@ SettingsPageLayout {
                 Layout.preferredWidth: root.viewWidth
                 Layout.fillHeight: true
 
-                currentIndex: optionsTab.currentItem == collectiblesTab ? 0 : 1
+                currentIndex: optionsTab.currentItem === collectiblesTab ? 0 : 1
 
                 CommunityNewTokenView {
                     viewWidth: root.viewWidth
@@ -370,19 +387,19 @@ SettingsPageLayout {
 
                 anchors.centerIn: Overlay.overlay
                 title: qsTr("Sign transaction - Mint %1 token").arg(popup.tokenName)
-                tokenName: parent.name
-                accountName: parent.accountName
-                networkName: parent.chainName
+                tokenName: preview.name
+                accountName: preview.accountName
+                networkName: preview.chainName
                 feeText: root.feeText
                 errorText: root.errorText
                 isFeeLoading: root.isFeeLoading
 
                 onOpened: {
                     root.setFeeLoading()
-                    root.signMintTransactionOpened(parent.chainId, d.accountAddress)
+                    root.signMintTransactionOpened(preview.chainId, d.accountAddress)
                 }
                 onCancelClicked: close()
-                onSignTransactionClicked: parent.signMintTransaction()
+                onSignTransactionClicked: preview.signMintTransaction()
             }
         }
     }
@@ -421,10 +438,16 @@ SettingsPageLayout {
                 }
             }
 
-            RemotelyDestructAlertPopup {
+            AlertPopup {
                 id: alertPopup
 
-                onRemotelyDestructClicked: {
+                property int tokenCount
+
+                title: qsTr("Remotely destruct %n token(s)", "", tokenCount)
+                acceptBtnText: qsTr("Remotely destruct")
+                alertText: qsTr("Continuing will destroy tokens held by members and revoke any permissions they are given. To undo you will have to issue them new tokens.")
+
+                onAcceptClicked: {
                     signTransactionPopup.isRemotelyDestructTransaction = true
                     signTransactionPopup.open()
                 }
@@ -438,9 +461,9 @@ SettingsPageLayout {
                 function signTransaction() {
                     root.setFeeLoading()
                     if(signTransactionPopup.isRemotelyDestructTransaction) {
-                        root.remoteSelfDestructCollectibles(d.selfDestructTokensList, d.contractUniqueKey)
+                        root.remoteSelfDestructCollectibles(d.selfDestructTokensList, d.tokenKey)
                     } else {
-                        root.burnCollectibles("TODO - KEY"/*d.tokenKey*/, d.burnAmount)
+                        root.burnCollectibles(d.tokenKey, d.burnAmount)
                     }
 
                     footerPanel.closePopups()
@@ -457,7 +480,7 @@ SettingsPageLayout {
 
                 onOpened: {
                     root.setFeeLoading()
-                    signTransactionPopup.isRemotelyDestructTransaction ? root.signSelfDestructTransactionOpened(d.selfDestructTokensList, d.contractUniqueKey) :
+                    signTransactionPopup.isRemotelyDestructTransaction ? root.signSelfDestructTransactionOpened(d.selfDestructTokensList, d.tokenKey) :
                                                                          root.signBurnTransactionOpened(d.chainId)
                 }
                 onCancelClicked: close()
@@ -490,28 +513,36 @@ SettingsPageLayout {
             onItemClicked: {
                 d.accountAddress = accountAddress
                 d.chainId = chainId
-                d.contractUniqueKey = contractUniqueKey
                 d.chainName = chainName
                 d.accountName = accountName
-                //d.tokenKey = key // TODO: Backend key role
-                stackManager.push(d.collectibleViewState,
-                                  collectibleView,
+                d.tokenKey = contractUniqueKey
+                stackManager.push(d.tokenViewState,
+                                  tokenView,
                                   {
                                       preview: false,
-                                      index
+                                      contractUniqueKey
                                   },
                                   StackView.Immediate)
+            }
+
+            Connections {
+                target: d
+
+                function onRetryMintClicked() {
+                    root.retryMintToken(d.tokenKey)
+                    stackManager.clear(d.initialViewState, StackView.Immediate)
+                }
             }
         }
     }
 
     Component {
-        id: collectibleView
+        id: tokenView
 
         CommunityTokenView {
             id: view
 
-            property int index // TODO: Update it to key when model has role key implemented
+            property string contractUniqueKey
 
             viewWidth: root.viewWidth
 
@@ -526,6 +557,30 @@ SettingsPageLayout {
                 property: "subTitle"
                 value: view.symbol
                 restoreMode: Binding.RestoreBindingOrValue
+            }
+
+            Binding {
+                target: root
+                property: "primaryHeaderButton.visible"
+                value: view.deployState === Constants.ContractTransactionStatus.Failed
+            }
+
+            Binding {
+                target: root
+                property: "primaryHeaderButton.text"
+                value: (view.deployState === Constants.ContractTransactionStatus.Failed) ? qsTr("Retry mint") : ""
+            }
+
+            Binding {
+                target: root
+                property: "secondaryHeaderButton.visible"
+                value: view.deployState === Constants.ContractTransactionStatus.Failed
+            }
+
+            Binding {
+                target: root
+                property: "secondaryHeaderButton.text"
+                value: (view.deployState === Constants.ContractTransactionStatus.Failed) ? qsTr("Delete") : ""
             }
 
             Binding {
@@ -562,17 +617,17 @@ SettingsPageLayout {
             Instantiator {
                 id: instantiator
 
-
                 model: SortFilterProxyModel {
                     sourceModel: root.tokensModel
-                    filters: IndexFilter {
-                        minimumIndex: view.index
-                        maximumIndex: view.index
+                    filters: ValueFilter {
+                        roleName: "contractUniqueKey"
+                        value: view.contractUniqueKey
                     }
                 }
                 delegate: QtObject {
                     component Bind: Binding { target: view }
                     readonly property list<Binding> bindings: [
+                        Bind { property: "isAssetView"; value: model.tokenType === Constants.TokenType.ERC20 },
                         Bind { property: "deployState"; value: model.deployState },
                         Bind { property: "remotelyDestructState"; value: model.remotelyDestructState },
                         Bind { property: "burnState"; value: model.burnState },
@@ -588,7 +643,8 @@ SettingsPageLayout {
                         Bind { property: "chainName"; value: model.chainName },
                         Bind { property: "chainIcon"; value: model.chainIcon },
                         Bind { property: "accountName"; value: model.accountName },
-                        Bind { property: "tokenOwnersModel"; value: model.tokenOwnersModel }
+                        Bind { property: "tokenOwnersModel"; value: model.tokenOwnersModel },
+                        Bind { property: "assetDecimals"; value: model.decimals }
                     ]
                 }
             }
@@ -601,5 +657,20 @@ SettingsPageLayout {
                 }
             }
         }
+    }
+
+    AlertPopup {
+        id: deleteTokenAlertPopup
+
+        width: 521
+        title: qsTr("Delete %1").arg(root.title)
+        acceptBtnText: qsTr("Delete %1 token").arg(root.title)
+        alertText: qsTr("%1 is not yet minted, are you sure you want to delete it? All data associated with this token including its icon and description will be permanently deleted.").arg(root.title)
+
+        onAcceptClicked: {
+            root.deleteToken(d.tokenKey)
+            stackManager.clear(d.initialViewState, StackView.Immediate)
+        }
+        onCancelClicked: close()
     }
 }

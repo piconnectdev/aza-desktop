@@ -20,15 +20,21 @@ SplitView {
         id: emptyModel
     }
 
+    Button {
+        text: "Back"
+        onClicked: panel.navigateBack()
+    }
     Rectangle {
         SplitView.fillWidth: true
         SplitView.fillHeight: true
-        color: Theme.palette.statusAppLayout.rightPanelBackgroundColor
+        color: Theme.palette.statusAppLayout.rightPanelBackgroundColor        
 
         CommunityMintTokensSettingsPanel {
+            id: panel
+
             anchors.fill: parent
             anchors.topMargin: 50
-            tokensModel: editorModelChecked.checked ? emptyModel : MintedCollectiblesModel.mintedCollectibleModel
+            tokensModel: editorModelChecked.checked ? emptyModel : MintedTokensModel.mintedTokensModel
             layer1Networks: NetworksModel.layer1Networks
             layer2Networks: NetworksModel.layer2Networks
             testNetworks: NetworksModel.testNetworks
@@ -37,6 +43,9 @@ SplitView {
             accounts: WalletAccountsModel {}
 
             onMintCollectible: logs.logEvent("CommunityMintTokensSettingsPanel::mintCollectible")
+            onMintAsset: logs.logEvent("CommunityMintTokensSettingsPanel::mintAssets")
+            onDeleteToken: logs.logEvent("CommunityMintTokensSettingsPanel::deleteToken: " + key)
+            onRetryMintToken: logs.logEvent("CommunityMintTokensSettingsPanel::retryMintToken: " + key)
         }
     }
 
@@ -71,9 +80,9 @@ SplitView {
                     checked: true
                     onCheckedChanged:{
                         if(checked)
-                            MintedCollectiblesModel.changeAllMintingStates(1/*In progress*/)
+                            MintedTokensModel.changeAllMintingStates(1/*In progress*/)
                         else
-                            MintedCollectiblesModel.changeAllMintingStates(2/*Deployed*/)
+                            MintedTokensModel.changeAllMintingStates(2/*Deployed*/)
                     }
 
                 }

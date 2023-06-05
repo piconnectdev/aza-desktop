@@ -43,7 +43,7 @@ Item {
                 asset: StatusAssetSettings {
                     width: isLetterIdenticon ? 40 : 20
                     height: isLetterIdenticon ? 40 : 20
-                    color: root.account ? root.account.color : "#ffffff"
+                    color: root.account ? Utils.getColorForId(root.account.colorId) : "#ffffff"
                     emoji: root.account ? root.account.emoji : ""
                     name: root.account && !root.account.emoji ? "filled-account": ""
                     letterSize: 14
@@ -132,7 +132,7 @@ Item {
                 primaryText: qsTr("Related Accounts")
                 tagsModel: root.account ? root.account.relatedAccounts : []
                 tagsDelegate: StatusListItemTag {
-                    bgColor: model.color
+                    bgColor: Utils.getColorForId(model.colorId)
                     bgRadius: 6
                     height: 22
                     closeButtonVisible: false
@@ -155,7 +155,7 @@ Item {
             ConfirmationDialog {
                 id: confirmationPopup
                 confirmButtonObjectName: "confirmDeleteAccountButton"
-                header.title: qsTr("Confirm %1 Removal").arg(root.account ? root.account.name : "")
+                headerSettings.title: qsTr("Confirm %1 Removal").arg(root.account ? root.account.name : "")
                 confirmationText: qsTr("You will not be able to restore viewing access to this account in the future unless you enter this account’s address again.")
                 confirmButtonLabel: qsTr("Remove Account")
                 onConfirmButtonClicked: {
