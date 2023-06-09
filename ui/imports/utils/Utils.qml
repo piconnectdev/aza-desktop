@@ -3,6 +3,8 @@ pragma Singleton
 import QtQuick 2.13
 
 import shared 1.0
+
+import StatusQ 0.1
 import StatusQ.Core.Theme 0.1
 import StatusQ.Core.Utils 0.1 as StatusQUtils
 
@@ -95,6 +97,14 @@ QtObject {
             return false
         }
         return Style.current.accountColors[colorIndex]
+    }
+
+    function validLink(link) {
+        if (link.length === 0) {
+            return false
+        }
+        var regex = /[(http(s)?):\/\/(www\.)?a-zA-Z0-9@:%._\+~#=]{2,256}\.[a-z]{2,6}\b([-a-zA-Z0-9@:%_\+.~#?&//=]*)/
+        return regex.test(link)
     }
 
     function getLinkStyle(link, hoveredLink, textColor) {
@@ -327,16 +337,15 @@ QtObject {
     }
 
     function isValidDragNDropImage(url) {
-        let lowerCaseUrl = url.toLowerCase()
-        return Constants.acceptedDragNDropImageExtensions.some(ext => lowerCaseUrl.endsWith(ext)) ||
-            lowerCaseUrl.startsWith(Constants.dataImagePrefix);
+        return url.startsWith(Constants.dataImagePrefix) ||
+                QClipboardProxy.isValidImageUrl(url, Constants.acceptedDragNDropImageExtensions)
     }
 
     function isFilesizeValid(img) {
         if (img.startsWith(Constants.dataImagePrefix)) {
             return img.length < maxImgSizeBytes
         }
-        let size = parseInt(globalUtils.getFileSize(img))
+        const size = QClipboardProxy.getFileSize(img)
         return size <= maxImgSizeBytes
     }
 

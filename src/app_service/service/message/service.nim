@@ -35,7 +35,7 @@ logScope:
 
 let NEW_LINE = re"\n|\r" #must be defined as let, not const
 const MESSAGES_PER_PAGE* = 20
-const MESSAGES_PER_PAGE_MAX* = 300
+const MESSAGES_PER_PAGE_MAX* = 40
 const CURSOR_VALUE_IGNORE = "ignore"
 const WEEK_AS_MILLISECONDS = initDuration(seconds = 60*60*24*7).inMilliSeconds
 
@@ -140,6 +140,8 @@ QtObject:
     msgCursor: Table[string, MessageCursor]
     pinnedMsgCursor: Table[string, MessageCursor]
     numOfPinnedMessagesPerChat: Table[string, int] # [chat_id, num_of_pinned_messages]
+
+  proc bulkReplacePubKeysWithDisplayNames(self: Service, messages: var seq[MessageDto])
 
   proc delete*(self: Service) =
     self.QObject.delete
@@ -263,6 +265,8 @@ QtObject:
     # that's the reason why the following check is commented out here.
     # if (not chats[0].active):
     #   return
+
+    self.bulkReplacePubKeysWithDisplayNames(messages)
 
     for i in 0 ..< chats.len:
       let chatId = chats[i].id
@@ -472,6 +476,8 @@ QtObject:
     var messages: seq[MessageDto]
     if(responseObj.getProp("messages", messagesArr)):
       messages = map(messagesArr.getElems(), proc(x: JsonNode): MessageDto = x.toMessageDto())
+
+    self.bulkReplacePubKeysWithDisplayNames(messages)
 
     # handling reactions
     var reactionsArr: JsonNode
@@ -865,6 +871,11 @@ proc replacePubKeysWithDisplayNames*(self: Service, message: string): string =
   let allKnownContacts = self.contactService.getContactsByGroup(ContactsGroup.AllKnownContacts)
   return message_common.replacePubKeysWithDisplayNames(allKnownContacts, message)
 
+proc bulkReplacePubKeysWithDisplayNames(self: Service, messages: var seq[MessageDto]) =
+  let allKnownContacts = self.contactService.getContactsByGroup(ContactsGroup.AllKnownContacts)
+  for i in 0..<messages.len:
+    messages[i].text = message_common.replacePubKeysWithDisplayNames(allKnownContacts, messages[i].text)
+
 proc editMessage*(self: Service, messageId: string, contentType: int, msg: string) =
   try:
     let allKnownContacts = self.contactService.getContactsByGroup(ContactsGroup.AllKnownContacts)
@@ -884,6 +895,8 @@ proc editMessage*(self: Service, messageId: string, contentType: int, msg: strin
     if messages[0].editedAt <= 0:
       error "error: ", procName="editMessage", errDesription = "message is not edited"
       return
+
+    self.bulkReplacePubKeysWithDisplayNames(messages)
 
     let data = MessageEditedArgs(chatId: messages[0].chatId, message: messages[0])
     self.events.emit(SIGNAL_MESSAGE_EDITED, data)

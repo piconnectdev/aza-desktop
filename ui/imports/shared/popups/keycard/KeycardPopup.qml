@@ -14,7 +14,6 @@ StatusModal {
 
     closePolicy: d.disableActionPopupButtons || d.disableCloseButton? Popup.NoAutoClose : Popup.CloseOnEscape | Popup.CloseOnPressOutside
     hasCloseButton: !d.disableActionPopupButtons && !d.disableCloseButton
-    destroyOnClose: false
 
     headerSettings.title: {
         switch (root.sharedKeycardModule.currentState.flowType) {
@@ -64,9 +63,8 @@ StatusModal {
     StatusScrollView {
         id: scrollView
         anchors.fill: parent
-
-        implicitWidth: Constants.keycard.general.popupWidth
         contentWidth: availableWidth
+        horizontalPadding: 0
 
         KeycardPopupContent {
             id: content

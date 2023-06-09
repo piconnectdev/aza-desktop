@@ -183,7 +183,7 @@ proc buildPinnedMessageItem(self: Module, message: MessageDto, actionInitiatedBy
     contactDetails.dto.added,
     message.outgoingStatus,
     self.controller.getRenderedText(message.parsedText, communityChats),
-    self.controller.replacePubKeysWithDisplayNames(message.text),
+    message.text,
     message.parsedText,
     message.image,
     message.containsContactMentions(),
@@ -358,6 +358,7 @@ method onContactDetailsUpdated*(self: Module, contactId: string) =
   if(self.controller.getMyChatId() == contactId):
     self.view.updateChatDetailsNameAndIcon(updatedContact.defaultDisplayName, updatedContact.icon)
     self.view.updateTrustStatus(updatedContact.dto.trustStatus == TrustStatus.Untrustworthy)
+    self.view.updateChatBlocked(updatedContact.dto.blocked)
 
 method onNotificationsUpdated*(self: Module, hasUnreadMessages: bool, notificationCount: int) =
   self.view.updateChatDetailsNotifications(hasUnreadMessages, notificationCount)

@@ -200,6 +200,15 @@ Item {
         }
     }
 
+    Connections {
+        target: Global.applicationWindow
+
+        function onActiveChanged() {
+            if (Global.applicationWindow.active) appMain.rootStore.windowActivated()
+            else appMain.rootStore.windowDeactivated()
+        }
+    }
+
     function changeAppSectionBySectionId(sectionId) {
         appMain.rootStore.mainModuleInst.setActiveSectionById(sectionId)
     }
@@ -876,7 +885,7 @@ Item {
                             value: true
                             restoreMode: Binding.RestoreNone
                         }
-                        
+
                         Component {
                             id: loadingStateComponent
                             Item {
@@ -893,7 +902,7 @@ Item {
                                 }
                             }
                         }
-                        
+
                         Component {
                             id: errorStateComponent
                             Item {
@@ -1265,7 +1274,6 @@ Item {
                     asset.height: 30
                     asset.color: modelData ? modelData.color : ""
                     asset.name: modelData ? modelData.icon : ""
-                    asset.isImage: asset.name.includes("data")
                 }
 
                 onAboutToShow: rootStore.rebuildChatSearchModel()

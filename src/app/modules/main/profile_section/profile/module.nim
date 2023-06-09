@@ -2,15 +2,15 @@ import NimQml, chronicles, sequtils, sugar
 
 import ./io_interface, ./view, ./controller
 import ../io_interface as delegate_interface
-import ../../../../global/global_singleton
+import app/global/global_singleton
 
-import ../../../../core/eventemitter
-import ../../../../../app_service/service/profile/service as profile_service
-import ../../../../../app_service/service/settings/service as settings_service
-import ../../../../../app_service/common/social_links
+import app/core/eventemitter
+import app_service/service/profile/service as profile_service
+import app_service/service/settings/service as settings_service
+import app_service/common/social_links
 
-import ../../../shared_models/social_links_model
-import ../../../shared_models/social_link_item
+import app/modules/shared_models/social_links_model
+import app/modules/shared_models/social_link_item
 
 export io_interface
 
@@ -49,12 +49,12 @@ method isLoaded*(self: Module): bool =
 method getModuleAsVariant*(self: Module): QVariant =
   return self.viewVariant
 
+proc updateSocialLinks(self: Module, socialLinks: SocialLinks) =
+  var socialLinkItems = toSocialLinkItems(socialLinks)
+  self.view.socialLinksSaved(socialLinkItems)
+
 method viewDidLoad*(self: Module) =
-  var socialLinkItems = toSocialLinkItems(self.controller.getSocialLinks())
-
-  self.view.socialLinksModel().setItems(socialLinkItems)
-  self.view.temporarySocialLinksModel().setItems(socialLinkItems)
-
+  self.updateSocialLinks(self.controller.getSocialLinks())
   self.moduleLoaded = true
   self.delegate.profileModuleDidLoad()
 
@@ -79,6 +79,12 @@ method setBio(self: Module, bio: string) =
 method onBioChanged*(self: Module, bio: string) =
   self.view.emitBioChangedSignal()
 
-method saveSocialLinks*(self: Module): bool =
-  let socialLinks = map(self.view.temporarySocialLinksModel.items(), x => SocialLink(text: x.text, url: x.url))
-  return self.controller.setSocialLinks(socialLinks)
+method saveSocialLinks*(self: Module) =
+  let socialLinks = map(self.view.temporarySocialLinksModel.items(), x => SocialLink(text: x.text, url: x.url, icon: x.icon))
+  self.controller.setSocialLinks(socialLinks)
+
+method onSocialLinksUpdated*(self: Module, socialLinks: SocialLinks, error: string) =
+  if error.len > 0:
+    # maybe we want in future popup or somehow display an error to a user
+    return
+  self.updateSocialLinks(socialLinks)

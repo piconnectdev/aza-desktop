@@ -2,6 +2,7 @@ import QtQuick 2.13
 import QtQuick.Controls 2.13
 import QtQuick.Layouts 1.13
 import QtGraphicalEffects 1.13
+import SortFilterProxyModel 0.2
 
 import StatusQ.Core 0.1
 import StatusQ.Core.Theme 0.1
@@ -40,7 +41,9 @@ Rectangle {
     onShowAllAccountsChanged: {
         walletAccountsListView.headerItem.highlighted = root.showAllAccounts
         walletAccountsListView.footerItem.button.highlighted = root.showSavedAddresses
-        selectAllAccounts()
+        if (root.showAllAccounts) {
+            selectAllAccounts()
+        }
     }
 
     property var emojiPopup: null
@@ -55,7 +58,6 @@ Rectangle {
         sourceComponent: AddAccountPopup {
             store.emojiPopup: root.emojiPopup
             store.addAccountModule: walletSection.addAccountModule
-            anchors.centerIn: parent
         }
 
         onLoaded: {
@@ -94,9 +96,6 @@ Rectangle {
         property string accountDerivationPath
 
         sourceComponent: RemoveAccountConfirmationPopup {
-            anchors.centerIn: parent
-            width: 400
-
             simple: removeAccountConfirmation.simple
             accountName: removeAccountConfirmation.accountName
             accountAddress: removeAccountConfirmation.accountAddress
@@ -424,7 +423,12 @@ Rectangle {
                 }
             }
 
-            model: RootStore.accounts
+            model: SortFilterProxyModel {
+                sourceModel: RootStore.accounts
+
+                sorters: RoleSorter { roleName: "createdAt"; sortOrder: Qt.AscendingOrder }
+            }
+            
         }
     }
 }

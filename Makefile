@@ -472,19 +472,24 @@ endif
 
 $(NIM_STATUS_CLIENT): NIM_PARAMS += $(RESOURCES_LAYOUT)
 $(NIM_STATUS_CLIENT): $(NIM_SOURCES) $(DOTHERSIDE) | statusq check-qt-dir $(STATUSGO) $(STATUSKEYCARDGO) $(QRCODEGEN) $(FLEETS) rcc compile-translations deps
-	echo -e $(BUILD_MSG) "$@" && \
-		$(ENV_SCRIPT) nim c $(NIM_PARAMS) --passL:"-L$(STATUSGO_LIBDIR)" --passL:"-lstatus" --passL:"-L$(STATUSKEYCARDGO_LIBDIR)" --passL:"-lkeycard" $(NIM_EXTRA_PARAMS) --passL:"$(QRCODEGEN)" --passL:"-lm" src/nim_status_client.nim && \
-		[[ $$? = 0 ]] && \
-		(([[ $(detected_OS) = Darwin ]] && \
-		install_name_tool -change \
-			libstatus.dylib \
-			@rpath/libstatus.dylib \
-			bin/nim_status_client && \
-		install_name_tool -change \
-			libkeycard.dylib \
-			@rpath/libkeycard.dylib \
-			bin/nim_status_client) || true)
+	echo -e $(BUILD_MSG) "$@"
+	$(ENV_SCRIPT) nim c $(NIM_PARAMS) \
+		--passL:"-L$(STATUSGO_LIBDIR)" \
+		--passL:"-lstatus" \
+		--passL:"-L$(STATUSKEYCARDGO_LIBDIR)" \
+		--passL:"-lkeycard" \
+		--passL:"$(QRCODEGEN)" \
+		--passL:"-lm" \
+		$(NIM_EXTRA_PARAMS) src/nim_status_client.nim
 ifeq ($(detected_OS),Darwin)
+	install_name_tool -change \
+		libstatus.dylib \
+		@rpath/libstatus.dylib \
+		bin/nim_status_client
+	install_name_tool -change \
+		libkeycard.dylib \
+		@rpath/libkeycard.dylib \
+		bin/nim_status_client
 ifeq ("$(wildcard ./node_modules/.bin/fileicon)","")
 	echo -e "\033[92mInstalling:\033[39m fileicon"
 	npm i
@@ -745,7 +750,7 @@ ICON_TOOL := node_modules/.bin/fileicon
 
 run-linux: nim_status_client
 	echo -e "\033[92mRunning:\033[39m bin/nim_status_client"
-	LD_LIBRARY_PATH="$(QT5_LIBDIR)":"$(STATUSGO_LIBDIR)":"$(STATUSKEYCARDGO_LIBDIR)" \
+	LD_LIBRARY_PATH="$(QT5_LIBDIR)":"$(STATUSGO_LIBDIR)":"$(STATUSKEYCARDGO_LIBDIR):$(LD_LIBRARY_PATH)" \
 	./bin/nim_status_client
 
 run-macos: nim_status_client
@@ -764,7 +769,7 @@ run-windows: nim_status_client $(NIM_WINDOWS_PREBUILT_DLLS)
 	./bin/nim_status_client.exe
 
 tests-nim-linux: | $(DOTHERSIDE)
-	LD_LIBRARY_PATH="$(QT5_LIBDIR)" \
+	LD_LIBRARY_PATH="$(QT5_LIBDIR):$(LD_LIBRARY_PATH)" \
 	$(ENV_SCRIPT) nim c $(NIM_PARAMS) $(NIM_EXTRA_PARAMS) -r test/nim/message_model_test.nim
 
 endif # "variables.mk" was not included

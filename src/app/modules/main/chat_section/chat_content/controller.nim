@@ -142,11 +142,13 @@ proc init*(self: Controller) =
       var args = ContactArgs(e)
       if (args.contactId == self.chatId):
         self.delegate.onMutualContactChanged()
+        self.delegate.onContactDetailsUpdated(args.contactId)
 
     self.events.on(SIGNAL_CONTACT_UNBLOCKED) do(e: Args):
       var args = ContactArgs(e)
       if (args.contactId == self.chatId):
         self.delegate.onMutualContactChanged()
+        self.delegate.onContactDetailsUpdated(args.contactId)
 
   self.events.on(SIGNAL_MESSAGE_DELETION) do(e: Args):
     let args = MessageDeletedArgs(e)
@@ -239,9 +241,6 @@ proc getContactDetails*(self: Controller, contactId: string): ContactDetails =
 
 proc getCurrentFleet*(self: Controller): string =
   return self.nodeConfigurationService.getFleetAsString()
-
-proc replacePubKeysWithDisplayNames*(self: Controller, message: string): string =
-  return self.messageService.replacePubKeysWithDisplayNames(message)
 
 proc getRenderedText*(self: Controller, parsedTextArray: seq[ParsedText], communityChats: seq[ChatDto]): string =
   return self.messageService.getRenderedText(parsedTextArray, communityChats)

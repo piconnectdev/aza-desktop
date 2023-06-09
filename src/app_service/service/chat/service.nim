@@ -83,6 +83,9 @@ type
     admin*: bool
     joined*: bool
 
+  RpcResponseArgs* = ref object of Args
+    response*: RpcResponse[JsonNode]
+
 
 # Signals which may be emitted by this service:
 const SIGNAL_CHANNEL_GROUPS_LOADED* = "channelGroupsLoaded"
@@ -104,6 +107,7 @@ const SIGNAL_CHAT_MEMBER_UPDATED* = "chatMemberUpdated"
 const SIGNAL_CHAT_SWITCH_TO_OR_CREATE_1_1_CHAT* = "switchToOrCreateOneToOneChat"
 const SIGNAL_CHAT_ADDED_OR_UPDATED* = "chatAddedOrUpdated"
 const SIGNAL_CHAT_CREATED* = "chatCreated"
+const SIGNAL_CHAT_REQUEST_UPDATE_AFTER_SEND* = "chatRequestUpdateAfterSend"
 
 QtObject:
   type Service* = ref object of QObject
@@ -133,6 +137,7 @@ QtObject:
   proc updateOrAddChat*(self: Service, chat: ChatDto)
   proc hydrateChannelGroups*(self: Service, data: JsonNode)
   proc updateOrAddChannelGroup*(self: Service, channelGroup: ChannelGroupDto, isCommunityChannelGroup: bool = false)
+  proc processMessageUpdateAfterSend*(self: Service, response: RpcResponse[JsonNode]): (seq[ChatDto], seq[MessageDto])
 
   proc doConnect(self: Service) =
     self.events.on(SignalType.Message.event) do(e: Args):
@@ -161,7 +166,11 @@ QtObject:
         for community in receivedData.communities:
           if community.joined:
             self.updateOrAddChannelGroup(community.toChannelGroupDto(), isCommunityChannelGroup = true)
-  
+
+    self.events.on(SIGNAL_CHAT_REQUEST_UPDATE_AFTER_SEND) do(e: Args):
+      var args = RpcResponseArgs(e)
+      discard self.processMessageUpdateAfterSend(args.response)
+
   proc getChannelGroups*(self: Service): seq[ChannelGroupDto] =
     return toSeq(self.channelGroups.values)
 
@@ -465,33 +474,9 @@ QtObject:
       var imagePaths: seq[string] = @[]
 
       for imagePathOrSource in images.mitems:
-
-        var imagePath = ""
-
-        if imagePathOrSource.startsWith(base64JPGPrefix):
-          # If an image was copied to clipboard we're receiving it from there
-          # as base64 encoded string. The base64 string will always have JPG data
-          # because image_resizer (a few lines below) will always generate jpgs
-          # (which needs to be fixed as well). 
-          #
-          # We save the image data to a tmp location because image_resizer expects
-          # a filepath to operate on.
-          #
-          # TODO: 
-          # Make image_resizer work for all image types (and ensure the same 
-          # for base64 encoded string received via clipboard
-          let base64Str = imagePathOrSource.replace(base64JPGPrefix, "")
-          let bytes = base64.decode(base64Str)
-          let tmpPath = TMPDIR & $genUUID() & ".jpg"
-          writeFile(tmpPath, bytes)
-          imagePath = tmpPath
-        else:
-          imagePath = imagePathOrSource
-
-        var image = singletonInstance.utils.formatImagePath(imagePath)
-        imagePath = image_resizer(image, 2000, TMPDIR)
-
-        imagePaths.add(imagePath)
+        let imagePath = image_resizer(imagePathOrSource, 2000, TMPDIR)
+        if imagePath != "":
+          imagePaths.add(imagePath)
 
       let response = status_chat.sendImages(chatId, imagePaths, msg, replyTo)
 

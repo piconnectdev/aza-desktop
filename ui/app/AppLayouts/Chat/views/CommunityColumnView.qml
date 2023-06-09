@@ -14,6 +14,8 @@ import utils 1.0
 import shared 1.0
 import shared.popups 1.0
 import shared.status 1.0
+import shared.controls.chat.menuItems 1.0
+
 import "../popups/community"
 import "../panels"
 import "../panels/communities"
@@ -76,7 +78,7 @@ Item {
         }
 
         onClicked: {
-            communityIntroDialog.open()
+            Global.openPopup(communityIntroDialog);
         }
 
         Connections {
@@ -88,43 +90,24 @@ Item {
                 }
             }
         }
-
-        CommunityIntroDialog {
+        Component {
             id: communityIntroDialog
+            CommunityIntroDialog {
 
-            isInvitationPending: joinCommunityButton.invitationPending
-            name: communityData.name
-            introMessage: communityData.introMessage
-            imageSrc: communityData.image
-            accessType: communityData.access
+                isInvitationPending: joinCommunityButton.invitationPending
+                name: communityData.name
+                introMessage: communityData.introMessage
+                imageSrc: communityData.image
+                accessType: communityData.access
 
-            onJoined: {
-                joinCommunityButton.loading = true
-                root.store.requestToJoinCommunity(communityData.id, root.store.userProfileInst.name)
-            }
-            onCancelMembershipRequest: {
-                root.store.cancelPendingRequest(communityData.id)
-                joinCommunityButton.invitationPending = root.store.isCommunityRequestPending(communityData.id)
-            }
-        }
-    }
-
-    Loader {
-        id: membershipRequests
-
-        readonly property int nbRequests: root.communityData.pendingRequestsToJoin.count || 0
-
-        anchors.top: joinCommunityButton.visible ? joinCommunityButton.bottom : communityHeader.bottom
-        anchors.topMargin: active ? Style.current.halfPadding : 0
-        anchors.horizontalCenter: parent.horizontalCenter
-
-        active: communityData.amISectionAdmin && nbRequests > 0
-        height: nbRequests > 0 ? 64 : 0
-        sourceComponent: Component {
-            StatusContactRequestsIndicatorListItem {
-                title: qsTr("Membership requests")
-                requestsCount: membershipRequests.nbRequests
-                onClicked: root.store.goToMembershipRequestsPage()
+                onJoined: {
+                    joinCommunityButton.loading = true
+                    root.store.requestToJoinCommunity(communityData.id, root.store.userProfileInst.name)
+                }
+                onCancelMembershipRequest: {
+                    root.store.cancelPendingRequest(communityData.id)
+                    joinCommunityButton.invitationPending = root.store.isCommunityRequestPending(communityData.id)
+                }
             }
         }
     }
@@ -132,7 +115,7 @@ Item {
     ChatsLoadingPanel {
         chatSectionModule: root.communitySectionModule
         width: parent.width
-        anchors.top: membershipRequests.bottom
+        anchors.top: joinCommunityButton.visible ? joinCommunityButton.bottom : communityHeader.bottom
         anchors.topMargin: active ? Style.current.halfPadding : 0
     }
 
@@ -177,7 +160,7 @@ Item {
 
     StatusScrollView {
         id: scrollView
-        anchors.top: membershipRequests.bottom
+        anchors.top: joinCommunityButton.visible ? joinCommunityButton.bottom : communityHeader.bottom
         anchors.topMargin: Style.current.halfPadding
         anchors.bottom: createChatOrCommunity.top
         anchors.horizontalCenter: parent.horizontalCenter
@@ -248,18 +231,24 @@ Item {
             }
 
             categoryPopupMenu: StatusMenu {
-
+                id: contextMenuCategory
                 property var categoryItem
 
+                MuteChatMenuItem {
+                    enabled: !!categoryItem && !categoryItem.muted
+                    title: qsTr("Mute category")
+                    onMuteTriggered: {
+                        root.communitySectionModule.muteCategory(categoryItem.itemId, interval)
+                        contextMenuCategory.close()
+                    }
+                }
+
                 StatusAction {
-                    text: !!categoryItem ? categoryItem.muted ? qsTr("Unmute category") : qsTr("Mute category") : ""
+                    enabled: !!categoryItem && categoryItem.muted
+                    text: qsTr("Unmute category")
                     icon.name: "notification"
                     onTriggered: {
-                        if (categoryItem.muted) {
-                            root.communitySectionModule.unmuteCategory(categoryItem.itemId)
-                        } else {
-                            root.communitySectionModule.muteCategory(categoryItem.itemId)
-                        }
+                        root.communitySectionModule.unmuteCategory(categoryItem.itemId)
                     }
                 }
 
@@ -452,7 +441,6 @@ Item {
                 enabled: communityData.amISectionAdmin
                 acceptedButtons: Qt.RightButton
                 onTapped: {
-                    console.log("<<< tapped")
                     adminPopupMenu.showInviteButton = true
                     adminPopupMenu.x = eventPoint.position.x + 4
                     adminPopupMenu.y = eventPoint.position.y + 4

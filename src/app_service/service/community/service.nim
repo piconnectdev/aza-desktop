@@ -1534,6 +1534,24 @@ QtObject:
     except Exception as e:
       error "Error exporting community", msg = e.msg
 
+  proc speedupArchivesImport*() =
+    try:
+      let response = status_go.speedupArchivesImport()
+      if (response.error != nil):
+        let error = Json.decode($response.error, RpcError)
+        raise newException(RpcException, fmt"err: {error.message}")
+    except Exception as e:
+      error "Error speeding up archives import: ", msg = e.msg
+
+  proc slowdownArchivesImport*() =
+    try:
+      let response = status_go.slowdownArchivesImport()
+      if (response.error != nil):
+        let error = Json.decode($response.error, RpcError)
+        raise newException(RpcException, fmt"err: {error.message}")
+    except Exception as e:
+      error "Error slowing down archives import: ", msg = e.msg
+
   proc getPendingRequestIndex(self: Service, communityId: string, requestId: string): int =
     let community = self.communities[communityId]
     var i = 0
@@ -1630,9 +1648,9 @@ QtObject:
       error "Error sharing community", msg = e.msg
       result = "Error sharing community: " & e.msg
 
-  proc muteCategory*(self: Service, communityId: string, categoryId: string) =
+  proc muteCategory*(self: Service, communityId: string, categoryId: string, interval: int) =
     try:
-      let response = status_go.muteCategory(communityId, categoryId)
+      let response = status_go.muteCategory(communityId, categoryId, interval)
       if (not response.error.isNil):
         let msg = response.error.message & " categoryId=" & categoryId
         error "error while mute category ", msg
