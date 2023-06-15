@@ -19,18 +19,28 @@ SettingsPageLayout {
 
     required property var membersModel
 
+    // JS object specifing fees for the airdrop operation, should be set to
+    // provide response to airdropFeesRequested signal.
+    // Refer CommunityNewAirdropView::airdropFees for details.
+    property var airdropFees: null
+
     property int viewWidth: 560 // by design
 
     signal airdropClicked(var airdropTokens, var addresses, var membersPubKeys)
-    signal navigateToMintTokenSettings
+    signal airdropFeesRequested(var contractKeysAndAmounts, var addresses)
 
+    signal navigateToMintTokenSettings
 
     function navigateBack() {
         stackManager.pop(StackView.Immediate)
     }
 
-    function selectCollectible(key, amount) {
-        d.selectCollectible(key, amount)
+    function selectToken(key, amount, type) {
+        d.selectToken(key, amount, type)
+    }
+
+    function addAddresses(addresses) {
+        d.addAddresses(addresses)
     }
 
     QtObject {
@@ -42,7 +52,8 @@ SettingsPageLayout {
         readonly property string welcomePageTitle: qsTr("Airdrops")
         readonly property string newAirdropViewPageTitle: qsTr("New airdrop")
 
-        signal selectCollectible(string key, int amount)
+        signal selectToken(string key, int amount, int type)
+        signal addAddresses(var addresses)
     }
 
     content: StackView {
@@ -104,13 +115,21 @@ SettingsPageLayout {
             collectiblesModel: root.collectiblesModel
             membersModel: root.membersModel
 
+            Binding on airdropFees {
+                value: root.airdropFees
+            }
+
             onAirdropClicked: {
                 root.airdropClicked(airdropTokens, addresses, membersPubKeys)
                 stackManager.clear(d.welcomeViewState, StackView.Immediate)
             }
             onNavigateToMintTokenSettings: root.navigateToMintTokenSettings()
 
-            Component.onCompleted: d.selectCollectible.connect(view.selectCollectible)
+            Component.onCompleted: {
+                d.selectToken.connect(view.selectToken)
+                d.addAddresses.connect(view.addAddresses)
+                airdropFeesRequested.connect(root.airdropFeesRequested)
+            }
         }
     }
 }

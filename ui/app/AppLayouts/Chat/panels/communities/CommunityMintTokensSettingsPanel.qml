@@ -12,6 +12,7 @@ import StatusQ.Controls 0.1
 import AppLayouts.Chat.layouts 1.0
 import AppLayouts.Chat.views.communities 1.0
 import AppLayouts.Chat.popups.community 1.0
+import AppLayouts.Chat.helpers 1.0
 
 import utils 1.0
 import SortFilterProxyModel 0.2
@@ -19,9 +20,15 @@ import SortFilterProxyModel 0.2
 SettingsPageLayout {
     id: root
 
+    // General properties:
+    property string communityName
+    property int viewWidth: 560 // by design
+
     // Models:
     property var tokensModel
+    property var accounts // Expected roles: address, name, color, emoji
 
+    // Transaction related properties:
     property string feeText
     property string errorText
     property bool isFeeLoading: true
@@ -33,56 +40,17 @@ SettingsPageLayout {
     property var enabledNetworks
     property var allNetworks
 
-    // Account expected roles: address, name, color, emoji
-    property var accounts
-
-    property string communityName
-
-    property int viewWidth: 560 // by design
-
-    signal mintCollectible(url artworkSource,
-                           string name,
-                           string symbol,
-                           string description,
-                           int supply,
-                           bool infiniteSupply,
-                           bool transferable,
-                           bool selfDestruct,
-                           int chainId,
-                           string accountName,
-                           string accountAddress,
-                           var artworkCropRect)
-
-    signal mintAsset(url artworkSource,
-                     string name,
-                     string symbol,
-                     string description,
-                     int supply,
-                     bool infiniteSupply,
-                     int decimals,
-                     int chainId,
-                     string accountName,
-                     string accountAddress,
-                     var artworkCropRect)
-
+    signal mintCollectible(var collectibleItem)
+    signal mintAsset(var assetItem)
     signal signMintTransactionOpened(int chainId, string accountAddress)
-
-    signal signSelfDestructTransactionOpened(var selfDestructTokensList, // [key , amount]
-                                             string tokenKey)
-
-    signal remoteSelfDestructCollectibles(var selfDestructTokensList, // [key , amount]
-                                          string tokenKey)
-
+    signal signRemoteDestructTransactionOpened(var remotelyDestructTokensList, // [key , amount]
+                                               string tokenKey)
+    signal remotelyDestructCollectibles(var remotelyDestructTokensList, // [key , amount]
+                                        string tokenKey)
     signal signBurnTransactionOpened(int chainId)
-
-    signal burnCollectibles(string tokenKey,
-                            int amount)
-
-    signal airdropCollectible(string tokenKey)
-
+    signal burnToken(string tokenKey, int amount)
+    signal airdropToken(string tokenKey, int type, var addresses)
     signal deleteToken(string tokenKey)
-
-    signal retryMintToken(string tokenKey)
 
     function setFeeLoading() {
         root.isFeeLoading = true
@@ -108,26 +76,25 @@ SettingsPageLayout {
         readonly property string newTokenButtonText: qsTr("Mint token")
         readonly property string backButtonText: qsTr("Back")
 
-        property string accountAddress
         property string accountName
         property int chainId
         property string chainName
-        property string contractUniqueKey
 
         property var tokenOwnersModel
-        property var selfDestructTokensList
-        property bool selfDestruct
-        property bool burnEnabled
+        property var remotelyDestructTokensList
+        property bool remotelyDestruct
+        property bool burnVisible
         property string tokenKey
         property int burnAmount
         property int remainingTokens
         property url artworkSource
+        property bool isAssetType
+        property var currentToken // CollectibleObject or AssetObject type
 
         readonly property var initialItem: (root.tokensModel && root.tokensModel.count > 0) ? mintedTokensView : welcomeView
-        onInitialItemChanged: updateInitialStackView()
 
         signal airdropClicked()
-
+        signal remoteDestructAddressClicked(string address)
         signal retryMintClicked()
 
         function updateInitialStackView() {
@@ -138,6 +105,15 @@ SettingsPageLayout {
                     stackManager.stackView.replace(welcomeView, mintedTokensView, StackView.Immediate)
             }
         }
+
+        onInitialItemChanged: updateInitialStackView()
+    }
+
+    QtObject {
+        id: temp_
+
+        readonly property CollectibleObject collectible: CollectibleObject{}
+        readonly property AssetObject asset: AssetObject{}
     }
 
     secondaryHeaderButton.type: StatusBaseButton.Type.Danger
@@ -162,6 +138,7 @@ SettingsPageLayout {
         },
         State {
             name: d.newTokenViewState
+            PropertyChanges {target: root; title: d.isAssetType ? d.newAssetPageTitle : d.newCollectiblePageTitle }
             PropertyChanges {target: root; subTitle: ""}
             PropertyChanges {target: root; previousPageName: d.backButtonText}
             PropertyChanges {target: root; primaryHeaderButton.visible: false}
@@ -184,8 +161,54 @@ SettingsPageLayout {
     onPrimaryHeaderButtonClicked: {
         if(root.state == d.initialViewState)
             stackManager.push(d.newTokenViewState, newTokenView, null, StackView.Immediate)
-        if(root.state == d.tokenViewState)
-            d.retryMintClicked()
+
+        if(root.state == d.tokenViewState) {
+            if(d.currentToken) {
+                if(d.isAssetType) {
+                    // Copy current data:
+                    temp_.asset.copyAsset(d.currentToken)
+
+                    // Update to point to new instance
+                    d.currentToken = temp_.asset
+
+                    // Reset the stack:
+                    stackManager.clear(d.initialViewState, StackView.Immediate)
+
+                    // Then move on to the new token view, but asset pre-filled:
+                    stackManager.push(d.newTokenViewState,
+                                      newTokenView,
+                                      {
+                                          isAssetView: d.isAssetType,
+                                          referenceName: d.currentToken.name,
+                                          referenceSymbol: d.currentToken.symbol,
+                                          validationMode: StatusInput.ValidationMode.Always,
+                                          asset: d.currentToken
+                                      },
+                                      StackView.Immediate)
+                } else {
+                    // Copy current data:
+                    temp_.collectible.copyCollectible(d.currentToken)
+
+                    // Update to point to new instance
+                    d.currentToken = temp_.collectible
+
+                    // Reset the stack:
+                    stackManager.clear(d.initialViewState, StackView.Immediate)
+
+                    // Then move on to the new token view, but collectible pre-filled:
+                    stackManager.push(d.newTokenViewState,
+                                      newTokenView,
+                                      {
+                                          isAssetView: d.isAssetType,
+                                          referenceName: d.currentToken.name,
+                                          referenceSymbol: d.currentToken.symbol,
+                                          validationMode: StatusInput.ValidationMode.Always,
+                                          collectible: d.currentToken
+                                      },
+                                      StackView.Immediate)
+                }
+            } else console.warn("Mint Token Settings - Trying to retry undefined token object.")
+        }
     }
 
     onSecondaryHeaderButtonClicked: {
@@ -220,6 +243,15 @@ SettingsPageLayout {
         id: newTokenView
 
         ColumnLayout {
+            id: colLayout
+
+            property CollectibleObject collectible: CollectibleObject{}
+            property AssetObject asset: AssetObject{}
+            property bool isAssetView: false
+            property int validationMode: StatusInput.ValidationMode.OnlyWhenDirty
+            property string referenceName: ""
+            property string referenceSymbol: ""
+
             width: root.viewWidth
             spacing: Style.current.padding
 
@@ -227,6 +259,7 @@ SettingsPageLayout {
                 id: optionsTab
 
                 Layout.preferredWidth: root.viewWidth
+                currentIndex: colLayout.isAssetView ? 1 : 0
 
                 StatusSwitchTabButton {
                     id: collectiblesTab
@@ -239,89 +272,64 @@ SettingsPageLayout {
 
                     text: qsTr("Assets")
                 }
-
-                Binding {
-                    target: root
-                    property: "title"
-                    value: optionsTab.currentItem === collectiblesTab ? d.newCollectiblePageTitle : d.newAssetPageTitle
-                }
             }
 
             StackLayout {
                 Layout.preferredWidth: root.viewWidth
                 Layout.fillHeight: true
 
-                currentIndex: optionsTab.currentItem === collectiblesTab ? 0 : 1
+                currentIndex: optionsTab.currentItem == collectiblesTab ? 0 : 1
 
-                CommunityNewTokenView {
-                    viewWidth: root.viewWidth
-                    layer1Networks: root.layer1Networks
-                    layer2Networks: root.layer2Networks
-                    testNetworks: root.testNetworks
-                    enabledNetworks: root.testNetworks
-                    allNetworks: root.allNetworks
-                    accounts: root.accounts
-                    tokensModel: root.tokensModel
+                CustomCommunityNewTokenView {
+                    id: newCollectibleView
 
-                    onPreviewClicked: {
-                        d.accountAddress = accountAddress
-                        stackManager.push(d.previewTokenViewState,
-                                          previewTokenView,
-                                          {
-                                              preview: true,
-                                              isAssetView: false,
-                                              name,
-                                              artworkSource,
-                                              artworkCropRect,
-                                              symbol,
-                                              description,
-                                              supplyAmount,
-                                              infiniteSupply,
-                                              transferable: !notTransferable,
-                                              selfDestruct,
-                                              chainId,
-                                              chainName,
-                                              chainIcon,
-                                              accountName
-                                          },
-                                          StackView.Immediate)
-                    }
+                    isAssetView: false
+                    validationMode: !colLayout.isAssetView ? colLayout.validationMode : StatusInput.ValidationMode.OnlyWhenDirty
+                    collectible: colLayout.collectible
+                    referenceName: colLayout.referenceName
+                    referenceSymbol: colLayout.referenceSymbol
                 }
 
-                CommunityNewTokenView {
-                    viewWidth: root.viewWidth
-                    layer1Networks: root.layer1Networks
-                    layer2Networks: root.layer2Networks
-                    testNetworks: root.testNetworks
-                    enabledNetworks: root.testNetworks
-                    allNetworks: root.allNetworks
-                    accounts: root.accounts
-                    tokensModel: root.tokensModel
+                CustomCommunityNewTokenView {
+                    id: newAssetView
+
                     isAssetView: true
+                    validationMode: colLayout.isAssetView ? colLayout.validationMode : StatusInput.ValidationMode.OnlyWhenDirty
+                    asset: colLayout.asset
+                    referenceName: colLayout.referenceName
+                    referenceSymbol: colLayout.referenceSymbol
+                }
+
+                component CustomCommunityNewTokenView: CommunityNewTokenView {
+                    isAssetView: false
+                    viewWidth: root.viewWidth
+                    layer1Networks: root.layer1Networks
+                    layer2Networks: root.layer2Networks
+                    testNetworks: root.testNetworks
+                    enabledNetworks: root.testNetworks
+                    allNetworks: root.allNetworks
+                    accounts: root.accounts
+                    tokensModel: root.tokensModel
 
                     onPreviewClicked: {
-                        d.accountAddress = accountAddress
                         stackManager.push(d.previewTokenViewState,
                                           previewTokenView,
                                           {
                                               preview: true,
-                                              isAssetView: true,
-                                              name,
-                                              artworkSource,
-                                              artworkCropRect,
-                                              symbol,
-                                              description,
-                                              supplyAmount,
-                                              infiniteSupply,
-                                              assetDecimals,
-                                              chainId,
-                                              chainName,
-                                              chainIcon,
-                                              accountName
+                                              isAssetView,
+                                              asset,
+                                              collectible
                                           },
                                           StackView.Immediate)
                     }
                 }
+            }
+
+            Binding {
+                target: root
+                property: "title"
+                value: optionsTab.currentItem == collectiblesTab ? d.newCollectiblePageTitle : d.newAssetPageTitle
+                restoreMode: Binding.RestoreBindingOrValue
             }
         }
     }
@@ -334,40 +342,17 @@ SettingsPageLayout {
 
             function signMintTransaction() {
                 root.setFeeLoading()
-                if(preview.isAssetView) {
-                    root.mintAsset(artworkSource,
-                                   name,
-                                   symbol,
-                                   description,
-                                   supplyAmount,
-                                   infiniteSupply,
-                                   assetDecimals,
-                                   chainId,
-                                   accountName,
-                                   d.accountAddress,
-                                   artworkCropRect)
-                } else {
-                    root.mintCollectible(artworkSource,
-                                         name,
-                                         symbol,
-                                         description,
-                                         supplyAmount,
-                                         infiniteSupply,
-                                         transferable,
-                                         selfDestruct,
-                                         chainId,
-                                         accountName,
-                                         d.accountAddress,
-                                         artworkCropRect)
-                }
+                if(preview.isAssetView)
+                    root.mintAsset(asset)
+                else
+                    root.mintCollectible(collectible)
 
                 stackManager.clear(d.initialViewState, StackView.Immediate)
             }
 
             viewWidth: root.viewWidth
 
-            onMintCollectible: popup.open()
-            onMintAsset: popup.open()
+            onMintClicked: signMintPopup.open()
 
             Binding {
                 target: root
@@ -383,10 +368,10 @@ SettingsPageLayout {
             }
 
             SignTokenTransactionsPopup {
-                id: popup
+                id: signMintPopup
 
                 anchors.centerIn: Overlay.overlay
-                title: qsTr("Sign transaction - Mint %1 token").arg(popup.tokenName)
+                title: qsTr("Sign transaction - Mint %1 token").arg(signMintPopup.tokenName)
                 tokenName: preview.name
                 accountName: preview.accountName
                 networkName: preview.chainName
@@ -396,7 +381,7 @@ SettingsPageLayout {
 
                 onOpened: {
                     root.setFeeLoading()
-                    root.signMintTransactionOpened(preview.chainId, d.accountAddress)
+                    root.signMintTransactionOpened(preview.chainId, preview.accountAddress)
                 }
                 onCancelClicked: close()
                 onSignTransactionClicked: preview.signMintTransaction()
@@ -410,16 +395,20 @@ SettingsPageLayout {
         MintTokensFooterPanel {
             id: footerPanel
 
+            readonly property bool deployStateFailed : (!!d.currentToken) ? d.currentToken.deployState === Constants.ContractTransactionStatus.Failed : false
+
             function closePopups() {
                 remotelyDestructPopup.close()
                 alertPopup.close()
                 signTransactionPopup.close()
             }
 
-            airdropEnabled: true
-            retailEnabled: false
-            remotelySelfDestructVisible: d.selfDestruct
-            burnVisible: d.burnEnabled
+            airdropEnabled: !deployStateFailed
+            remotelyDestructEnabled: !deployStateFailed
+            burnEnabled: !deployStateFailed
+
+            remotelyDestructVisible: d.remotelyDestruct
+            burnVisible: d.burnVisible
 
             onAirdropClicked: d.airdropClicked()
             onRemotelyDestructClicked: remotelyDestructPopup.open()
@@ -430,9 +419,10 @@ SettingsPageLayout {
 
                 collectibleName: root.title
                 model: d.tokenOwnersModel
+                destroyOnClose: false
 
                 onRemotelyDestructClicked: {
-                    d.selfDestructTokensList = selfDestructTokensList
+                    d.remotelyDestructTokensList = remotelyDestructTokensList
                     alertPopup.tokenCount = tokenCount
                     alertPopup.open()
                 }
@@ -442,6 +432,8 @@ SettingsPageLayout {
                 id: alertPopup
 
                 property int tokenCount
+
+                destroyOnClose: false
 
                 title: qsTr("Remotely destruct %n token(s)", "", tokenCount)
                 acceptBtnText: qsTr("Remotely destruct")
@@ -461,9 +453,9 @@ SettingsPageLayout {
                 function signTransaction() {
                     root.setFeeLoading()
                     if(signTransactionPopup.isRemotelyDestructTransaction) {
-                        root.remoteSelfDestructCollectibles(d.selfDestructTokensList, d.tokenKey)
+                        root.remotelyDestructCollectibles(d.remotelyDestructTokensList, d.tokenKey)
                     } else {
-                        root.burnCollectibles(d.tokenKey, d.burnAmount)
+                        root.burnToken(d.tokenKey, d.burnAmount)
                     }
 
                     footerPanel.closePopups()
@@ -480,7 +472,7 @@ SettingsPageLayout {
 
                 onOpened: {
                     root.setFeeLoading()
-                    signTransactionPopup.isRemotelyDestructTransaction ? root.signSelfDestructTransactionOpened(d.selfDestructTokensList, d.tokenKey) :
+                    signTransactionPopup.isRemotelyDestructTransaction ? root.signRemoteDestructTransactionOpened(d.remotelyDestructTokensList, d.tokenKey) :
                                                                          root.signBurnTransactionOpened(d.chainId)
                 }
                 onCancelClicked: close()
@@ -501,6 +493,15 @@ SettingsPageLayout {
                     signTransactionPopup.open()
                 }
             }
+
+            Connections {
+                target: d
+
+                function onRemoteDestructAddressClicked(address) {
+                    remotelyDestructPopup.open()
+                    // TODO: set the address selected in the popup's list
+                }
+            }
         }
     }
 
@@ -511,27 +512,17 @@ SettingsPageLayout {
             viewWidth: root.viewWidth
             model: root.tokensModel
             onItemClicked: {
-                d.accountAddress = accountAddress
                 d.chainId = chainId
                 d.chainName = chainName
                 d.accountName = accountName
-                d.tokenKey = contractUniqueKey
+                d.tokenKey = tokenKey
                 stackManager.push(d.tokenViewState,
                                   tokenView,
                                   {
                                       preview: false,
-                                      contractUniqueKey
+                                      tokenKey
                                   },
                                   StackView.Immediate)
-            }
-
-            Connections {
-                target: d
-
-                function onRetryMintClicked() {
-                    root.retryMintToken(d.tokenKey)
-                    stackManager.clear(d.initialViewState, StackView.Immediate)
-                }
             }
         }
     }
@@ -542,9 +533,12 @@ SettingsPageLayout {
         CommunityTokenView {
             id: view
 
-            property string contractUniqueKey
+            property string airdropKey // TO REMOVE: Temporal property until airdrop backend is not ready to use token key instead of symbol
+            property int tokenType
 
             viewWidth: root.viewWidth
+            collectible: CollectibleObject{}
+            asset: AssetObject{}
 
             Binding {
                 target: root
@@ -591,13 +585,13 @@ SettingsPageLayout {
 
             Binding {
                 target: d
-                property: "selfDestruct"
-                value: view.selfDestruct
+                property: "remotelyDestruct"
+                value: view.collectible.remotelyDestruct
             }
 
             Binding {
                 target: d
-                property: "burnEnabled"
+                property: "burnVisible"
                 value: !view.infiniteSupply
                 restoreMode: Binding.RestoreBindingOrValue
             }
@@ -614,6 +608,18 @@ SettingsPageLayout {
                 value: view.artworkSource
             }
 
+            Binding {
+                target: d
+                property: "isAssetType"
+                value: view.tokenType === Constants.TokenType.ERC20
+            }
+
+            Binding {
+                target: d
+                property: "currentToken"
+                value: view.isAssetView ? view.asset : view.collectible
+            }
+
             Instantiator {
                 id: instantiator
 
@@ -621,39 +627,82 @@ SettingsPageLayout {
                     sourceModel: root.tokensModel
                     filters: ValueFilter {
                         roleName: "contractUniqueKey"
-                        value: view.contractUniqueKey
+                        value: d.tokenKey
                     }
                 }
                 delegate: QtObject {
                     component Bind: Binding { target: view }
                     readonly property list<Binding> bindings: [
                         Bind { property: "isAssetView"; value: model.tokenType === Constants.TokenType.ERC20 },
-                        Bind { property: "deployState"; value: model.deployState },
-                        Bind { property: "remotelyDestructState"; value: model.remotelyDestructState },
-                        Bind { property: "burnState"; value: model.burnState },
-                        Bind { property: "name"; value: model.name },
-                        Bind { property: "artworkSource"; value: model.image },
-                        Bind { property: "symbol"; value: model.symbol },
-                        Bind { property: "description"; value: model.description },
-                        Bind { property: "supplyAmount"; value: model.supply },
-                        Bind { property: "infiniteSupply"; value: model.infiniteSupply },
-                        Bind { property: "remainingTokens"; value: model.remainingTokens },
-                        Bind { property: "selfDestruct"; value: model.remoteSelfDestruct },
-                        Bind { property: "chainId"; value: model.chainId },
-                        Bind { property: "chainName"; value: model.chainName },
-                        Bind { property: "chainIcon"; value: model.chainIcon },
-                        Bind { property: "accountName"; value: model.accountName },
                         Bind { property: "tokenOwnersModel"; value: model.tokenOwnersModel },
-                        Bind { property: "assetDecimals"; value: model.decimals }
+                        Bind { property: "tokenType"; value: model.tokenType },
+                        Bind { property: "airdropKey"; value: model.symbol } // TO BE REMOVED: When airdrop backend is ready to use token key instead of symbol
+                    ]
+
+                    component BindCollectible: Binding { target: view.collectible }
+                    readonly property list<Binding> collectibleBindings: [
+                        BindCollectible { property: "key"; value: model.contractUniqueKey },
+                        BindCollectible { property: "deployState"; value: model.deployState },
+                        BindCollectible { property: "burnState"; value: model.burnState },
+                        BindCollectible { property: "name"; value: model.name },
+                        BindCollectible { property: "artworkSource"; value: model.image },
+                        BindCollectible { property: "symbol"; value: model.symbol },
+                        BindCollectible { property: "description"; value: model.description },
+                        BindCollectible { property: "supply"; value: model.supply },
+                        BindCollectible { property: "infiniteSupply"; value: model.infiniteSupply },
+                        BindCollectible { property: "remainingTokens"; value: model.remainingTokens },
+                        BindCollectible { property: "chainId"; value: model.chainId },
+                        BindCollectible { property: "chainName"; value: model.chainName },
+                        BindCollectible { property: "chainIcon"; value: model.chainIcon },
+                        BindCollectible { property: "accountName"; value: model.accountName },
+                        BindCollectible { property: "accountAddress"; value: model.accountAddress }, // TODO: Backend
+                        BindCollectible { property: "transferable"; value: model.transferable },
+                        BindCollectible { property: "remotelyDestructState"; value: model.remotelyDestructState },
+                        BindCollectible { property: "remotelyDestruct"; value: model.remoteSelfDestruct }
+                    ]
+
+                    component BindAsset: Binding { target: view.asset }
+                    readonly property list<Binding> assetBindings: [
+                        BindAsset { property: "key"; value: model.contractUniqueKey },
+                        BindAsset { property: "deployState"; value: model.deployState },
+                        BindAsset { property: "burnState"; value: model.burnState },
+                        BindAsset { property: "name"; value: model.name },
+                        BindAsset { property: "artworkSource"; value: model.image },
+                        BindAsset { property: "symbol"; value: model.symbol },
+                        BindAsset { property: "description"; value: model.description },
+                        BindAsset { property: "supply"; value: model.supply },
+                        BindAsset { property: "infiniteSupply"; value: model.infiniteSupply },
+                        BindAsset { property: "remainingTokens"; value: model.remainingTokens },
+                        BindAsset { property: "chainId"; value: model.chainId },
+                        BindAsset { property: "chainName"; value: model.chainName },
+                        BindAsset { property: "chainIcon"; value: model.chainIcon },
+                        BindAsset { property: "accountName"; value: model.accountName },
+                        BindCollectible { property: "accountAddress"; value: model.accountAddress }, // TODO: Backend
+                        BindAsset { property: "decimals"; value: model.decimals }
                     ]
                 }
+            }
+
+            onGeneralAirdropRequested: {
+                root.airdropToken(view.airdropKey, view.tokenType, []) // d.tokenKey instead when backend airdrop ready to use key instead of symbol
+            }
+
+            onAirdropRequested: {
+                root.airdropToken(view.airdropKey, view.tokenType, [address]) // d.tokenKey instead when backend airdrop ready to use key instead of symbol
+            }
+
+            onRemoteDestructRequested: {
+                d.remoteDestructAddressClicked(address)
             }
 
             Connections {
                 target: d
 
+                // handle airdrop request from the footer
                 function onAirdropClicked() {
-                    root.airdropCollectible(view.symbol) // TODO: Backend. It should just be the key (hash(chainId + contractAddress)
+                    root.airdropToken(view.airdropKey, // d.tokenKey instead when backend airdrop ready to use key instead of symbol
+                                      view.tokenType, 
+                                      [])
                 }
             }
         }

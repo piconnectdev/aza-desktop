@@ -34,6 +34,7 @@ QtObject:
     result.multi_transaction = mt
     result.transaction = nil
     result.isPending = false
+    result.metadata = metadata
     result.setup()
 
   proc newTransactionActivityEntry*(tr: ref Item, metadata: backend.ActivityEntry): ActivityEntry =
@@ -41,6 +42,7 @@ QtObject:
     result.multi_transaction = nil
     result.transaction = tr
     result.isPending = metadata.payloadType == backend.PayloadType.PendingTransaction
+    result.metadata = metadata
     result.setup()
 
   proc isMultiTransaction*(self: ActivityEntry): bool {.slot.} =
@@ -76,7 +78,7 @@ QtObject:
     return self.transaction
 
   proc getSender*(self: ActivityEntry): string {.slot.} =
-    # TODO: lookup sender's name from addressbook and cache it or in advance
+    # TODO: lookup sender's name
     if self.isMultiTransaction():
       return self.multi_transaction.fromAddress
 
@@ -86,7 +88,7 @@ QtObject:
     read = getSender
 
   proc getRecipient*(self: ActivityEntry): string {.slot.} =
-    # TODO: lookup recipient name from addressbook and cache it or in advance
+    # TODO: lookup recipient name
     if self.isMultiTransaction():
       return self.multi_transaction.toAddress
 
@@ -133,6 +135,12 @@ QtObject:
 
   QtProperty[int] timestamp:
     read = getTimestamp
+
+  proc getStatus*(self: ActivityEntry): int {.slot.} =
+    return self.metadata.activityStatus.int
+
+  QtProperty[int] status:
+    read = getStatus
 
   # TODO: properties - type, fromChains, toChains, fromAsset, toAsset, assetName
 

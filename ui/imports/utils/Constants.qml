@@ -396,6 +396,14 @@ QtObject {
         readonly property int communityChat: 6
     }
 
+    readonly property QtObject memberRole: QtObject{
+        readonly property int none: 0
+        readonly property int owner: 1
+        readonly property int manageUsers: 2
+        readonly property int moderateContent: 3
+        readonly property int admin: 4
+    }
+
     readonly property QtObject messageContentType: QtObject {
         readonly property int newMessagesMarker: -3
         readonly property int fetchMoreMessagesButton: -2
@@ -596,6 +604,7 @@ QtObject {
     readonly property QtObject regularExpressions: QtObject {
         readonly property var alphanumerical: /^$|^[a-zA-Z0-9]+$/
         readonly property var alphanumericalExpanded: /^$|^[a-zA-Z0-9\-_ ]+$/
+        readonly property var alphanumericalWithSpace: /^$|^[a-zA-Z0-9\s]+$/
         readonly property var asciiPrintable:         /^$|^[!-~]+$/
         readonly property var ascii:                  /^$|^[\x00-\x7F]+$/
         readonly property var capitalOnly: /^$|^[A-Z]+$/
@@ -604,6 +613,7 @@ QtObject {
 
     readonly property QtObject errorMessages: QtObject {
         readonly property string alphanumericalRegExp: qsTr("Only letters and numbers allowed")
+        readonly property string alphanumericalWithSpaceRegExp: qsTr("Special characters are not allowed")
         readonly property string alphanumericalExpandedRegExp: qsTr("Only letters, numbers, underscores, whitespaces and hyphens allowed")
         readonly property string asciiRegExp: qsTr("Only letters, numbers and ASII characters allowed")
     }
@@ -772,6 +782,24 @@ QtObject {
     readonly property string networkMainnet: "Mainnet"
     readonly property string networkRopsten: "Ropsten"
 
+    readonly property QtObject networkShortChainNames: QtObject {
+        readonly property string mainnet: "eth"
+        readonly property string arbiscan: "arb"
+        readonly property string optimism: "opt"
+        readonly property string goerliMainnet: "goEth"
+        readonly property string goerliArbiscan: "goArb"
+        readonly property string goerliOptimism: "goOpt"
+    }
+
+    readonly property QtObject networkExplorerLinks: QtObject {
+        readonly property string etherscan: "https://etherscan.io"
+        readonly property string arbiscan: "https://arbiscan.io"
+        readonly property string optimistic: "https://optimistic.etherscan.io"
+        readonly property string goerliEtherscan: "https://goerli.etherscan.io"
+        readonly property string goerliArbiscan: "https://goerli.arbiscan.io"
+        readonly property string goerliOptimistic: "https://goerli-optimism.etherscan.io"
+    }
+
     readonly property string api_request: "api-request"
     readonly property string web3SendAsyncReadOnly: "web3-send-async-read-only"
     readonly property string web3DisconnectAccount: "web3-disconnect-account"
@@ -856,11 +884,6 @@ QtObject {
 
     readonly property int minPasswordLength: 10
 
-    enum TransactionStatus {
-        Failure = 0,
-        Success = 1
-    }
-
     enum SendType {
         Transfer,
         ENSRegister,
@@ -917,6 +940,37 @@ QtObject {
         Unknown = 0,
         ERC20 = 1,
         ERC721 = 2
+    }
+
+    // Mirrors src/backend/activity.nim ActivityStatus
+    enum TransactionStatus {
+        Failed,
+        Pending,
+        Complete,
+        Finished
+    }
+
+    // Mirrors src/backend/activity.nim ActivityType
+    enum TransactionType {
+        Send,
+        Receive,
+        Buy,
+        Swap,
+        Bridge,
+        Sell, // TODO update value when added to backend
+        Destroy // TODO update value when added to backend
+    }
+
+    // To-do sync with backend
+    enum TransactionTimePeriod {
+        All,
+        Today,
+        Yesterday,
+        ThisWeek,
+        LastWeek,
+        ThisMonth,
+        LastMonth,
+        Custom
     }
 
     readonly property QtObject walletSection: QtObject {

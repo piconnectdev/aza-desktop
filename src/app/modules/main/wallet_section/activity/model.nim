@@ -1,8 +1,8 @@
-import NimQml, Tables, strutils, strformat, sequtils
+import NimQml, Tables, strutils, strformat, sequtils, logging
 
 import ./entry
 
-# TODO - DEV: remove this
+# TODO - DEV: remove these imports and associated code after all the metadata is returned by the filter API
 import app_service/service/transaction/dto
 import app/modules/shared_models/currency_amount
 import ../transactions/item as transaction
@@ -65,26 +65,33 @@ QtObject:
     of ModelRole.ActivityEntryRole:
       result = newQVariant(entry)
 
-  proc setEntries*(self: Model, entries: seq[ActivityEntry]) =
-    self.beginResetModel()
-    self.entries = entries
-    self.endResetModel()
-    self.countChanged()
-
-  # TODO: update data
-
-  # TODO: fetch more
-
   proc hasMoreChanged*(self: Model) {.signal.}
+
+  proc setHasMore(self: Model, hasMore: bool) {.slot.} =
+    self.hasMore = hasMore
+    self.hasMoreChanged()
+
+  proc setEntries*(self: Model, newEntries: seq[ActivityEntry], offset: int, hasMore: bool) =
+    if offset == 0:
+      self.beginResetModel()
+      self.entries = newEntries
+      self.endResetModel()
+    else:
+      let parentModelIndex = newQModelIndex()
+      defer: parentModelIndex.delete
+
+      if offset != self.entries.len:
+        error "offset != self.entries.len"
+        return
+      self.beginInsertRows(parentModelIndex, self.entries.len, self.entries.len + newEntries.len - 1)
+      self.entries.add(newEntries)
+      self.endInsertRows()
+    self.countChanged()
+    self.setHasMore(hasMore)
 
   proc getHasMore*(self: Model): bool {.slot.} =
     return self.hasMore
 
-  proc setHasMore*(self: Model, hasMore: bool) {.slot.} =
-    self.hasMore = hasMore
-    self.hasMoreChanged()
-
   QtProperty[bool] hasMore:
     read = getHasMore
-    write = setHasMore
     notify = hasMoreChanged

@@ -103,6 +103,13 @@ QtObject:
     self.endRemoveRows()
     self.countChanged()
 
+  proc getItemById*(self: TokenPermissionsModel, permissionId: string): TokenPermissionItem =
+    let idx = self.findIndexById(permissionId)
+    if(idx == -1):
+      return
+
+    return self.items[idx]
+
   proc updateItem*(self: TokenPermissionsModel, permissionId: string, item: TokenPermissionItem) =
     let idx = self.findIndexById(permissionId)
     if(idx == -1):
@@ -111,6 +118,7 @@ QtObject:
     self.items[idx].`type` = item.`type`
     self.items[idx].tokenCriteria.setItems(item.tokenCriteria.getItems())
     self.items[idx].isPrivate = item.isPrivate
+    self.items[idx].tokenCriteriaMet = item.tokenCriteriaMet
 
     let index = self.createIndex(idx, 0, nil)
     self.dataChanged(index, index, @[

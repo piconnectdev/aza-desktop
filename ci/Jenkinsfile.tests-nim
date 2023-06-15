@@ -7,7 +7,7 @@ pipeline {
   agent {
     docker {
       label 'linux'
-      image 'statusteam/nim-status-client-build:1.2.1-qt5.15.2'
+      image 'statusteam/nim-status-client-build:1.3.0-qt5.15.2'
     }
   }
 
@@ -46,6 +46,8 @@ pipeline {
     MAKEFLAGS = "-j4 V=${params.VERBOSE}"
     /* Makefile assumes the compiler folder is included */
     QTDIR = "/opt/qt/5.15.2/gcc_64"
+    /* Avoid weird bugs caused by stale cache. */
+    QML_DISABLE_DISK_CACHE = "true"
     /* Include library in order to compile the project */
     LD_LIBRARY_PATH = "$QTDIR/lib"
   }

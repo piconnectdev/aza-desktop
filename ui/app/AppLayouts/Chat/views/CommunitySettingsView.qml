@@ -37,9 +37,11 @@ StatusSectionLayout {
     // TODO: get this model from backend?
     property var settingsMenuModel: [{id: Constants.CommunitySettingsSections.Overview, name: qsTr("Overview"), icon: "show", enabled: true},
         {id: Constants.CommunitySettingsSections.Members, name: qsTr("Members"), icon: "group-chat", enabled: true, },
+
         {id: Constants.CommunitySettingsSections.Permissions, name: qsTr("Permissions"), icon: "objects", enabled: true},
-        {id: Constants.CommunitySettingsSections.MintTokens, name: qsTr("Mint Tokens"), icon: "token", enabled: true},
-        {id: Constants.CommunitySettingsSections.Airdrops, name: qsTr("Airdrops"), icon: "airdrop", enabled: true}]
+        {id: Constants.CommunitySettingsSections.MintTokens, name: qsTr("Mint Tokens"), icon: "token", enabled: root.community.memberRole === Constants.memberRole.owner},
+        {id: Constants.CommunitySettingsSections.Airdrops, name: qsTr("Airdrops"), icon: "airdrop", enabled: root.community.memberRole === Constants.memberRole.owner}]
+
     // TODO: Next community settings options:
     //                        {name: qsTr("Token sales"), icon: "token-sale"},
     //                        {name: qsTr("Subscriptions"), icon: "subscription"},
@@ -48,6 +50,9 @@ StatusSectionLayout {
     property var community
     property bool hasAddedContacts: false
     property var transactionStore: TransactionStore {}
+
+    property bool isAdmin: community.memberRole === Constants.memberRole.owner ||
+                           community.memberRole === Constants.memberRole.admin
 
     readonly property string filteredSelectedTags: {
         var tagsArray = []
@@ -177,7 +182,8 @@ StatusSectionLayout {
                 archiveSupportEnabled: root.community.historyArchiveSupportEnabled
                 requestToJoinEnabled: root.community.access === Constants.communityChatOnRequestAccess
                 pinMessagesEnabled: root.community.pinMessageAllMembersEnabled
-                editable: root.community.amISectionAdmin
+                editable: true
+                owned: root.community.memberRole === Constants.memberRole.owner
 
                 onEdited: {
                     const error = root.chatCommunitySectionModule.editCommunity(
@@ -219,7 +225,7 @@ StatusSectionLayout {
                 bannedMembersModel: root.community.bannedMembers
                 pendingMemberRequestsModel: root.community.pendingMemberRequests
                 declinedMemberRequestsModel: root.community.declinedMemberRequests
-                editable: root.community.amISectionAdmin
+                editable: root.isAdmin
                 communityName: root.community.name
 
                 onKickUserClicked: root.rootStore.removeUserFromCommunity(id)
@@ -245,12 +251,10 @@ StatusSectionLayout {
                 channelsModel: rootStore.chatCommunitySectionModule.model
 
                 communityDetails: QtObject {
-                    readonly property var _activeSection:
-                        rootStore.mainModuleInst.activeSection
-
-                    readonly property string name: _activeSection.name
-                    readonly property string image: _activeSection.image
-                    readonly property string color: _activeSection.color
+                    readonly property string name: root.community.name
+                    readonly property string image: root.community.image
+                    readonly property string color: root.community.color
+                    readonly property bool owner: root.community.memberRole === Constants.memberRole.owner
                 }
 
                 onCreatePermissionRequested:
@@ -305,46 +309,18 @@ StatusSectionLayout {
 
                 onPreviousPageNameChanged: root.backButtonName = previousPageName
                 onSignMintTransactionOpened: communityTokensStore.computeDeployFee(chainId, accountAddress)
-                onMintCollectible: {
-                    communityTokensStore.deployCollectible(root.community.id,
-                                                           accountAddress,
-                                                           name,
-                                                           symbol,
-                                                           description,
-                                                           supply,
-                                                           infiniteSupply,
-                                                           transferable,
-                                                           selfDestruct,
-                                                           chainId,
-                                                           artworkSource,
-                                                           accountName,
-                                                           artworkCropRect)
-                }
-                onMintAsset: {
-                    communityTokensStore.deployAsset(root.community.id,
-                                                     accountAddress,
-                                                     name,
-                                                     symbol,
-                                                     description,
-                                                     supply,
-                                                     infiniteSupply,
-                                                     decimals,
-                                                     chainId,
-                                                     artworkSource,
-                                                     accountName,
-                                                     artworkCropRect)
-                }
-                onSignSelfDestructTransactionOpened: communityTokensStore.computeSelfDestructFee(selfDestructTokensList, tokenKey)
-                onRemoteSelfDestructCollectibles: {
+                onMintCollectible: communityTokensStore.deployCollectible(root.community.id, collectibleItem)
+                onMintAsset: communityTokensStore.deployAsset(root.community.id, assetItem)
+                onSignRemoteDestructTransactionOpened: communityTokensStore.computeSelfDestructFee(remotelyDestructTokensList, tokenKey)
+                onRemotelyDestructCollectibles: {
                     communityTokensStore.remoteSelfDestructCollectibles(root.community.id,
-                                                                        selfDestructTokensList,
+                                                                        remotelyDestructTokensList,
                                                                         tokenKey)
                 }
                 onSignBurnTransactionOpened: communityTokensStore.computeBurnFee(chainId)
-                onBurnCollectibles: communityTokensStore.burnCollectibles(tokenKey, amount)
-                onAirdropCollectible: root.goTo(Constants.CommunitySettingsSections.Airdrops)
+                onBurnToken: communityTokensStore.burnToken(tokenKey, amount)
+                onAirdropToken: root.goTo(Constants.CommunitySettingsSections.Airdrops)
                 onDeleteToken: communityTokensStore.deleteToken(root.community.id, tokenKey)
-                onRetryMintToken: communityTokensStore.retryMintToken(root.community.id, tokenKey)
 
                 Connections {
                     target: rootStore.communityTokensStore
@@ -475,15 +451,30 @@ StatusSectionLayout {
                 onAirdropClicked: communityTokensStore.airdrop(root.community.id, airdropTokens, addresses)
                 onNavigateToMintTokenSettings: root.goTo(Constants.CommunitySettingsSections.MintTokens)
 
+                onAirdropFeesRequested:
+                    communityTokensStore.computeAirdropFee(
+                        root.community.id, contractKeysAndAmounts, addresses)
+
                 Connections {
                     target: mintPanel
 
-                    function onAirdropCollectible(key) {
+                    function onAirdropToken(tokenKey, type, addresses) {
                         // Here it is forced a navigation to the new airdrop form, like if it was clicked the header button
                         airdropPanel.primaryHeaderButtonClicked()
 
                         // Force a token selection to be airdroped with default amount 1
-                        airdropPanel.selectCollectible(key, 1)
+                        airdropPanel.selectToken(tokenKey, 1, type)
+                        
+                        // Set given addresses as recipients
+                        airdropPanel.addAddresses(addresses)
+                    }
+                }
+
+                Connections {
+                    target: rootStore.communityTokensStore
+
+                    function onAirdropFeeUpdated(airdropFees) {
+                        airdropPanel.airdropFees = airdropFees
                     }
                 }
             }
@@ -505,12 +496,15 @@ StatusSectionLayout {
         function goTo(section: int, subSection: int) {
             //find and enable section
             const matchingIndex = listView.model.findIndex((modelItem, index) => modelItem.id === section && modelItem.enabled)
-            if(matchingIndex !== -1) {
-                d.currentIndex = matchingIndex
-                //find and enable subsection if subSection navigation is available
-                if(d.currentItem && d.currentItem.goTo) {
-                    d.currentItem.goTo(subSection)
-                }
+
+            if(matchingIndex === -1)
+                return
+
+            d.currentIndex = matchingIndex
+
+            //find and enable subsection if subSection navigation is available
+            if(d.currentItem && d.currentItem.goTo) {
+                d.currentItem.goTo(subSection)
             }
         }
     }

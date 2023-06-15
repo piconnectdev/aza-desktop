@@ -15,6 +15,7 @@ QtObject {
 
     signal deployFeeUpdated(var ethCurrency, var fiatCurrency, int error)
     signal selfDestructFeeUpdated(var ethCurrency, var fiatCurrency, int error)
+    signal airdropFeeUpdated(var airdropFees)
 
     signal deploymentStateChanged(string communityId, int status, string url)
 
@@ -23,22 +24,26 @@ QtObject {
     signal remoteDestructStateChanged(string communityId, string tokenName, int status, string url)
 
     // Minting tokens:
-    function deployCollectible(communityId, accountAddress, name, symbol, description, supply,
-                             infiniteSupply, transferable, selfDestruct, chainId, artworkSource, accountName, artworkCropRect)
-    {
+    function deployCollectible(communityId, collectibleItem)
+    {        
         // TODO: Backend needs to create new role `accountName` and update this call accordingly
+        // TODO: Backend will need to check if the collectibleItem has a valid tokenKey, so it means a deployment retry,
+        // otherwise, it is a new deployment.
         // TODO: Backend needs to modify the call to expect an image JSON file with cropped artwork information:
-        const jsonArtworkFile = Utils.getImageAndCropInfoJson(artworkSource, artworkCropRect)
-        communityTokensModuleInst.deployCollectible(communityId, accountAddress, name, symbol, description, supply,
-                                                    infiniteSupply, transferable, selfDestruct, chainId, artworkSource/*instead: jsonArtworkFile*/)
+        const jsonArtworkFile = Utils.getImageAndCropInfoJson(collectibleItem.artworkSource, collectibleItem.artworkCropRect)
+        communityTokensModuleInst.deployCollectible(communityId, collectibleItem.accountAddress, collectibleItem.name,
+                                                    collectibleItem.symbol, collectibleItem.description, collectibleItem.supply,
+                                                    collectibleItem.infiniteSupply, collectibleItem.transferable, collectibleItem.remotelyDestruct,
+                                                    collectibleItem.chainId, collectibleItem.artworkSource/*instead: jsonArtworkFile*/)
     }
 
-    function deployAsset(communityId, accountAddress, name, symbol, description, supply,
-                         infiniteSupply, decimals, chainId, artworkSource, accountName, artworkCropRect)
+    function deployAsset(communityId, assetItem)
     {
         // TODO: Backend needs to create new role `accountName` and update this call accordingly
+        // TODO: Backend will need to check if the collectibleItem has a valid tokenKey, so it means a deployment retry,
+        // otherwise, it is a new deployment.
         // TODO: Backend needs to modify the call to expect an image JSON file with cropped artwork information:
-        const jsonArtworkFile = Utils.getImageAndCropInfoJson(artworkSource, artworkCropRect)
+        const jsonArtworkFile = Utils.getImageAndCropInfoJson(assetItem.artworkSource, assetItem.artworkCropRect)
         console.log("TODO: Deploy Asset backend!")
     }
 
@@ -46,24 +51,28 @@ QtObject {
         console.log("TODO: Delete token bakend!")
     }
 
-    function retryMintToken(communityId, contractUniqueKey) {
-        console.log("TODO: Retry mint token bakend!")
-    }
-
     readonly property Connections connections: Connections {
-      target: communityTokensModuleInst
-      function onDeployFeeUpdated(ethCurrency, fiatCurrency, errorCode) {
-          root.deployFeeUpdated(ethCurrency, fiatCurrency, errorCode)
-      }
-      function onSelfDestructFeeUpdated(ethCurrency, fiatCurrency, errorCode) {
-          root.selfDestructFeeUpdated(ethCurrency, fiatCurrency, errorCode)
-      }
-      function onDeploymentStateChanged(communityId, status, url) {
-          root.deploymentStateChanged(communityId, status, url)
-      }
-      function onRemoteDestructStateChanged(communityId, tokenName, status, url) {
-          root.remoteDestructStateChanged(communityId, tokenName, status, url)
-      }
+        target: communityTokensModuleInst
+
+        function onDeployFeeUpdated(ethCurrency, fiatCurrency, errorCode) {
+            root.deployFeeUpdated(ethCurrency, fiatCurrency, errorCode)
+        }
+
+        function onSelfDestructFeeUpdated(ethCurrency, fiatCurrency, errorCode) {
+            root.selfDestructFeeUpdated(ethCurrency, fiatCurrency, errorCode)
+        }
+
+        function onAirdropFeesUpdated(jsonFees) {
+            root.airdropFeeUpdated(JSON.parse(jsonFees))
+        }
+
+        function onDeploymentStateChanged(communityId, status, url) {
+            root.deploymentStateChanged(communityId, status, url)
+        }
+
+        function onRemoteDestructStateChanged(communityId, tokenName, status, url) {
+            root.remoteDestructStateChanged(communityId, tokenName, status, url)
+        }
     }
 
     function computeDeployFee(chainId, accountAddress) {
@@ -85,7 +94,7 @@ QtObject {
         console.warn("TODO: Compute burn fee backend")
     }
 
-    function burnCollectibles(tokenKey, burnAmount) {
+    function burnToken(tokenKey, burnAmount) {
         // TODO BACKEND
         console.warn("TODO: Burn collectible backend")
     }
@@ -93,5 +102,11 @@ QtObject {
     // Airdrop tokens:
     function airdrop(communityId, airdropTokens, addresses) {
         communityTokensModuleInst.airdropCollectibles(communityId, JSON.stringify(airdropTokens), JSON.stringify(addresses))
+    }
+
+    function computeAirdropFee(communityId, contractKeysAndAmounts, addresses) {
+        communityTokensModuleInst.computeAirdropCollectiblesFee(
+                    communityId, JSON.stringify(contractKeysAndAmounts),
+                    JSON.stringify(addresses))
     }
 }

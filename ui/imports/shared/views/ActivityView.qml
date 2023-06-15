@@ -28,23 +28,6 @@ Control {
     property var assetsModel: null
     property bool assetsLoading: true
 
-    // Mirrors src/backend/activity.nim ActivityType
-    enum ActivityType {
-        Send,
-        Receive,
-        Buy,
-        Swap,
-        Bridge
-    }
-
-    // Mirrors src/backend/activity.nim ActivityStatus
-    enum ActivityStatus {
-        Failed,
-        Pending,
-        Complete,
-        Finalized
-    }
-
     background: Rectangle {
         anchors.fill: parent
         color: "white"
@@ -159,7 +142,7 @@ Control {
                 id: timeFilterLayout
 
                 RowLayout {
-                    Label { text: "Past Days Span: 100" }
+                    Label { text: qsTr("Past Days Span: 100") }
                     Slider {
                         id: fromSlider
 
@@ -187,12 +170,12 @@ Control {
                         stepSize: 1
                         value: 0
                     }
-                    Label { text: "0" }
+                    Label { text: qsTr("0") }
                 }
-                Label { text: `Interval: ${d.start > 0 ? root.epochToDateStr(d.start) : "all time"} - ${d.end > 0 ? root.epochToDateStr(d.end) : "now"}` }
+                Label { text: `Interval: ${d.start > 0 ? root.epochToDateStr(d.start) : qsTr("all time")} - ${d.end > 0 ? root.epochToDateStr(d.end) : qsTr("now")}` }
             }
             RowLayout {
-                Label { text: "Type" }
+                Label { text: qsTr("Type") }
                 // Models the ActivityType
                 ListModel {
                     id: typeModel
@@ -215,7 +198,7 @@ Control {
                     delegate: ItemOnOffDelegate {}
                 }
 
-                Label { text: "Status" }
+                Label { text: qsTr("Status") }
                 // ActivityStatus
                 ListModel {
                     id: statusModel
@@ -236,7 +219,7 @@ Control {
                     delegate: ItemOnOffDelegate {}
                 }
 
-                Label { text: "To addresses" }
+                Label { text: qsTr("To addresses") }
                 TextField {
                     id: toAddressesInput
 
@@ -252,7 +235,7 @@ Control {
             }
             RowLayout {
 
-                Label { text: "Addresses" }
+                Label { text: qsTr("Addresses") }
                 TextField {
                     id: addressesInput
 
@@ -261,7 +244,7 @@ Control {
                     placeholderText: qsTr("0x1234, 0x5678, ...")
                 }
 
-                Label { text: "Chains" }
+                Label { text: qsTr("Chains") }
                 ComboBox {
                     displayText: qsTr("Select chains")
 
@@ -273,7 +256,7 @@ Control {
                     delegate: ItemOnOffDelegate {}
                 }
 
-                Label { text: "Assets" }
+                Label { text: qsTr("Assets") }
                 ComboBox {
                     displayText: assetsLoader.status != Loader.Ready ? qsTr("Loading...") : qsTr("Select an asset")
 
@@ -344,6 +327,12 @@ Control {
             Layout.fillWidth: true
             Layout.fillHeight: true
 
+            Component.onCompleted: {
+                if(controller.model.hasMore) {
+                    controller.loadMoreItems();
+                }
+            }
+
             model: controller.model
 
             delegate: Item {
@@ -352,22 +341,97 @@ Control {
 
                 readonly property var entry: model.activityEntry
 
-                RowLayout {
+                ColumnLayout {
                     id: itemLayout
                     anchors.fill: parent
+                    spacing: 5
 
-                    Label { text: entry.isMultiTransaction ? "MT" : entry.isPendingTransaction ? "PT" : " T" }
-                    Label { text: `[${root.epochToDateStr(entry.timestamp)}] ` }
-                    Label { text: entry.isMultiTransaction ? entry.fromAmount : entry.amount }
-                    Label { text: "from"; Layout.leftMargin: 5; Layout.rightMargin: 5 }
-                    Label { text: entry.sender; Layout.maximumWidth: 200; elide: Text.ElideMiddle }
-                    Label { text: "to"; Layout.leftMargin: 5; Layout.rightMargin: 5 }
-                    Label { text: entry.recipient; Layout.maximumWidth: 200; elide: Text.ElideMiddle }
-                    Label { text: "got"; Layout.leftMargin: 5; Layout.rightMargin: 5; visible: entry.isMultiTransaction }
-                    Label { text: entry.toAmount; Layout.leftMargin: 5; Layout.rightMargin: 5; visible: entry.isMultiTransaction }
-                    RowLayout {}    // Spacer
+                    RowLayout {
+                        Label { text: entry.isMultiTransaction ? entry.fromAmount : entry.amount }
+                        Label { text: qsTr("from"); Layout.leftMargin: 5; Layout.rightMargin: 5 }
+                        Label { text: entry.sender; Layout.maximumWidth: 200; elide: Text.ElideMiddle }
+                        Label { text: qsTr("to"); Layout.leftMargin: 5; Layout.rightMargin: 5 }
+                        Label { text: entry.recipient; Layout.maximumWidth: 200; elide: Text.ElideMiddle }
+                        Label { text: qsTr("got"); Layout.leftMargin: 5; Layout.rightMargin: 5; visible: entry.isMultiTransaction }
+                        Label { text: entry.toAmount; Layout.leftMargin: 5; Layout.rightMargin: 5; visible: entry.isMultiTransaction }
+                        RowLayout {}    // Spacer
+                    }
+                    RowLayout {
+                        Label { text: entry.isMultiTransaction ? qsTr("MT") : entry.isPendingTransaction ? qsTr("PT") : qsTr(" T") }
+                        Label { text: `[${root.epochToDateStr(entry.timestamp)}] ` }
+                        Label {
+                            text: `{${
+                                function() {
+                                    switch (entry.status) {
+                                        case Constants.TransactionStatus.Failed: return qsTr("Failed");
+                                        case Constants.TransactionStatus.Pending: return qsTr("Pending");
+                                        case Constants.TransactionStatus.Complete: return qsTr("Complete");
+                                        case Constants.TransactionStatus.Finalized: return qsTr("Finalized");
+                                    }
+                                    return qsTr("-")
+                                }()}}`
+                            Layout.leftMargin: 5;
+                        }
+                        RowLayout {}    // Spacer
+                    }
                 }
             }
+
+            onContentYChanged: checkIfFooterVisible()
+            onHeightChanged: checkIfFooterVisible()
+            onContentHeightChanged: checkIfFooterVisible()
+            Connections {
+                target: listView.footerItem
+                function onHeightChanged() {
+                    listView.checkIfFooterVisible()
+                }
+            }
+
+            function checkIfFooterVisible() {
+                if((contentY + height) > (contentHeight - footerItem.height) && controller.model.hasMore && !controller.loadingData) {
+                    controller.loadMoreItems();
+                }
+            }
+
+            footer: Column {
+                id: loadingItems
+
+                width: listView.width
+                visible: controller.model.hasMore
+
+                Repeater {
+                    model: controller.model.hasMore ? 10 : 0
+
+                    Text {
+                        text: loadingItems.loadingPattern
+                    }
+                }
+
+                property string loadingPattern: ""
+                property int glanceOffset: 0
+                Timer {
+                    interval: 25; repeat: true; running: true
+
+                    onTriggered: {
+                        let offset = loadingItems.glanceOffset
+                        let length = 100
+                        let slashCount = 3;
+
+                        let pattern = new Array(length).fill(' ');
+
+                        for (let i = 0; i < slashCount; i++) {
+                            let position = (offset + i) % length;
+                            pattern[position] = '/';
+                        }
+                        pattern = '[' + pattern.join('') + ']';
+
+                        loadingItems.loadingPattern = pattern;
+                        loadingItems.glanceOffset = (offset + 1) % length;
+                    }
+                }
+            }
+
+            ScrollBar.vertical: ScrollBar {}
         }
     }
 

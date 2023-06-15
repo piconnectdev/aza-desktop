@@ -8,6 +8,7 @@ include ../../../common/json_utils
 import ../../../common/conversion
 
 import ../../chat/dto/chat
+import ../../../../app_service/common/types
 
 type RequestToJoinType* {.pure.}= enum
   Pending = 1,
@@ -34,7 +35,10 @@ type CommunityAdminSettingsDto* = object
 type TokenPermissionType* {.pure.}= enum
   Unknown = 0,
   BecomeAdmin = 1,
-  BecomeMember = 2
+  BecomeMember = 2,
+  View = 3,
+  ViewAndPost = 4,
+  
 
 type TokenType* {.pure.}= enum
   Unknown = 0,
@@ -69,7 +73,7 @@ type CommunityTokensMetadataDto* = object
 
 type CommunityDto* = object
   id*: string
-  admin*: bool
+  memberRole*: MemberRole
   verified*: bool
   joined*: bool
   spectated*: bool
@@ -135,6 +139,18 @@ type DiscordImportTaskProgress* = object
   warningsCount*: int
   stopped*: bool
   state*: string
+
+type AccountChainIDsCombinationDto* = object
+  address*: string
+  chainIds*: seq[int]
+
+type CheckPermissionToJoinResultDto* = object
+  criteria*: seq[bool]
+
+type CheckPermissionsToJoinResponseDto* = object
+  satisfied*: bool
+  permissions*: Table[string, CheckPermissionToJoinResultDto]
+  validCombinations*: seq[AccountChainIDsCombinationDto]
 
 proc toCommunityAdminSettingsDto*(jsonObj: JsonNode): CommunityAdminSettingsDto =
   result = CommunityAdminSettingsDto()
@@ -246,10 +262,40 @@ proc toCommunityTokenPermissionDto*(jsonObj: JsonNode): CommunityTokenPermission
   if jsonObj.hasKey("key"):
     discard jsonObj.getProp("key", result.id)
 
+proc toCheckPermissionToJoinResultDto*(jsonObj: JsonNode): CheckPermissionToJoinResultDto =
+  result = CheckPermissionToJoinResultDto()
+  var criteriaObj: JsonNode
+  if(jsonObj.getProp("criteria", criteriaObj) and criteriaObj.kind == JArray):
+    for c in criteriaObj:
+      result.criteria.add(c.getBool)
+
+proc toAccountChainIDsCombinationDto*(jsonObj: JsonNode): AccountChainIDsCombinationDto =
+  result = AccountChainIDsCombinationDto()
+  discard jsonObj.getProp("address", result.address)
+  var chainIdsObj: JsonNode
+  if(jsonObj.getProp("chainIds", chainIdsObj) and chainIdsObj.kind == JArray):
+    for chainId in chainIdsObj:
+      result.chainIds.add(chainId.getInt)
+
+proc toCheckPermissionsToJoinResponseDto*(jsonObj: JsonNode): CheckPermissionsToJoinResponseDto =
+  result = CheckPermissionsToJoinResponseDto()
+  discard jsonObj.getProp("satisfied", result.satisfied)
+
+  var validCombinationsObj: JsonNode
+  if(jsonObj.getProp("validCombinations", validCombinationsObj) and validCombinationsObj.kind == JArray):
+    for validCombination in validCombinationsObj:
+      result.validCombinations.add(validCombination.toAccountChainIDsCombinationDto)
+
+  var permissionsObj: JsonNode
+  if(jsonObj.getProp("permissions", permissionsObj) and permissionsObj.kind == JObject):
+    result.permissions = initTable[string, CheckPermissionToJoinResultDto]()
+    for permissionId, permission in permissionsObj:
+      result.permissions[permissionId] = permission.toCheckPermissionToJoinResultDto
+
 proc toCommunityDto*(jsonObj: JsonNode): CommunityDto =
   result = CommunityDto()
   discard jsonObj.getProp("id", result.id)
-  discard jsonObj.getProp("admin", result.admin)
+  discard jsonObj.getProp("memberRole", result.memberRole)
   discard jsonObj.getProp("verified", result.verified)
   discard jsonObj.getProp("joined", result.joined)
   discard jsonObj.getProp("spectated", result.spectated)
@@ -379,7 +425,7 @@ proc toChannelGroupDto*(communityDto: CommunityDto): ChannelGroupDto =
     categories: communityDto.categories,
     # Community doesn't have an ensName yet. Add this when it is added in status-go
     # ensName: communityDto.ensName,
-    admin: communityDto.admin,
+    memberRole: communityDto.memberRole,
     verified: communityDto.verified,
     description: communityDto.description,
     introMessage: communityDto.introMessage,
@@ -390,8 +436,7 @@ proc toChannelGroupDto*(communityDto: CommunityDto): ChannelGroupDto =
     members: communityDto.members.map(m => ChatMember(
         id: m.id,
         joined: true,
-        admin: isMemberAdmin(m.roles),
-        roles: m.roles
+        role: m.role
       )),
     canManageUsers: communityDto.canManageUsers,
     muted: communityDto.muted,

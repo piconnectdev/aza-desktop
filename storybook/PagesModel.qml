@@ -1,4 +1,4 @@
-import QtQuick 2.14
+import QtQuick 2.15
 
 ListModel {
     ListElement {
@@ -126,6 +126,10 @@ ListModel {
          section: "Panels"
     }
     ListElement {
+         title: "SortableTokenHoldersPanel"
+         section: "Panels"
+    }
+    ListElement {
         title: "ProfileSocialLinksPanel"
         section: "Panels"
     }
@@ -190,6 +194,10 @@ ListModel {
          section: "Popups"
     }
     ListElement {
+         title: "SignMultiTokenTransactionsPopup"
+         section: "Popups"
+    }
+    ListElement {
          title: "RemotelyDestructPopup"
          section: "Popups"
     }
@@ -215,6 +223,10 @@ ListModel {
     }
     ListElement {
         title: "ContactsListAndSearch"
+        section: "Components"
+    }
+    ListElement {
+        title: "StatusInput"
         section: "Components"
     }
     ListElement {
@@ -306,6 +318,14 @@ ListModel {
         section: "Components"
     }
     ListElement {
+        title: "StatusChatListItem"
+        section: "Components"
+    }
+    ListElement {
+         title: "SortableTokenHoldersList"
+         section: "Components"
+    }
+    ListElement {
          title: "BrowserSettings"
          section: "Settings"
     }
@@ -343,6 +363,10 @@ ListModel {
     }
     ListElement {
         title: "StatusTxProgressBar"
+        section: "Wallet"
+    }
+    ListElement {
+        title: "ActivityFilterMenu"
         section: "Wallet"
     }
 }
