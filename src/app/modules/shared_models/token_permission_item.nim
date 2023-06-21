@@ -1,4 +1,4 @@
-import strformat
+import strformat, strutils
 import ../../../app_service/service/community/dto/community
 import ../../../app_service/service/chat/dto/chat
 import token_criteria_model
@@ -62,3 +62,34 @@ proc getIsPrivate*(self: TokenPermissionItem): bool =
 
 proc getTokenCriteriaMet*(self: TokenPermissionItem): bool =
   return self.tokenCriteriaMet
+
+proc buildTokenPermissionItem*(tokenPermission: CommunityTokenPermissionDto): TokenPermissionItem =
+  var tokenCriteriaItems: seq[TokenCriteriaItem] = @[]
+
+  for tc in tokenPermission.tokenCriteria:
+
+    let tokenCriteriaItem = initTokenCriteriaItem(
+      tc.symbol,
+      tc.name,
+      tc.amount.parseFloat,
+      tc.`type`.int,
+      tc.ensPattern,
+      false # tokenCriteriaMet will be updated by a call to checkPermissionsToJoin
+    )
+
+    tokenCriteriaItems.add(tokenCriteriaItem)
+
+  var tokenPermissionChatListItems: seq[TokenPermissionChatListItem] = @[]
+  for chatID in tokenPermission.chatIDs:
+    tokenPermissionChatListItems.add(initTokenPermissionChatListItem(chatID))
+
+  let tokenPermissionItem = initTokenPermissionItem(
+      tokenPermission.id, 
+      tokenPermission.`type`.int, 
+      tokenCriteriaItems,
+      tokenPermissionChatListItems,
+      tokenPermission.isPrivate,
+      false # allTokenCriteriaMet will be update by a call to checkPermissinosToJoin
+  )
+
+  return tokenPermissionItem

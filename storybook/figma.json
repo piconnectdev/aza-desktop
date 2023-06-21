@@ -75,6 +75,9 @@
     "CommunityPermissionsView": [
         "https://www.figma.com/file/17fc13UBFvInrLgNUKJJg5/Kuba%E2%8E%9CDesktop?node-id=22813%3A497277&t=7gqqAFbdG5KrPOmn-0"
     ],
+    "ChatPermissionQualificationPanel": [
+        "https://www.figma.com/file/17fc13UBFvInrLgNUKJJg5/Kuba%E2%8E%9CDesktop?node-id=2698%3A375926&t=iIeFeGOBx5BbbYJa-0"
+    ],
     "CommunityProfilePopupInviteFriendsPanel": [
         "https://www.figma.com/file/17fc13UBFvInrLgNUKJJg5/Kuba%E2%8E%9CDesktop?node-id=2927%3A343592",
         "https://www.figma.com/file/17fc13UBFvInrLgNUKJJg5/Kuba%E2%8E%9CDesktop?node-id=2990%3A353179",
@@ -212,5 +215,11 @@
         "https://www.figma.com/file/17fc13UBFvInrLgNUKJJg5/Kuba%E2%8E%9CDesktop?type=design&node-id=29528%3A588403&t=GUxMZEWcfRO7pXJb-1",
         "https://www.figma.com/file/17fc13UBFvInrLgNUKJJg5/Kuba%E2%8E%9CDesktop?type=design&node-id=29528%3A588563&t=GUxMZEWcfRO7pXJb-1",
         "https://www.figma.com/file/17fc13UBFvInrLgNUKJJg5/Kuba%E2%8E%9CDesktop?type=design&node-id=29528%3A587660&t=GUxMZEWcfRO7pXJb-1"
+    ],
+    "UserAgreementPopup": [
+        "https://www.figma.com/file/17fc13UBFvInrLgNUKJJg5/Kuba⎜Desktop?type=design&node-id=31450-560694&t=Q4MOViPCoHsTjhs6-0"
+    ],
+    "StatusButton": [
+        "https://www.figma.com/file/MtAO3a7HnEH5xjCDVNilS7/%F0%9F%8E%A8-Design-System-%E2%8E%9C-Desktop?type=design&node-id=1-12&t=UHegCbqAa5K7qUKd-0"
     ]
 }

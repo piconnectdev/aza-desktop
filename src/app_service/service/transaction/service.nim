@@ -46,7 +46,9 @@ const SIGNAL_HISTORY_FETCHING* = "historyFetching"
 const SIGNAL_HISTORY_READY* = "historyReady"
 const SIGNAL_HISTORY_NON_ARCHIVAL_NODE* = "historyNonArchivalNode"
 const SIGNAL_HISTORY_ERROR* = "historyError"
+const SIGNAL_NEW_TRANSFERS* = "newTransfers"
 const SIGNAL_CRYPTO_SERVICES_READY* = "cryptoServicesReady"
+const SIGNAL_TRANSACTION_DECODED* = "transactionDecoded"
 
 const SIMPLE_TX_BRIDGE_NAME = "Simple"
 const HOP_TX_BRIDGE_NAME = "Hop"
@@ -94,6 +96,10 @@ type
 type
   CryptoServicesArgs* = ref object of Args
     data*: seq[CryptoRampDto]
+type
+  TransactionDecodedArgs* = ref object of Args
+    dataDecoded*: string
+    txHash*: string
 
 QtObject:
   type Service* = ref object of QObject
@@ -144,6 +150,16 @@ QtObject:
           self.events.emit(SIGNAL_HISTORY_NON_ARCHIVAL_NODE, Args())
         of "fetching-history-error":
           self.events.emit(SIGNAL_HISTORY_ERROR, Args())
+        of "new-transfers":
+          # TODO delete this, once activity filter is integrated
+          # with scheduler (Reactor) in status-go.
+          # It should handle proper updates of activity list. Proper
+          # handling of new and old transfers with current implementation
+          # requires lots of refactoring.
+          for account in data.accounts:
+            self.loadTransactions(account, stint.fromHex(Uint256, "0x0"))
+
+          self.events.emit(SIGNAL_NEW_TRANSFERS, HistoryArgs(addresses: data.accounts))
 
   proc getPendingTransactions*(self: Service): seq[TransactionDto] =
     try:
@@ -209,6 +225,28 @@ QtObject:
     )
     self.threadpool.start(arg)
 
+  proc onFetchDecodedTxData*(self: Service, response: string) {.slot.} =
+    var args = TransactionDecodedArgs()
+    try:
+      let data = parseJson(response)
+      if data.hasKey("result"):
+        args.dataDecoded = $data["result"]
+      if data.hasKey("txHash"):
+        args.txHash = data["txHash"].getStr
+    except Exception as e:
+      error "Error parsing decoded tx input data", msg = e.msg
+    self.events.emit(SIGNAL_TRANSACTION_DECODED, args)
+
+  proc fetchDecodedTxData*(self: Service, txHash: string, data: string) =
+    let arg = FetchDecodedTxDataTaskArg(
+      tptr: cast[ByteAddress](fetchDecodedTxDataTask),
+      vptr: cast[ByteAddress](self.vptr),
+      data: data,
+      txHash: txHash,
+      slot: "onFetchDecodedTxData",
+    )
+    self.threadpool.start(arg)
+
   proc watchPendingTransactions*(self: Service): seq[TransactionDto] =
     let pendingTransactions = self.getPendingTransactions()
     for tx in pendingTransactions:
@@ -223,6 +261,7 @@ QtObject:
     let allTxLoaded = historyData["allTxLoaded"].getBool
     var transactions: seq[TransactionDto] = @[]
     var collectibles: seq[CollectibleDto] = @[]
+     
     for tx in historyData["history"].getElems():
       let dto = tx.toTransactionDto()
       self.allTransactions.mgetOrPut(address, initTable[string, TransactionDto]())[dto.txHash] = dto
@@ -512,9 +551,6 @@ QtObject:
     self.events.emit(SIGNAL_CRYPTO_SERVICES_READY, CryptoServicesArgs(data: cryptoServices))
 
   proc fetchCryptoServices*(self: Service) =
-    if(not main_constants.WALLET_ENABLED):
-      return
-
     let arg = GetCryptoServicesTaskArg(
       tptr: cast[ByteAddress](getCryptoServicesTask),
       vptr: cast[ByteAddress](self.vptr),

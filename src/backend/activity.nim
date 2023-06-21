@@ -1,6 +1,7 @@
 import times, strformat, options
 import json, json_serialization
 import core, response_type
+import stint
 from gen import rpc
 import backend
 import transactions
@@ -148,6 +149,8 @@ type
     activityType*: MultiTransactionType
     activityStatus*: ActivityStatus
     tokenType*: TokenType
+    amountOut*: UInt256
+    amountIn*: UInt256
 
   # Mirrors services/wallet/activity/service.go ErrorCode
   ErrorCode* = enum
@@ -155,6 +158,7 @@ type
     ErrorCodeFilterCanceled,
     ErrorCodeFilterFailed
 
+  # Mirrors services/wallet/activity/service.go FilterResponse
   FilterResponse* = object
     activities*: seq[ActivityEntry]
     offset*: int
@@ -173,7 +177,9 @@ proc fromJson*(e: JsonNode, T: typedesc[ActivityEntry]): ActivityEntry {.inline.
                  else: none(TransactionIdentity),
     id: e["id"].getInt(),
     activityStatus: fromJson(e["activityStatus"], ActivityStatus),
-    timestamp: e["timestamp"].getInt()
+    timestamp: e["timestamp"].getInt(),
+    amountOut: stint.fromHex(UInt256, e["amountOut"].getStr()),
+    amountIn: stint.fromHex(UInt256, e["amountIn"].getStr())
   )
 
 proc `$`*(self: ActivityEntry): string =
@@ -187,6 +193,8 @@ proc `$`*(self: ActivityEntry): string =
     activityType* {$self.activityType},
     activityStatus* {$self.activityStatus},
     tokenType* {$self.tokenType},
+    amountOut* {$self.amountOut},
+    amountIn* {$self.amountIn},
   )"""
 
 proc fromJson*(e: JsonNode, T: typedesc[FilterResponse]): FilterResponse {.inline.} =
@@ -209,5 +217,14 @@ rpc(filterActivityAsync, "wallet"):
   addresses: seq[string]
   chainIds: seq[int]
   filter: ActivityFilter
+  offset: int
+  limit: int
+
+# see services/wallet/api.go GetAllRecipientsResponse
+type GetAllRecipientsResponse* = object
+  addresses*: seq[string]
+  hasMore*: bool
+
+rpc(getAllRecipients, "wallet"):
   offset: int
   limit: int

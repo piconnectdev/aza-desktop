@@ -9,6 +9,7 @@ import shared 1.0
 import shared.panels 1.0
 import shared.popups 1.0
 import shared.status 1.0
+import shared.controls 1.0
 
 import StatusQ.Core 0.1
 import StatusQ.Popups 0.1
@@ -34,6 +35,11 @@ SettingsContentBase {
         width: root.contentWidth
         height: generalColumn.height
 
+        QtObject {
+            id: d
+            readonly property string experimentalFeatureMessage: qsTr("This feature is experimental and is meant for testing purposes by core contributors and the community. It's not meant for real use and makes no claims of security or integrity of funds or data. Use at your own risk.")
+        }
+
         Column {
             id: generalColumn
             anchors.top: parent.top
@@ -47,6 +53,15 @@ SettingsContentBase {
                 text: qsTr("Fleet")
                 currentValue: root.advancedStore.fleet
                 onClicked: fleetModal.open()
+            }
+
+            StatusSettingsLineButton {
+                id: labelScrolling
+                anchors.leftMargin: 0
+                anchors.rightMargin: 0
+                text: qsTr("Chat scrolling")
+                currentValue: root.advancedStore.isCustomScrollingEnabled ? qsTr("Custom") : qsTr("System")
+                onClicked: scrollingModal.open()
             }
 
             // TODO: replace with StatusQ component
@@ -146,7 +161,7 @@ SettingsContentBase {
                 anchors.right: parent.right
                 anchors.leftMargin: Style.current.padding
                 anchors.rightMargin: Style.current.padding
-                visible: root.advancedStore.isWakuV2 && root.advancedStore.fleet != Constants.status_prod
+                visible: root.advancedStore.isWakuV2
                 text: qsTr("WakuV2 options")
                 topPadding: Style.current.bigPadding
                 bottomPadding: Style.current.padding
@@ -211,9 +226,9 @@ SettingsContentBase {
                         }
                         onClosed: {
                             switch(root.advancedStore.bloomLevel){
-                                case "light":  btnBloomLight.click(); break;
-                                case "normal":  btnBloomNormal.click(); break;
-                                case "full":  btnBloomFull.click(); break;
+                                case "light":  btnBloomLight.toggle(); break;
+                                case "normal":  btnBloomNormal.toggle(); break;
+                                case "full":  btnBloomFull.toggle(); break;
                             }
                             destroy()
                         }
@@ -230,11 +245,7 @@ SettingsContentBase {
                     checkedByDefault: root.advancedStore.bloomLevel == "light"
                     btnText: qsTr("Light Node")
                     onToggled: {
-                        if (root.advancedStore.bloomLevel != "light") {
-                            Global.openPopup(bloomConfirmationDialogComponent, {mode: "light"})
-                        } else {
-                            btnBloomLight.click()
-                        }
+                        Global.openPopup(bloomConfirmationDialogComponent, {mode: "light"})
                     }
                 }
 
@@ -244,11 +255,7 @@ SettingsContentBase {
                     checkedByDefault: root.advancedStore.bloomLevel == "normal"
                     btnText: qsTr("Normal")
                     onToggled: {
-                        if (root.advancedStore.bloomLevel != "normal") {
-                            Global.openPopup(bloomConfirmationDialogComponent, {mode: "normal"})
-                        } else {
-                            btnBloomNormal.click()
-                        }
+                        Global.openPopup(bloomConfirmationDialogComponent, {mode: "normal"})
                     }
                 }
 
@@ -258,11 +265,7 @@ SettingsContentBase {
                     checkedByDefault: root.advancedStore.bloomLevel == "full"
                     btnText: qsTr("Full Node")
                     onToggled: {
-                        if (root.advancedStore.bloomLevel != "full") {
-                            Global.openPopup(bloomConfirmationDialogComponent, {mode: "full"})
-                        } else {
-                            btnBloomFull.click()
-                        }
+                        Global.openPopup(bloomConfirmationDialogComponent, {mode: "full"})
                     }
                 }
             }
@@ -273,22 +276,31 @@ SettingsContentBase {
                 anchors.leftMargin: Style.current.padding
                 anchors.rightMargin: Style.current.padding
                 spacing: 11
-                visible: root.advancedStore.isWakuV2 && root.advancedStore.fleet != Constants.status_prod
+                visible: root.advancedStore.isWakuV2
+
                 Component {
                     id: wakuV2ModeConfirmationDialogComponent
-                    ConfirmationDialog {
-                        property bool mode: false
 
+                    ConfirmationDialog {
                         id: confirmDialog
-                        confirmationText: qsTr("The account will be logged out. When you login again, the selected mode will be enabled")
+
+                        property bool lightMode: false
+
+                        confirmationText: (!lightMode ? "" : (d.experimentalFeatureMessage + "\n\n"))
+                                          + qsTr("The account will be logged out. When you login again, the selected mode will be enabled")
+                        confirmButtonLabel: lightMode ? qsTr("I understand") : qsTr("Confirm")
+                        showCancelButton: lightMode
                         onConfirmButtonClicked: {
-                            root.advancedStore.setWakuV2LightClientEnabled(mode)
+                            root.advancedStore.setWakuV2LightClientEnabled(lightMode)
+                        }
+                        onCancelButtonClicked: {
+                            close()
                         }
                         onClosed: {
-                            if(root.advancedStore.wakuV2LightClientEnabled){
-                                btnWakuV2Light.click()
+                            if (root.advancedStore.wakuV2LightClientEnabled){
+                                btnWakuV2Light.toggle()
                             } else {
-                                btnWakuV2Full.click();
+                                btnWakuV2Full.toggle()
                             }
                             destroy()
                         }
@@ -303,13 +315,9 @@ SettingsContentBase {
                     id: btnWakuV2Light
                     buttonGroup: wakuV2Group
                     checkedByDefault: root.advancedStore.wakuV2LightClientEnabled
-                    btnText: qsTr("Light Node")
+                    btnText: qsTr("Light mode")
                     onToggled: {
-                        if (!root.advancedStore.wakuV2LightClientEnabled) {
-                            Global.openPopup(wakuV2ModeConfirmationDialogComponent, {mode: true})
-                        } else {
-                            btnWakuV2Light.click()
-                        }
+                        Global.openPopup(wakuV2ModeConfirmationDialogComponent, { lightMode: true })
                     }
                 }
 
@@ -317,13 +325,9 @@ SettingsContentBase {
                     id: btnWakuV2Full
                     buttonGroup: wakuV2Group
                     checkedByDefault: !root.advancedStore.wakuV2LightClientEnabled
-                    btnText: qsTr("Full Node")
+                    btnText: qsTr("Relay mode")
                     onToggled: {
-                        if (root.advancedStore.wakuV2LightClientEnabled) {
-                            Global.openPopup(wakuV2ModeConfirmationDialogComponent, {mode: false})
-                        } else {
-                            btnWakuV2Full.click()
-                        }
+                        Global.openPopup(wakuV2ModeConfirmationDialogComponent, { lightMode: false })
                     }
                 }
             }
@@ -451,7 +455,7 @@ SettingsContentBase {
 
                 id: confirmDialog
                 showCancelButton: true
-                confirmationText: qsTr("Are you sure you want to enable all the develoer features? The app will be restarted.")
+                confirmationText: qsTr("Are you sure you want to enable all the developer features? The app will be restarted.")
                 onConfirmButtonClicked: {
                     localAccountSensitiveSettings.downloadChannelMessagesEnabled = true
                     Qt.callLater(root.advancedStore.enableDeveloperFeatures)
@@ -615,17 +619,28 @@ SettingsContentBase {
             id: confirmationPopup
             property string experimentalFeature: ""
             showCancelButton: true
-            confirmationText: qsTr("This feature is experimental and is meant for testing purposes by core contributors and the community. It's not meant for real use and makes no claims of security or integrity of funds or data. Use at your own risk.")
+            confirmationText: d.experimentalFeatureMessage
             confirmButtonLabel: qsTr("I understand")
             onConfirmButtonClicked: {
                 root.advancedStore.toggleExperimentalFeature(experimentalFeature)
                 experimentalFeature = ""
                 close()
             }
-
             onCancelButtonClicked: {
                 close()
             }
+        }
+
+        ScrollingModal {
+            id: scrollingModal
+
+            title: labelScrolling.text
+            initialVelocity: root.advancedStore.scrollVelocity
+            initialDeceleration: root.advancedStore.scrollDeceleration
+            isCustomScrollingEnabled: root.advancedStore.isCustomScrollingEnabled
+            onVelocityChanged: root.advancedStore.setScrollVelocity(value)
+            onDecelerationChanged: root.advancedStore.setScrollDeceleration(value)
+            onCustomScrollingChanged: root.advancedStore.setCustomScrollingEnabled(enabled)
         }
     }
 }

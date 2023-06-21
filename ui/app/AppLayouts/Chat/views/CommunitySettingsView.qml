@@ -221,6 +221,7 @@ StatusSectionLayout {
             }
 
             CommunityMembersSettingsPanel {
+                rootStore: root.rootStore
                 membersModel: root.community.members
                 bannedMembersModel: root.community.bannedMembers
                 pendingMemberRequestsModel: root.community.pendingMemberRequests
@@ -317,8 +318,8 @@ StatusSectionLayout {
                                                                         remotelyDestructTokensList,
                                                                         tokenKey)
                 }
-                onSignBurnTransactionOpened: communityTokensStore.computeBurnFee(chainId)
-                onBurnToken: communityTokensStore.burnToken(tokenKey, amount)
+                onSignBurnTransactionOpened: communityTokensStore.computeBurnFee(tokenKey, amount)
+                onBurnToken: communityTokensStore.burnToken(root.community.id, tokenKey, amount)
                 onAirdropToken: root.goTo(Constants.CommunitySettingsSections.Airdrops)
                 onDeleteToken: communityTokensStore.deleteToken(root.community.id, tokenKey)
 
@@ -329,6 +330,10 @@ StatusSectionLayout {
                     }
 
                     function onSelfDestructFeeUpdated(ethCurrency, fiatCurrency, errorCode) {
+                        mintPanel.setFeesInfo(ethCurrency, fiatCurrency, errorCode)
+                    }
+
+                    function onBurnFeeUpdated(ethCurrency, fiatCurrency, errorCode) {
                         mintPanel.setFeesInfo(ethCurrency, fiatCurrency, errorCode)
                     }
 
@@ -354,6 +359,70 @@ StatusSectionLayout {
                             break
                         default:
                             console.warn("Unknown destruction state: "+status)
+                            return
+                        }
+                        Global.displayToastMessage(title,
+                                                   qsTr("View on etherscan"),
+                                                   "",
+                                                   loading,
+                                                   type,
+                                                   url)
+                    }
+
+                    function onAirdropStateChanged(communityId, tokenName, chainName, status, url) {
+                        if (root.community.id !== communityId) {
+                            return
+                        }
+
+                        let title = ""
+                        let loading = false
+                        let type = Constants.ephemeralNotificationType.normal
+                        switch (status) {
+                        case Constants.ContractTransactionStatus.InProgress:
+                            title = qsTr("Airdrop on %1 in progress...").arg(chainName)
+                            loading = true
+                            break
+                        case Constants.ContractTransactionStatus.Completed:
+                            title = qsTr("Airdrop on %1 in complete").arg(chainName)
+                            type = Constants.ephemeralNotificationType.success
+                            break
+                        case Constants.ContractTransactionStatus.Failed:
+                            title = qsTr("Airdrop on %1 failed").arg(chainName)
+                            break
+                        default:
+                            console.warn("Unknown airdrop state: "+status)
+                            return
+                        }
+                        Global.displayToastMessage(title,
+                                                   qsTr("View on etherscan"),
+                                                   "",
+                                                   loading,
+                                                   type,
+                                                   url)
+                    }
+
+                    function onBurnStateChanged(communityId, tokenName, status, url) {
+                        if (root.community.id !== communityId) {
+                            return
+                        }
+
+                        let title = ""
+                        let loading = false
+                        let type = Constants.ephemeralNotificationType.normal
+                        switch (status) {
+                        case Constants.ContractTransactionStatus.InProgress:
+                            title = qsTr("%1 being burned...").arg(tokenName)
+                            loading = true
+                            break
+                        case Constants.ContractTransactionStatus.Completed:
+                            title = qsTr("%1 burning is complete").arg(tokenName)
+                            type = Constants.ephemeralNotificationType.success
+                            break
+                        case Constants.ContractTransactionStatus.Failed:
+                            title = qsTr("%1 burning is failed").arg(tokenName)
+                            break
+                        default:
+                            console.warn("Unknown burning state: "+status)
                             return
                         }
                         Global.displayToastMessage(title,
@@ -396,26 +465,37 @@ StatusSectionLayout {
                                                    url)
                     }
                 }
+
+                Connections {
+                    target: airdropPanel
+
+                    function onNavigateToMintTokenSettings(isAssetType) {
+                        // Here it is forced a navigation to the new airdrop form, like if it was clicked the header button
+                        mintPanel.resetNavigation(isAssetType)
+                        mintPanel.primaryHeaderButtonClicked()
+                    }
+                }
             }
 
             CommunityAirdropsSettingsPanel {
                 id: airdropPanel
 
                 readonly property CommunityTokensStore communityTokensStore:
-                    rootStore.communityTokensStore
-
-                assetsModel: ListModel {}
+                    rootStore.communityTokensStore                
 
                 readonly property var communityTokens: root.community.communityTokens
 
                 Loader {
-                    id: modelLoader
+                    id: assetsModelLoader
                     active: airdropPanel.communityTokens
 
                     sourceComponent: SortFilterProxyModel {
 
                         sourceModel: airdropPanel.communityTokens
-
+                        filters: ValueFilter {
+                            roleName: "tokenType"
+                            value: Constants.TokenType.ERC20
+                        }
                         proxyRoles: [
                             ExpressionRole {
                                 name: "category"
@@ -436,8 +516,39 @@ StatusSectionLayout {
                     }
                 }
 
-                collectiblesModel: modelLoader.item
+                Loader {
+                    id: collectiblesModelLoader
+                    active: airdropPanel.communityTokens
 
+                    sourceComponent: SortFilterProxyModel {
+
+                        sourceModel: airdropPanel.communityTokens
+                        filters: ValueFilter {
+                            roleName: "tokenType"
+                            value: Constants.TokenType.ERC721
+                        }
+                        proxyRoles: [
+                            ExpressionRole {
+                                name: "category"
+
+                                // Singleton cannot be used directly in the epression
+                                readonly property int category: TokenCategories.Category.Own
+                                expression: category
+                            },
+                            ExpressionRole {
+                                name: "iconSource"
+                                expression: model.image
+                            },
+                            ExpressionRole {
+                                name: "key"
+                                expression: model.symbol
+                            }
+                        ]
+                    }
+                }
+
+                assetsModel: assetsModelLoader.item
+                collectiblesModel: collectiblesModelLoader.item
                 membersModel: {
                     const chatContentModule = root.rootStore.currentChatContentModule()
                     if (!chatContentModule || !chatContentModule.usersModule) {

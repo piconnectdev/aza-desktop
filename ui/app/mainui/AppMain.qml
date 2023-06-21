@@ -354,6 +354,8 @@ Item {
                             onTriggered: popups.openCommunityProfilePopup(appMain.rootStore, model, communityContextMenu.chatCommunitySectionModule)
                         }
 
+                        StatusMenuSeparator {}
+
                         StatusAction {
                             text: model.muted ? qsTr("Unmute Community") : qsTr("Mute Community")
                             icon.name: model.muted ? "notification-muted" : "notification"
@@ -362,13 +364,20 @@ Item {
                             }
                         }
 
-                        StatusMenuSeparator {}
+                        StatusMenuSeparator { visible: leaveCommunityMenuItem.enabled }
 
                         StatusAction {
-                            text: qsTr("Leave Community")
-                            icon.name: "arrow-left"
+                            id: leaveCommunityMenuItem
+                            enabled: !model.amISectionAdmin
+                            text: {
+                                if (model.spectated)
+                                    return qsTr("Close Community")
+                                return qsTr("Leave Community")
+                            }
+                            icon.name: model.spectated ? "close-circle" : "arrow-left"
                             type: StatusAction.Type.Danger
-                            onTriggered: communityContextMenu.chatCommunitySectionModule.leaveCommunity()
+                            onTriggered: model.spectated ? communityContextMenu.chatCommunitySectionModule.leaveCommunity()
+                                                         : popups.openLeaveCommunityPopup(model.name, model.id, model.outroMessage)
                         }
                     }
                 }
@@ -958,8 +967,28 @@ Item {
                         CommunitiesPortalLayout {
                             anchors.fill: parent
                             communitiesStore: appMain.communitiesStore
-                            assetsModel: appMain.rootChatStore.assetsModel
-                            collectiblesModel: appMain.rootChatStore.collectiblesModel
+                            assetsModel: SortFilterProxyModel {
+                                sourceModel: appMain.communitiesStore.communitiesModuleInst.tokenList
+
+                                proxyRoles: ExpressionRole {
+                                    function tokenIcon(symbol) {
+                                        return Constants.tokenIcon(symbol)
+                                    }
+                                    name: "iconSource"
+                                    expression: !!model.icon ? model.icon : tokenIcon(model.symbol)
+                                }
+                            }
+                            collectiblesModel: SortFilterProxyModel {
+                                sourceModel: appMain.communitiesStore.communitiesModuleInst.collectiblesModel
+
+                                proxyRoles: ExpressionRole {
+                                    function icon(icon) {
+                                        return !!icon ? icon : Style.png("tokens/DEFAULT-TOKEN")
+                                    }
+                                    name: "iconSource"
+                                    expression: icon(model.icon)
+                                }
+                            }
                             notificationCount: appMain.activityCenterStore.unreadNotificationsCount
                             hasUnseenNotifications: activityCenterStore.hasUnseenNotifications
                         }
@@ -1273,8 +1302,11 @@ Item {
                     }
                     asset.width: 30
                     asset.height: 30
-                    asset.color: modelData ? modelData.color : ""
+                    asset.color: modelData ? modelData.color ? modelData.color : Utils.colorForColorId(modelData.colorId) : ""
                     asset.name: modelData ? modelData.icon : ""
+                    asset.charactersLen: 2
+                    asset.letterSize: asset._twoLettersSize
+                    ringSettings.ringSpecModel: modelData ? modelData.colorHash : undefined
                 }
 
                 onAboutToShow: rootStore.rebuildChatSearchModel()
@@ -1387,5 +1419,14 @@ Item {
 
         width: appMain.width
         height: appMain.height
+    }
+
+    Loader {
+        id: userAgreementLoader
+        active: production && !localAppSettings.testEnvironment
+        sourceComponent: UserAgreementPopup {
+            visible: appMain.visible
+            onClosed: userAgreementLoader.active = false
+        }
     }
 }

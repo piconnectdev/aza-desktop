@@ -15,10 +15,16 @@ Item {
     implicitWidth: image.implicitWidth
     implicitHeight: image.implicitHeight
 
+    signal clicked(int index)
+
     Component {
         id: inspectionItemComponent
 
-        InspectionItem {}
+        InspectionItem {
+            required property int index
+
+            onClicked: root.clicked(index)
+        }
     }
 
     Image {
@@ -51,26 +57,31 @@ Item {
         const placeholders = []
         const modelItems = []
 
-        items.forEach((entry) => {
+        items.forEach((entry, index) => {
             const {item, parentIndex, level} = entry
             const isRoot = parentIndex === -1
 
             const parent = isRoot ? root : placeholders[parentIndex]
-            const visualParent = isRoot ? root : (parent.isVisual ? parent : parent.visualParent)
+            const visualParent = isRoot ? root
+                                        : (parent.isVisual
+                                           ? (parent.background || parent)
+                                           : parent.visualParent)
 
             const x = isRoot ? 0 : item.x
             const y = isRoot ? 0 : item.y
+
             const name = InspectionUtils.simpleName(item)
-            const visual = InspectionUtils.isVisual(item)
+            const visual = InspectionUtils.isVisual(item) || !!item.background
             const clip = item.clip
 
             const props = {
-                name, x, y,
+                index, name, x, y,
                 width: item.width,
                 height: item.height,
                 z: item.z,
                 isVisual: visual,
                 visualParent,
+                visualRoot: root,
                 clip: Qt.binding(() => root.propagateClipping && item.clip),
                 showNonVisual: Qt.binding(() => root.showNonVisualItems)
             }

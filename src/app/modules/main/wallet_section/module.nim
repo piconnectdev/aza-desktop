@@ -1,4 +1,4 @@
-import NimQml, chronicles
+import NimQml, chronicles, sequtils, sugar
 
 import ./controller, ./view, ./filter
 import ./io_interface as io_interface
@@ -58,6 +58,7 @@ type
     addAccountModule: add_account_module.AccessInterface
     overviewModule: overview_module.AccessInterface
     networksModule: networks_module.AccessInterface
+    networksService: network_service.Service
     keycardService: keycard_service.Service
     accountsService: accounts_service.Service
     walletAccountService: wallet_account_service.Service
@@ -99,9 +100,10 @@ proc newModule*(
   result.buySellCryptoModule = buy_sell_crypto_module.newModule(result, events, transactionService)
   result.overviewModule = overview_module.newModule(result, events, walletAccountService, currencyService)
   result.networksModule = networks_module.newModule(result, events, networkService, walletAccountService, settingsService)
-  result.filter = initFilter(result.controller)
+  result.networksService = networkService
+  result.activityController = activityc.newController(result.transactionsModule, events, currencyService)
+  result.filter = initFilter(result.controller, result.activityController)
 
-  result.activityController = activityc.newController(result.transactionsModule, events)
   result.view = newView(result, result.activityController)
 
 
@@ -128,7 +130,14 @@ method getCurrentCurrency*(self: Module): string =
   self.controller.getCurrency()
 
 method setTotalCurrencyBalance*(self: Module) =
-  self.view.setTotalCurrencyBalance(self.controller.getCurrencyBalance(self.filter.addresses))
+  var addresses: seq[string] = @[]
+  let walletAccounts = self.controller.getWalletAccounts()
+  if self.filter.excludeWatchOnly:
+    addresses = walletAccounts.filter(a => a.walletType != "watch").map(a => a.address)
+  else:
+    addresses = walletAccounts.map(a => a.address)
+
+  self.view.setTotalCurrencyBalance(self.controller.getCurrencyBalance(addresses))
 
 method notifyFilterChanged(self: Module) =
   self.overviewModule.filterChanged(self.filter.addresses, self.filter.chainIds, self.filter.excludeWatchOnly, self.filter.allAddresses)

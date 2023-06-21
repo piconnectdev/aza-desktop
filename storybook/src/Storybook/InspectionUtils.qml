@@ -2,6 +2,7 @@ pragma Singleton
 
 import QtQml 2.15
 import QtQuick 2.15
+import QtQuick.Controls 2.15
 
 QtObject {
     function isVisual(item) {
@@ -10,6 +11,7 @@ QtObject {
                 || item instanceof Image
                 || item instanceof TextEdit
                 || item instanceof TextInput
+                || item instanceof SpriteSequence
     }
 
     function baseName(item) {
@@ -27,7 +29,7 @@ QtObject {
         return fullName
     }
 
-    function simpleName(item) {
+    function baseTypeName(item) {
         if (item instanceof Text)
             return "Text"
         if (item instanceof Rectangle)
@@ -38,11 +40,28 @@ QtObject {
             return "TextEdit"
         if (item instanceof TextInput)
             return "TextInput"
+        if (item instanceof SpriteSequence)
+            return "SpriteSequence"
 
-        const name = baseName(item)
+        if (item instanceof Control)
+            return "Control"
 
+        return ""
+    }
+
+    function trimQQuickPrefix(name) {
         if (name.startsWith("QQuick"))
             return name.substring(6)
+
+        return name
+    }
+
+    function simpleName(item) {
+        const name = trimQQuickPrefix(baseName(item))
+        const base = baseTypeName(item)
+
+        if (base)
+            return `${name} [${base}]`
 
         return name
     }

@@ -20,6 +20,8 @@ Rectangle {
     property int notificationsCount: 0
     property bool muted: false
     property int onlineStatus: StatusChatListItem.OnlineStatus.Inactive
+    property bool requiresPermissions: false
+    property bool locked: false
 
     property StatusAssetSettings asset: StatusAssetSettings {
         width: 24
@@ -35,9 +37,6 @@ Rectangle {
     property bool selected: false
     property bool dragged: false
     property alias sensor: sensor
-
-    property bool requiresPermissions
-    property bool locked
 
     signal clicked(var mouse)
     signal unmute()
@@ -200,7 +199,7 @@ Rectangle {
             anchors.rightMargin: 8
             StatusBadge {
                 id: statusBadge
-                readonly property bool onlyUnread: (root.notificationsCount === 0 && root.hasUnreadMessages)
+                readonly property bool onlyUnread: !root.muted && root.notificationsCount === 0 && root.hasUnreadMessages
                 anchors.centerIn: parent
                 color: onlyUnread ? Theme.palette.baseColor1 :
                                     root.muted ? Theme.palette.primaryColor2 : Theme.palette.primaryColor1

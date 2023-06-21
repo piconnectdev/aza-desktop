@@ -28,7 +28,9 @@ Rectangle {
     required property bool isVisual
     property bool showNonVisual: false
     property bool forceSelect: false
+
     required property Item visualParent
+    required property Item visualRoot
 
     readonly property real topSpacing: mapToItem(visualParent, 0, 0).y
 
@@ -42,40 +44,84 @@ Rectangle {
 
     readonly property alias containsMouse: mouseArea.containsMouse
 
-    component DistanceRectangle: Rectangle {
-        width: 1
-        height: 1
-        color: selectionColor
-        visible: root.selected
-        parent: root.parent
-    }
+    signal clicked
 
-    // top
-    DistanceRectangle {
-        height: topSpacing
-        anchors.bottom: root.top
-        anchors.horizontalCenter: root.horizontalCenter
-    }
+    Loader {
+        active: root.selected
 
-    // left
-    DistanceRectangle {
-        width: leftSpacing
-        anchors.right: root.left
-        anchors.verticalCenter: root.verticalCenter
-    }
+        sourceComponent: Item {
+            parent: root.visualRoot
+            anchors.fill: parent
 
-    // right
-    DistanceRectangle {
-        width: rightSpacing
-        anchors.left: root.right
-        anchors.verticalCenter: root.verticalCenter
-    }
+            Rectangle {
+                id: selectionParentRect
 
-    // bottom
-    DistanceRectangle {
-        height: bottomSpacing
-        anchors.top: root.bottom
-        anchors.horizontalCenter: root.horizontalCenter
+                width: root.visualParent.width
+                height: root.visualParent.height
+
+                readonly property point pos:
+                    root.visualParent.mapToItem(root.visualRoot, 0, 0)
+
+                x: pos.x
+                y: pos.y
+
+                border.color: root.border.color
+                border.width: 1
+                color: "transparent"
+            }
+
+            Rectangle {
+                id: selectionRect
+
+                width: root.width
+                height: root.height
+
+                readonly property point pos:
+                    root.mapToItem(root.visualRoot, 0, 0)
+
+                x: pos.x
+                y: pos.y
+
+                border.color: root.border.color
+                border.width: root.border.width
+                color: root.color
+            }
+
+            component DistanceRectangle: Rectangle {
+                width: 1
+                height: 1
+                color: selectionColor
+                visible: root.selected
+            }
+
+            // top
+            DistanceRectangle {
+                anchors.top: selectionParentRect.top
+                anchors.bottom: selectionRect.top
+                anchors.horizontalCenter: selectionRect.horizontalCenter
+            }
+
+            // bottom
+            DistanceRectangle {
+                anchors.top: selectionRect.bottom
+                anchors.bottom: selectionParentRect.bottom
+                anchors.horizontalCenter: selectionRect.horizontalCenter
+            }
+
+            // left
+            DistanceRectangle {
+                anchors.left: selectionParentRect.left
+                anchors.right: selectionRect.left
+                anchors.verticalCenter: selectionRect.verticalCenter
+            }
+
+            // right
+            DistanceRectangle {
+                anchors.left: selectionRect.right
+                anchors.right: selectionParentRect.right
+                anchors.verticalCenter: selectionRect.verticalCenter
+            }
+        }
     }
 
     Popup {
@@ -117,5 +163,7 @@ Rectangle {
         visible: isVisual || showNonVisual
         anchors.fill: parent
         hoverEnabled: true
+
+        onClicked: root.clicked()
     }
 }

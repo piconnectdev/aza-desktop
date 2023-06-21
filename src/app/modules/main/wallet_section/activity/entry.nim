@@ -1,9 +1,21 @@
-import NimQml, tables, json, strformat, sequtils, strutils, logging
+import NimQml, tables, json, strformat, sequtils, strutils, logging, stint, strutils
 
 import ../transactions/view
 import ../transactions/item
 import ./backend/transactions
 import backend/activity as backend
+import ../../../shared_models/currency_amount
+
+# Additional data needed to build an Entry, which is
+# not included in the metadata and needs to be 
+# fetched from a different source.
+type
+  ExtraData* = object
+    inAmount*: float64
+    outAmount*: float64
+    # TODO: Fields below should come from the metadata
+    inSymbol*: string
+    outSymbol*: string
 
 # It is used to display an activity history entry in the QML UI
 #
@@ -20,8 +32,10 @@ QtObject:
       multi_transaction: MultiTransactionDto
       transaction: ref Item
       isPending: bool
+      activityType: backend.ActivityType
 
       metadata: backend.ActivityEntry
+      extradata: ExtraData
 
   proc setup(self: ActivityEntry) =
     self.QObject.setup
@@ -29,20 +43,28 @@ QtObject:
   proc delete*(self: ActivityEntry) =
     self.QObject.delete
 
-  proc newMultiTransactionActivityEntry*(mt: MultiTransactionDto, metadata: backend.ActivityEntry): ActivityEntry =
+  proc newMultiTransactionActivityEntry*(mt: MultiTransactionDto, metadata: backend.ActivityEntry, extradata: ExtraData): ActivityEntry =
     new(result, delete)
     result.multi_transaction = mt
     result.transaction = nil
     result.isPending = false
     result.metadata = metadata
+    result.extradata = extradata
     result.setup()
 
-  proc newTransactionActivityEntry*(tr: ref Item, metadata: backend.ActivityEntry): ActivityEntry =
+  proc newTransactionActivityEntry*(tr: ref Item, metadata: backend.ActivityEntry, fromAddresses: seq[string], extradata: ExtraData): ActivityEntry =
     new(result, delete)
     result.multi_transaction = nil
     result.transaction = tr
     result.isPending = metadata.payloadType == backend.PayloadType.PendingTransaction
     result.metadata = metadata
+    result.extradata = extradata
+    result.activityType = backend.ActivityType.Send
+    if tr != nil:
+      for address in fromAddresses:
+        if (cmpIgnoreCase(address, tr[].getTo()) == 0):
+          result.activityType = backend.ActivityType.Receive
+          break
     result.setup()
 
   proc isMultiTransaction*(self: ActivityEntry): bool {.slot.} =
@@ -97,35 +119,30 @@ QtObject:
   QtProperty[string] recipient:
     read = getRecipient
 
-  # TODO: use CurrencyAmount?
-  proc getFromAmount*(self: ActivityEntry): string {.slot.} =
-    if self.isMultiTransaction():
-      return self.multi_transaction.fromAmount
-    error "getFromAmount: ActivityEntry is not a MultiTransaction"
-    return "0"
+  proc getInAmount*(self: ActivityEntry): float {.slot.} =
+    return float(self.extradata.inAmount)
 
-  QtProperty[string] fromAmount:
-    read = getFromAmount
+  QtProperty[float] inAmount:
+    read = getInAmount
 
-  proc getToAmount*(self: ActivityEntry): string {.slot.} =
-    if not self.isMultiTransaction():
-      error "getToAmount: ActivityEntry is not a MultiTransaction"
-      return "0"
+  proc getOutAmount*(self: ActivityEntry): float {.slot.} =
+    return float(self.extradata.outAmount)
 
-    return self.multi_transaction.fromAmount
+  QtProperty[float] outAmount:
+    read = getOutAmount
 
-  QtProperty[string] toAmount:
-    read = getToAmount
 
-  proc getAmount*(self: ActivityEntry): QVariant {.slot.} =
-    if not self.isMultiTransaction():
-      error "getAmount: ActivityEntry is not an transaction.Item"
-      return newQVariant(0)
+  proc getInSymbol*(self: ActivityEntry): string {.slot.} =
+    return self.extradata.inSymbol
 
-    return newQVariant(self.transaction[].getValue())
+  QtProperty[string] inSymbol:
+    read = getInSymbol
 
-  QtProperty[QVariant] amount:
-    read = getAmount
+  proc getOutSymbol*(self: ActivityEntry): string {.slot.} =
+    return self.extradata.outSymbol
+
+  QtProperty[string] outSymbol:
+    read = getOutSymbol
 
   proc getTimestamp*(self: ActivityEntry): int {.slot.} =
     if self.isMultiTransaction():
@@ -142,10 +159,156 @@ QtObject:
   QtProperty[int] status:
     read = getStatus
 
-  # TODO: properties - type, fromChains, toChains, fromAsset, toAsset, assetName
+  proc getChainId*(self: ActivityEntry): int {.slot.} =
+    if self.transaction == nil:
+      error "getChainId: ActivityEntry is not an transaction.Item"
+      return 0
+    return self.transaction[].getChainId()
 
-  # proc getType*(self: ActivityEntry): int {.slot.} =
-  #   return self.metadata.activityType.int
+  QtProperty[int] chainId:
+    read = getChainId
 
-  # QtProperty[int] type:
-  #   read = getType
+  proc getIsNFT*(self: ActivityEntry): bool {.slot.} =
+    if self.transaction == nil:
+      error "getIsNFT: ActivityEntry is not an transaction.Item"
+      return false
+    return self.transaction[].getIsNFT()
+
+  QtProperty[int] isNFT:
+    read = getIsNFT
+
+  proc getNFTName*(self: ActivityEntry): string {.slot.} =
+    if self.transaction == nil:
+      error "getNFTName: ActivityEntry is not an transaction.Item"
+      return ""
+    return self.transaction[].getNFTName()
+
+  QtProperty[string] nftName:
+    read = getNFTName
+
+  proc getNFTImageURL*(self: ActivityEntry): string {.slot.} =
+    if self.transaction == nil:
+      error "getNFTImageURL: ActivityEntry is not an transaction.Item"
+      return ""
+    return self.transaction[].getNFTImageURL()
+
+  QtProperty[string] nftImageURL:
+    read = getNFTImageURL
+
+  proc getTotalFees*(self: ActivityEntry): QVariant {.slot.} =
+    if self.transaction == nil:
+      error "getTotalFees: ActivityEntry is not an transaction.Item"
+      return newQVariant(0)
+    return newQVariant(self.transaction[].getTotalFees())
+
+  QtProperty[QVariant] totalFees:
+    read = getTotalFees
+
+  proc getInput*(self: ActivityEntry): string {.slot.} =
+    if self.transaction == nil:
+      error "getInput: ActivityEntry is not an transaction.Item"
+      return ""
+    return self.transaction[].getInput()
+
+  QtProperty[string] input:
+    read = getInput
+
+  proc getTxType*(self: ActivityEntry): int {.slot.} =
+    return self.activityType.int
+
+  QtProperty[int] txType:
+    read = getTxType
+
+  proc getType*(self: ActivityEntry): string {.slot.} =
+    if self.transaction == nil:
+      error "getType: ActivityEntry is not an transaction.Item"
+      return ""
+    return self.transaction[].getType()
+
+  QtProperty[string] type:
+    read = getType
+
+  proc getContract*(self: ActivityEntry): string {.slot.} =
+    if self.transaction == nil:
+      error "getContract: ActivityEntry is not an transaction.Item"
+      return ""
+    return self.transaction[].getContract()
+
+  QtProperty[string] contract:
+    read = getContract
+
+  proc getTxHash*(self: ActivityEntry): string {.slot.} =
+    if self.transaction == nil:
+      error "getTxHash: ActivityEntry is not an transaction.Item"
+      return ""
+    return self.transaction[].getTxHash()
+
+  QtProperty[string] txHash:
+    read = getTxHash
+
+  proc getTokenID*(self: ActivityEntry): string {.slot.} =
+    if self.transaction == nil:
+      error "getTokenID: ActivityEntry is not an transaction.Item"
+      return ""
+    return $self.transaction[].getTokenID()
+
+  QtProperty[string] tokenID:
+    read = getTokenID
+
+  proc getNonce*(self: ActivityEntry): string {.slot.} =
+    if self.transaction == nil:
+      error "getNonce: ActivityEntry is not an transaction.Item"
+      return ""
+    return $self.transaction[].getNonce()
+
+  QtProperty[string] nonce:
+    read = getNonce
+
+# TODO: Replaced usage of these for in/out versions in the QML modules
+  proc getSymbol*(self: ActivityEntry): string {.slot.} =
+    if self.transaction == nil:
+      error "getSymbol: ActivityEntry is not an transaction.Item"
+      return ""
+    
+    if self.activityType == backend.ActivityType.Receive:
+      return self.getInSymbol()
+
+    return self.getOutSymbol()
+
+  QtProperty[string] symbol:
+    read = getSymbol
+
+  proc getFromAmount*(self: ActivityEntry): float {.slot.} =
+    if self.isMultiTransaction():
+      return self.getOutAmount()
+    error "getFromAmount: ActivityEntry is not a MultiTransaction"
+    return 0.0
+
+  QtProperty[float] fromAmount:
+    read = getFromAmount
+
+  proc getToAmount*(self: ActivityEntry): float {.slot.} =
+    if self.isMultiTransaction():
+      return self.getInAmount()
+    error "getToAmount: ActivityEntry is not a MultiTransaction"
+    return 0.0
+
+  QtProperty[float] toAmount:
+    read = getToAmount
+
+  proc getValue*(self: ActivityEntry): float {.slot.} =
+    if self.isMultiTransaction():
+      error "getToAmount: ActivityEntry is a MultiTransaction"
+      return 0.0
+
+    if self.activityType == backend.ActivityType.Receive:
+      return self.getInAmount()
+
+    # For some reason status-go is categorizing every activity as Receive,
+    # inverting the In/Out fields for Send operations. Revert this when
+    # that gets fixed.
+    #return self.getOutAmount()
+    return self.getInAmount()
+
+  QtProperty[float] value:
+    read = getValue

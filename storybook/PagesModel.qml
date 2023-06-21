@@ -158,6 +158,14 @@ ListModel {
         section: "Panels"
     }
     ListElement {
+        title: "FeesPanel"
+        section: "Panels"
+    }
+    ListElement {
+        title: "ChatPermissionQualificationPanel"
+        section: "Panels"
+    }
+    ListElement {
          title: "BurnTokensPopup"
          section: "Popups"
     }
@@ -212,6 +220,14 @@ ListModel {
     ListElement {
         title: "SendModal"
         section: "Popups"
+    }
+    ListElement {
+        title: "UserAgreementPopup"
+        section: "Popups"
+    }
+    ListElement {
+        title: "StatusButton"
+        section: "Controls"
     }
     ListElement {
         title: "MembersSelector"

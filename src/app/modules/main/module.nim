@@ -4,6 +4,7 @@ import io_interface, view, controller, chat_search_item, chat_search_model
 import ephemeral_notification_item, ephemeral_notification_model
 import ./communities/models/[pending_request_item, pending_request_model]
 import ../shared_models/[user_item, member_item, member_model, section_item, section_model, section_details]
+import ../shared_models/[color_hash_item, color_hash_model]
 import ../shared_modules/keycard_popup/module as keycard_shared_module
 import ../../global/app_sections_config as conf
 import ../../global/app_signals
@@ -206,7 +207,7 @@ proc newModule*[T](
   result.stickersModule = stickers_module.newModule(result, events, stickersService, settingsService, walletAccountService, networkService, tokenService)
   result.activityCenterModule = activity_center_module.newModule(result, events, activityCenterService, contactsService,
   messageService, chatService, communityService)
-  result.communitiesModule = communities_module.newModule(result, events, communityService, contactsService, communityTokensService, networkService, transactionService)
+  result.communitiesModule = communities_module.newModule(result, events, communityService, contactsService, communityTokensService, networkService, transactionService, tokenService)
   result.appSearchModule = app_search_module.newModule(result, events, contactsService, chatService, communityService,
   messageService)
   result.nodeSectionModule = node_section_module.newModule(result, events, settingsService, nodeService, nodeConfigurationService)
@@ -237,7 +238,8 @@ proc createTokenItem[T](self: Module[T], tokenDto: CommunityTokenDto) : TokenIte
   let network = self.controller.getNetwork(tokenDto.chainId)
   let tokenOwners = self.controller.getCommunityTokenOwners(tokenDto.communityId, tokenDto.chainId, tokenDto.address)
   let ownerAddressName = self.controller.getCommunityTokenOwnerName(tokenDto.chainId, tokenDto.address)
-  result = initTokenItem(tokenDto, network, tokenOwners, ownerAddressName)
+  let remainingSupply = if tokenDto.infiniteSupply: 0 else: self.controller.getRemainingSupply(tokenDto.chainId, tokenDto.address)
+  result = initTokenItem(tokenDto, network, tokenOwners, ownerAddressName, remainingSupply)
 
 proc createChannelGroupItem[T](self: Module[T], channelGroup: ChannelGroupDto): SectionItem =
   let isCommunity = channelGroup.channelGroupType == ChannelGroupType.Community
@@ -792,7 +794,7 @@ method getCommunitySectionModule*[T](self: Module[T], communityId: string): QVar
 
 method rebuildChatSearchModel*[T](self: Module[T]) =
   let transformItem = proc(item: chat_item.Item, sectionId, sectionName: string): chat_search_item.Item =
-    result = chat_search_item.initItem(item.id(), item.name(), item.color(), item.icon(), sectionId, sectionName)
+    result = chat_search_item.initItem(item.id(), item.name(), item.color(), item.colorId(), item.icon(), item.colorHash().toJson(), sectionId, sectionName)
 
   let transform = proc(items: seq[chat_item.Item], sectionId, sectionName: string): seq[chat_search_item.Item] =
     for item in items:
@@ -1006,6 +1008,12 @@ method onCommunityTokenDeployStateChanged*[T](self: Module[T], communityId: stri
   let item = self.view.model().getItemById(communityId)
   if item.id != "":
     item.updateCommunityTokenDeployState(chainId, contractAddress, deployState)
+
+method onCommunityTokenSupplyChanged*[T](self: Module[T], communityId: string, chainId: int, contractAddress: string, supply: int, remainingSupply: int) =
+  let item = self.view.model().getItemById(communityId)
+  if item.id != "":
+    item.updateCommunityTokenSupply(chainId, contractAddress, supply)
+    item.updateCommunityRemainingSupply(chainId, contractAddress, remainingSupply)
 
 method onAcceptRequestToJoinLoading*[T](self: Module[T], communityId: string, memberKey: string) =
   let item = self.view.model().getItemById(communityId)

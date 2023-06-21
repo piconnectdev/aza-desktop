@@ -13,6 +13,8 @@ import ../../shared_models/token_criteria_item
 import ../../shared_models/token_criteria_model
 import ../../shared_models/token_list_item
 import ../../shared_models/token_list_model
+import ../../shared_models/token_permission_chat_list_item
+import ../../shared_models/token_permission_chat_list_model
 
 import chat_content/module as chat_content_module
 import chat_content/users/module as users_module
@@ -69,6 +71,8 @@ proc buildChatSectionUI(self: Module,
   gifService: gif_service.Service,
   mailserversService: mailservers_service.Service)
 
+proc reevaluateRequiresTokenPermissionToJoin(self: Module)
+
 proc addOrUpdateChat(self: Module,
     chat: ChatDto,
     channelGroup: ChannelGroupDto,
@@ -85,8 +89,6 @@ proc addOrUpdateChat(self: Module,
     setChatAsActive: bool = true,
     insertIntoModel: bool = true,
   ): Item
-
-proc buildTokenPermissionItem*(self: Module, tokenPermission: CommunityTokenPermissionDto): TokenPermissionItem
 
 proc buildTokenList*(self: Module)
 
@@ -259,7 +261,7 @@ proc createItemFromPublicKey(self: Module, publicKey: string): UserItem =
     alias = contactDetails.dto.alias,
     icon = contactDetails.icon,
     colorId = contactDetails.colorId,
-    colorHash = contactDetails.colorHash,
+    colorHash = if not contactDetails.dto.ensVerified: contactDetails.colorHash else: "",
     onlineStatus = toOnlineStatus(self.controller.getStatusForContactWithId(publicKey).statusType),
     isContact = contactDetails.dto.isContact(),
     isVerified = contactDetails.dto.isContactVerified(),
@@ -283,7 +285,7 @@ proc rebuildCommunityTokenPermissionsModel(self: Module) =
   var tokenPermissionsItems: seq[TokenPermissionItem] = @[]
 
   for id, tokenPermission in community.tokenPermissions:
-    let tokenPermissionItem = self.buildTokenPermissionItem(tokenPermission)
+    let tokenPermissionItem = buildTokenPermissionItem(tokenPermission)
     tokenPermissionsItems.add(tokenPermissionItem)
 
   let memberPermissions = filter(tokenPermissionsItems, tokenPermissionsItem => 
@@ -293,9 +295,17 @@ proc rebuildCommunityTokenPermissionsModel(self: Module) =
     tokenPermissionsItem.getType() == TokenPermissionType.BecomeAdmin.int)
 
   self.view.tokenPermissionsModel().setItems(tokenPermissionsItems)
-  self.view.setRequiresTokenPermissionToJoin(len(memberPermissions) > 0 or len(adminPermissions) > 0)
+  self.reevaluateRequiresTokenPermissionToJoin()
 
-proc initCommunityTokenPermissionsModel(self: Module) =
+proc reevaluateRequiresTokenPermissionToJoin(self: Module) =
+  let community = self.controller.getMyCommunity()
+  var hasBecomeMemberOrBecomeAdminPermissions = false
+  for id, tokenPermission in community.tokenPermissions:
+    if tokenPermission.`type` == TokenPermissionType.BecomeMember or tokenPermission.`type` == TokenPermissionType.BecomeAdmin:
+      hasBecomeMemberOrBecomeAdminPermissions = true
+  self.view.setRequiresTokenPermissionToJoin(hasBecomeMemberOrBecomeAdminPermissions)
+
+proc initCommunityTokenPermissionsModel(self: Module, channelGroup: ChannelGroupDto) =
   self.rebuildCommunityTokenPermissionsModel()
 
 proc buildTokenList(self: Module) =
@@ -392,14 +402,19 @@ method onChatsLoaded*(
     self.usersModule.load()
     let community = self.controller.getMyCommunity()
     self.view.setAmIMember(community.joined)
-    self.initCommunityTokenPermissionsModel()
+    self.initCommunityTokenPermissionsModel(channelGroup)
     self.controller.asyncCheckPermissionsToJoin()
 
   let activeChatId = self.controller.getActiveChatId()
   let isCurrentSectionActive = self.controller.getIsCurrentSectionActive()
-  for chatId, cModule in self.chatContentModules:
-    if isCurrentSectionActive and chatId == activeChatId:
-      cModule.onMadeActive()
+  if isCurrentSectionActive:
+    for chatId, cModule in self.chatContentModules:
+      if chatId == activeChatId:
+        cModule.onMadeActive()
+
+    if(self.controller.isCommunity()):
+      let community = self.controller.getMyCommunity()
+      self.controller.asyncCheckChannelPermissions(community.id, activeChatId)
 
   self.view.chatsLoaded()
 
@@ -477,6 +492,10 @@ method activeItemSet*(self: Module, itemId: string) =
   # notify parent module about active chat/channel
   self.delegate.onActiveChatChange(mySectionId, activeChatId)
   self.delegate.onDeactivateChatLoader(deactivateSectionId, deactivateChatId)
+  
+  if self.controller.isCommunity():
+    self.controller.asyncCheckChannelPermissions(mySectionId, activeChatId)
+
 
 method getModuleAsVariant*(self: Module): QVariant =
   return self.viewVariant
@@ -497,6 +516,16 @@ proc updateParentBadgeNotifications(self: Module) =
     unviewedMessagesCount > 0,
     unviewedMentionsCount
   )
+
+proc updateChatLocked(self: Module, chatId: string) =
+  let communityId = self.controller.getMySectionId()
+  let locked = self.controller.checkChatIsLocked(communityId, chatId)
+  self.view.chatsModel().setItemLocked(chatId, locked)
+
+proc updateChatRequiresPermissions(self: Module, chatId: string) =
+  let communityId = self.controller.getMySectionId
+  let requiresPermissions = self.controller.checkChatHasPermissions(communityId, chatId)
+  self.view.chatsModel().setItemPermissionsRequired(chatId, requiresPermissions)
 
 proc updateBadgeNotifications(self: Module, chat: ChatDto, hasUnreadMessages: bool, unviewedMentionsCount: int) =
   let chatId = chat.id
@@ -532,6 +561,11 @@ method onActiveSectionChange*(self: Module, sectionId: string) =
     self.setFirstChannelAsActive()
   else:
     self.setActiveItem(activeChatId)
+
+  if self.isCommunity():
+    self.controller.asyncCheckPermissionsToJoin()
+    self.controller.asyncCheckAllChannelsPermissions()
+
   self.delegate.onActiveChatChange(self.controller.getMySectionId(), self.controller.getActiveChatId())
 
 method chatsModel*(self: Module): chats_model.Model =
@@ -554,7 +588,7 @@ method addNewChat*(
     setChatAsActive: bool = true,
     insertIntoModel: bool = true,
   ): Item =
-  let hasNotification = not chatDto.muted and (chatDto.unviewedMessagesCount > 0 or chatDto.unviewedMentionsCount > 0)
+  let hasNotification =chatDto.unviewedMessagesCount > 0
   let notificationsCount = chatDto.unviewedMentionsCount
 
   var chatName = chatDto.name
@@ -572,7 +606,8 @@ method addNewChat*(
     chatImage = contactDetails.icon
     blocked = contactDetails.dto.isBlocked()
     isUsersListAvailable = false
-    colorHash = self.controller.getColorHash(chatDto.id)
+    if not contactDetails.dto.ensVerified:
+      colorHash = self.controller.getColorHash(chatDto.id)
     colorId = self.controller.getColorId(chatDto.id)
     onlineStatus = toOnlineStatus(self.controller.getStatusForContactWithId(chatDto.id).statusType)
 
@@ -626,7 +661,10 @@ method addNewChat*(
     categoryOpened,
     onlineStatus = onlineStatus,
     loaderActive = setChatAsActive,
+    locked = self.controller.checkChatIsLocked(self.controller.getMySectionId(), chatDto.id),
+    requiresPermissions = self.controller.checkChatHasPermissions(self.controller.getMySectionId(), chatDto.id)
   )
+
   self.addSubmodule(
     chatDto.id,
     belongsToCommunity,
@@ -641,6 +679,7 @@ method addNewChat*(
     gifService,
     mailserversService,
   )
+
   self.chatContentModules[chatDto.id].load(result)
   if insertIntoModel:
     self.view.chatsModel().appendItem(result)
@@ -786,20 +825,18 @@ method onCommunityTokenPermissionDeleted*(self: Module, communityId: string, per
   singletonInstance.globalEvents.showCommunityTokenPermissionDeletedNotification(communityId, "Community permission deleted", "A token permission has been removed")
 
 method onCommunityTokenPermissionCreated*(self: Module, communityId: string, tokenPermission: CommunityTokenPermissionDto) =
-  let tokenPermissionItem = self.buildTokenPermissionItem(tokenPermission)
-  if tokenPermissionItem.tokenCriteriaMet:
-    self.view.setAllTokenRequirementsMet(true)
-  self.view.tokenPermissionsModel.addItem(tokenPermissionItem)
-  self.view.setRequiresTokenPermissionToJoin(true)
+  let tokenPermissionItem = buildTokenPermissionItem(tokenPermission)
 
+  self.view.tokenPermissionsModel.addItem(tokenPermissionItem)
+  self.reevaluateRequiresTokenPermissionToJoin()
   singletonInstance.globalEvents.showCommunityTokenPermissionCreatedNotification(communityId, "Community permission created", "A token permission has been added")
 
-method onCommunityCheckPermissionsToJoinResponse*(self: Module, checkPermissionsToJoinResponse: CheckPermissionsToJoinResponseDto) =
-  let community = self.controller.getMyCommunity()
-
-  for id, criteriaResult in checkPermissionsToJoinResponse.permissions:
+proc updateTokenPermissionModel*(self: Module, permissions: Table[string, CheckPermissionsResultDto], community: CommunityDto) = 
+  for id, criteriaResult in permissions:
     if community.tokenPermissions.hasKey(id):
       let tokenPermissionItem = self.view.tokenPermissionsModel.getItemById(id)
+      if tokenPermissionItem.id == "":
+        continue
 
       var updatedTokenCriteriaItems: seq[TokenCriteriaItem] = @[]
       var permissionSatisfied = true
@@ -824,7 +861,7 @@ method onCommunityCheckPermissionsToJoinResponse*(self: Module, checkPermissions
           tokenPermissionItem.id, 
           tokenPermissionItem.`type`,
           updatedTokenCriteriaItems,
-          @[], # TODO: handle chat list items
+          tokenPermissionItem.getChatList().getItems(),
           tokenPermissionItem.isPrivate,
           permissionSatisfied
       )
@@ -853,9 +890,23 @@ method onCommunityCheckPermissionsToJoinResponse*(self: Module, checkPermissions
   self.view.setRequiresTokenPermissionToJoin(requiresPermissionToJoin)
       
 
+proc updateChannelPermissionViewData*(self: Module, chatId: string, viewOnlyPermissions: ViewOnlyOrViewAndPostPermissionsResponseDto, viewAndPostPermissions: ViewOnlyOrViewAndPostPermissionsResponseDto, community: CommunityDto) =
+  self.updateTokenPermissionModel(viewOnlyPermissions.permissions, community)
+  self.updateTokenPermissionModel(viewAndPostPermissions.permissions, community)
+  self.updateChatRequiresPermissions(chatId)
+  self.updateChatLocked(chatId)
+  self.chatContentModules[chatId].onUpdateViewOnlyPermissionsSatisfied(viewOnlyPermissions.satisfied)
+  self.chatContentModules[chatId].onUpdateViewAndPostPermissionsSatisfied(viewAndPostPermissions.satisfied)
+
+method onCommunityCheckPermissionsToJoinResponse*(self: Module, checkPermissionsToJoinResponse: CheckPermissionsToJoinResponseDto) =
+  let community = self.controller.getMyCommunity()
+  self.view.setAllTokenRequirementsMet(checkPermissionsToJoinResponse.satisfied)
+  self.updateTokenPermissionModel(checkPermissionsToJoinResponse.permissions, community)
+
 method onCommunityTokenPermissionUpdated*(self: Module, communityId: string, tokenPermission: CommunityTokenPermissionDto) =
-  let tokenPermissionItem = self.buildTokenPermissionItem(tokenPermission)
+  let tokenPermissionItem = buildTokenPermissionItem(tokenPermission)
   self.view.tokenPermissionsModel.updateItem(tokenPermission.id, tokenPermissionItem)
+  self.reevaluateRequiresTokenPermissionToJoin()
 
   singletonInstance.globalEvents.showCommunityTokenPermissionUpdatedNotification(communityId, "Community permission updated", "A token permission has been updated")
 
@@ -867,6 +918,15 @@ method onCommunityTokenPermissionUpdateFailed*(self: Module, communityId: string
 
 method onCommunityTokenPermissionDeletionFailed*(self: Module, communityId: string) =
   singletonInstance.globalEvents.showCommunityTokenPermissionDeletionFailedNotification(communityId, "Failed to delete community permission", "Something went wrong")
+
+method onCommunityCheckChannelPermissionsResponse*(self: Module, chatId: string, checkChannelPermissionsResponse: CheckChannelPermissionsResponseDto) =
+  let community = self.controller.getMyCommunity()
+  self.updateChannelPermissionViewData(chatId, checkChannelPermissionsResponse.viewOnlyPermissions, checkChannelPermissionsResponse.viewAndPostPermissions, community)
+
+method onCommunityCheckAllChannelsPermissionsResponse*(self: Module, checkAllChannelsPermissionsResponse: CheckAllChannelsPermissionsResponseDto) =
+  let community = self.controller.getMyCommunity()
+  for chatId, permissionResult in checkAllChannelsPermissionsResponse.channels:
+    self.updateChannelPermissionViewData(chatId, permissionResult.viewOnlyPermissions, permissionResult.viewAndPostPermissions, community)
 
 method onCommunityTokenMetadataAdded*(self: Module, communityId: string, tokenMetadata: CommunityTokensMetadataDto) = 
   let tokenListItem = initTokenListItem(
@@ -1197,10 +1257,7 @@ proc addOrUpdateChat(self: Module,
 
   if not self.chatsLoaded or chatExists:
     # Update badges
-    var hasUnreadMessages = false
-    if not chat.muted:
-      hasUnreadMessages = chat.unviewedMessagesCount > 0
-    self.updateBadgeNotifications(chat, hasUnreadMessages, chat.unviewedMentionsCount)
+    self.updateBadgeNotifications(chat, chat.unviewedMessagesCount > 0, chat.unviewedMentionsCount)
 
   if not self.chatsLoaded:
     return
@@ -1211,6 +1268,8 @@ proc addOrUpdateChat(self: Module,
 
   if chatExists:
     self.changeMutedOnChat(chat.id, chat.muted)
+    self.updateChatRequiresPermissions(chat.id)
+    self.updateChatLocked(chat.id)
     if (chat.chatType == ChatType.PrivateGroupChat):
       self.onGroupChatDetailsUpdated(chat.id, chat.name, chat.color, chat.icon)
     elif (chat.chatType != ChatType.OneToOne):
@@ -1282,13 +1341,19 @@ method joinSpectatedCommunity*(self: Module) =
   if self.usersModule != nil:
     self.usersModule.updateMembersList()
 
-method createOrEditCommunityTokenPermission*(self: Module, communityId: string, permissionId: string, permissionType: int, tokenCriteriaJson: string, isPrivate: bool) =
+method createOrEditCommunityTokenPermission*(self: Module, communityId: string, permissionId: string, permissionType: int, tokenCriteriaJson: string, channelIDs: seq[string], isPrivate: bool) =
+
   var tokenPermission = CommunityTokenPermissionDto()
   tokenPermission.id = permissionId
   tokenPermission.isPrivate = isPrivate
   tokenPermission.`type` = TokenPermissionType(permissionType)
+  tokenPermission.chatIDs = channelIDs
+
+  if tokenPermission.`type` != TokenPermissionType.View and tokenPermission.`type` != TokenPermissionType.ViewAndPost:
+    tokenPermission.chatIDs = @[]
 
   let tokenCriteriaJsonObj = tokenCriteriaJson.parseJson
+
   for tokenCriteria in tokenCriteriaJsonObj:
 
     let viewAmount = tokenCriteria{"amount"}.getFloat
@@ -1318,33 +1383,6 @@ method requestToJoinCommunity*(self: Module, communityId: string, ensName: strin
 
 method requestToJoinCommunityWithAuthentication*(self: Module, communityId: string, ensName: string) =
   self.controller.authenticateToRequestToJoinCommunity(communityId, ensName)
-
-proc buildTokenPermissionItem*(self: Module, tokenPermission: CommunityTokenPermissionDto): TokenPermissionItem =
-  var tokenCriteriaItems: seq[TokenCriteriaItem] = @[]
-
-  for tc in tokenPermission.tokenCriteria:
-
-    let tokenCriteriaItem = initTokenCriteriaItem(
-      tc.symbol,
-      tc.name,
-      tc.amount.parseFloat,
-      tc.`type`.int,
-      tc.ensPattern,
-      false # tokenCriteriaMet will be updated by a call to checkPermissionsToJoin
-    )
-
-    tokenCriteriaItems.add(tokenCriteriaItem)
-
-  let tokenPermissionItem = initTokenPermissionItem(
-      tokenPermission.id, 
-      tokenPermission.`type`.int, 
-      tokenCriteriaItems,
-      @[], # TODO: handle chat list items
-      tokenPermission.isPrivate,
-      false # allTokenCriteriaMet will be update by a call to checkPermissinosToJoin
-  )
-
-  return tokenPermissionItem
 
 method onDeactivateChatLoader*(self: Module, chatId: string) =
   self.view.chatsModel().disableChatLoader(chatId)

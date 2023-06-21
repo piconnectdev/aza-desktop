@@ -43,13 +43,19 @@ SettingsPageLayout {
     signal mintCollectible(var collectibleItem)
     signal mintAsset(var assetItem)
     signal signMintTransactionOpened(int chainId, string accountAddress)
-    signal signRemoteDestructTransactionOpened(var remotelyDestructTokensList, // [key , amount]
-                                               string tokenKey)
-    signal remotelyDestructCollectibles(var remotelyDestructTokensList, // [key , amount]
-                                        string tokenKey)
-    signal signBurnTransactionOpened(int chainId)
+
+    signal signRemoteDestructTransactionOpened(var selfDestructTokensList, // [key , amount]
+                                             string tokenKey)
+
+    signal remotelyDestructCollectibles(var selfDestructTokensList, // [key , amount]
+                                          string tokenKey)
+
+    signal signBurnTransactionOpened(string tokenKey, int amount)
+
     signal burnToken(string tokenKey, int amount)
-    signal airdropToken(string tokenKey, int type, var addresses)
+
+    signal airdropToken(string tokenKey)
+
     signal deleteToken(string tokenKey)
 
     function setFeeLoading() {
@@ -60,6 +66,11 @@ SettingsPageLayout {
 
     function navigateBack() {
         stackManager.pop(StackView.Immediate)
+    }
+
+    function resetNavigation(isAssetView = false) {
+        d.isAssetView = isAssetView
+        stackManager.clear(d.initialViewState, StackView.Immediate)
     }
 
     QtObject {
@@ -88,7 +99,7 @@ SettingsPageLayout {
         property int burnAmount
         property int remainingTokens
         property url artworkSource
-        property bool isAssetType
+        property bool isAssetView: false
         property var currentToken // CollectibleObject or AssetObject type
 
         readonly property var initialItem: (root.tokensModel && root.tokensModel.count > 0) ? mintedTokensView : welcomeView
@@ -138,7 +149,7 @@ SettingsPageLayout {
         },
         State {
             name: d.newTokenViewState
-            PropertyChanges {target: root; title: d.isAssetType ? d.newAssetPageTitle : d.newCollectiblePageTitle }
+            PropertyChanges {target: root; title: d.isAssetView ? d.newAssetPageTitle : d.newCollectiblePageTitle }
             PropertyChanges {target: root; subTitle: ""}
             PropertyChanges {target: root; previousPageName: d.backButtonText}
             PropertyChanges {target: root; primaryHeaderButton.visible: false}
@@ -159,12 +170,19 @@ SettingsPageLayout {
     ]
 
     onPrimaryHeaderButtonClicked: {
-        if(root.state == d.initialViewState)
-            stackManager.push(d.newTokenViewState, newTokenView, null, StackView.Immediate)
+        if(root.state == d.initialViewState) {
+            // Then move on to the new token view, with the specific tab selected:
+            stackManager.push(d.newTokenViewState,
+                              newTokenView,
+                              {
+                                  isAssetView: d.isAssetView
+                              },
+                              StackView.Immediate)
+        }
 
         if(root.state == d.tokenViewState) {
             if(d.currentToken) {
-                if(d.isAssetType) {
+                if(d.isAssetView) {
                     // Copy current data:
                     temp_.asset.copyAsset(d.currentToken)
 
@@ -172,13 +190,13 @@ SettingsPageLayout {
                     d.currentToken = temp_.asset
 
                     // Reset the stack:
-                    stackManager.clear(d.initialViewState, StackView.Immediate)
+                    root.resetNavigation(true)
 
                     // Then move on to the new token view, but asset pre-filled:
                     stackManager.push(d.newTokenViewState,
                                       newTokenView,
                                       {
-                                          isAssetView: d.isAssetType,
+                                          isAssetView: d.isAssetView,
                                           referenceName: d.currentToken.name,
                                           referenceSymbol: d.currentToken.symbol,
                                           validationMode: StatusInput.ValidationMode.Always,
@@ -193,13 +211,13 @@ SettingsPageLayout {
                     d.currentToken = temp_.collectible
 
                     // Reset the stack:
-                    stackManager.clear(d.initialViewState, StackView.Immediate)
+                    root.resetNavigation(false)
 
                     // Then move on to the new token view, but collectible pre-filled:
                     stackManager.push(d.newTokenViewState,
                                       newTokenView,
                                       {
-                                          isAssetView: d.isAssetType,
+                                          isAssetView: d.isAssetView,
                                           referenceName: d.currentToken.name,
                                           referenceSymbol: d.currentToken.symbol,
                                           validationMode: StatusInput.ValidationMode.Always,
@@ -347,7 +365,7 @@ SettingsPageLayout {
                 else
                     root.mintCollectible(collectible)
 
-                stackManager.clear(d.initialViewState, StackView.Immediate)
+                root.resetNavigation()
             }
 
             viewWidth: root.viewWidth
@@ -401,6 +419,7 @@ SettingsPageLayout {
                 remotelyDestructPopup.close()
                 alertPopup.close()
                 signTransactionPopup.close()
+                burnTokensPopup.close()
             }
 
             airdropEnabled: !deployStateFailed
@@ -473,7 +492,7 @@ SettingsPageLayout {
                 onOpened: {
                     root.setFeeLoading()
                     signTransactionPopup.isRemotelyDestructTransaction ? root.signRemoteDestructTransactionOpened(d.remotelyDestructTokensList, d.tokenKey) :
-                                                                         root.signBurnTransactionOpened(d.chainId)
+                                                                         root.signBurnTransactionOpened(d.tokenKey, d.burnAmount)
                 }
                 onCancelClicked: close()
                 onSignTransactionClicked: signTransaction()
@@ -610,7 +629,7 @@ SettingsPageLayout {
 
             Binding {
                 target: d
-                property: "isAssetType"
+                property: "isAssetView"
                 value: view.tokenType === Constants.TokenType.ERC20
             }
 
@@ -650,7 +669,7 @@ SettingsPageLayout {
                         BindCollectible { property: "description"; value: model.description },
                         BindCollectible { property: "supply"; value: model.supply },
                         BindCollectible { property: "infiniteSupply"; value: model.infiniteSupply },
-                        BindCollectible { property: "remainingTokens"; value: model.remainingTokens },
+                        BindCollectible { property: "remainingTokens"; value: model.remainingSupply },
                         BindCollectible { property: "chainId"; value: model.chainId },
                         BindCollectible { property: "chainName"; value: model.chainName },
                         BindCollectible { property: "chainIcon"; value: model.chainIcon },
@@ -672,7 +691,7 @@ SettingsPageLayout {
                         BindAsset { property: "description"; value: model.description },
                         BindAsset { property: "supply"; value: model.supply },
                         BindAsset { property: "infiniteSupply"; value: model.infiniteSupply },
-                        BindAsset { property: "remainingTokens"; value: model.remainingTokens },
+                        BindAsset { property: "remainingTokens"; value: model.remainingSupply },
                         BindAsset { property: "chainId"; value: model.chainId },
                         BindAsset { property: "chainName"; value: model.chainName },
                         BindAsset { property: "chainIcon"; value: model.chainIcon },
@@ -718,7 +737,7 @@ SettingsPageLayout {
 
         onAcceptClicked: {
             root.deleteToken(d.tokenKey)
-            stackManager.clear(d.initialViewState, StackView.Immediate)
+            root.resetNavigation()
         }
         onCancelClicked: close()
     }

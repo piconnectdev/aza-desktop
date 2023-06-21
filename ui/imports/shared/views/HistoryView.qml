@@ -27,20 +27,13 @@ ColumnLayout {
     id: root
 
     property var overview
-    property int pageSize: 20 // number of transactions per page
 
     signal launchTransactionDetail(var transaction)
-
-    function fetchHistory() {
-        if (!RootStore.isFetchingHistory(root.overview.mixedcaseAddress)) {
-            d.isLoading = true
-            RootStore.loadTransactionsForAccount(root.overview.mixedcaseAddress, pageSize)
-        }
-    }
 
     QtObject {
         id: d
         property bool isLoading: false
+        property var activityFiltersStore: WalletStores.ActivityFiltersStore{}
     }
 
     Connections {
@@ -66,7 +59,7 @@ ColumnLayout {
         id: noTxs
         Layout.fillWidth: true
         Layout.preferredHeight: 42
-        visible: !d.isLoading && transactionListRoot.count === 0
+        visible: !d.isLoading && transactionListRoot.count === 0 && !d.activityFiltersStore.filtersSet
         font.pixelSize: Style.current.primaryTextFontSize
         text: qsTr("Activity for this account will appear here")
     }
@@ -74,153 +67,148 @@ ColumnLayout {
     // Tp-do make connections with nim once logic is ready
     ActivityFilterPanel {
         id: filterComponent
-        visible: !d.isLoading && transactionListRoot.count !== 0
+        visible: !d.isLoading && (transactionListRoot.count !== 0 || d.activityFiltersStore.filtersSet)
         Layout.fillWidth: true
         Layout.preferredHeight: 50
-        store: RootStore
-        selectedTime: Constants.TransactionTimePeriod.All
-        typeFilters: [
-            Constants.TransactionType.Send,
-            Constants.TransactionType.Receive,
-            Constants.TransactionType.Buy,
-            Constants.TransactionType.Swap,
-            Constants.TransactionType.Bridge
-        ]
-        statusFilters: [
-            Constants.TransactionStatus.Failed,
-            Constants.TransactionStatus.Pending,
-            Constants.TransactionStatus.Complete,
-            Constants.TransactionStatus.Finished
-        ]
+        activityFilterStore: d.activityFiltersStore
+        store: WalletStores.RootStore
     }
 
-    Separator {
-        Layout.fillWidth: true
-        visible: filterComponent.visible
-    }
-
-    StatusListView {
-        id: transactionListRoot
-        objectName: "walletAccountTransactionList"
+    Item {
         Layout.alignment: Qt.AlignTop
         Layout.topMargin: nonArchivalNodeError.visible || noTxs.visible ? Style.current.padding : 0
-        Layout.bottomMargin:  Style.current.padding
+        Layout.bottomMargin: Style.current.padding
         Layout.fillWidth: true
         Layout.fillHeight: true
 
-        property string firstSection
+        Rectangle { // Shadow behind delegates when scrolling
+            anchors.top: topListSeparator.bottom
+            width: parent.width
+            height: 4
+            color: Style.current.separator
+            visible: topListSeparator.visible
+        }
 
-        model: SortFilterProxyModel {
-            id: txModel
+        StatusListView {
+            id: transactionListRoot
+            objectName: "walletAccountTransactionList"
+            anchors.fill: parent
 
-            sourceModel: RootStore.historyTransactions
+            property string firstSection
 
-            // LocaleUtils is not accessable from inside expression, but local function works
-            property var formatDate: (ms) => LocaleUtils.formatDate(ms, Locale.ShortFormat)
-            sorters: RoleSorter {
-                roleName: "timestamp"
-                sortOrder: Qt.DescendingOrder
-            }
-            proxyRoles: ExpressionRole {
-                name: "date"
-                expression: {
-                    return timestamp > 0 ? txModel.formatDate(timestamp * 1000) : (d.isLoading ? " " : "") //  not empty, because section will not be displayed when loading if empty
+            model: SortFilterProxyModel {
+                id: txModel
+
+                sourceModel: RootStore.historyTransactions
+
+                // LocaleUtils is not accessable from inside expression, but local function works
+                property var formatDate: (ms) => LocaleUtils.formatDate(ms, Locale.ShortFormat)
+                proxyRoles: ExpressionRole {
+                    name: "date"
+                    expression: {
+                        return model.activityEntry.timestamp > 0 ? txModel.formatDate(model.activityEntry.timestamp * 1000) : (d.isLoading ? " " : "") //  not empty, because section will not be displayed when loading if empty
+                    }
                 }
             }
-        }
 
-        delegate: transactionDelegate
+            delegate: transactionDelegate
 
-        footer: footerComp
+            footer: footerComp
 
-        displaced: Transition { // TODO Remove animation when ordered fetching of transactions is implemented
-            NumberAnimation { properties: "y"; duration: 250; easing.type: Easing.Linear; alwaysRunToEnd: true }
-        }
+            displaced: Transition { // TODO Remove animation when ordered fetching of transactions is implemented
+                NumberAnimation { properties: "y"; duration: 250; easing.type: Easing.Linear; alwaysRunToEnd: true }
+            }
 
-        readonly property point lastVisibleItemPos: Qt.point(0, contentY + height - 1)
-        property int lastVisibleIndex: indexAt(lastVisibleItemPos.x, lastVisibleItemPos.y)
+            readonly property point lastVisibleItemPos: Qt.point(0, contentY + height - 1)
+            property int lastVisibleIndex: indexAt(lastVisibleItemPos.x, lastVisibleItemPos.y)
 
-        onCountChanged: {
-            // Preserve last visible item in view when more items added at the end or
-            // inbetween
+            onCountChanged: {
+                // Preserve last visible item in view when more items added at the end or
+                // inbetween
+                // TODO Remove this logic, when new activity design is implemented
+                // and items are loaded in order
+                const lastVisibleItem = itemAtIndex(lastVisibleIndex)
+                const newItem = itemAt(lastVisibleItemPos.x, lastVisibleItemPos.y)
+                const lastVisibleItemY = lastVisibleItem ? lastVisibleItem.y : -1
+                if (newItem) {
+                    if (newItem.y < lastVisibleItemY) { // item inserted higher than last visible
+                        lastVisibleIndex = indexAt(lastVisibleItemPos.x, lastVisibleItemPos.y)
+                    }
+                }
+            }
+            currentIndex: 0
+
+            property bool userScrolled: false
+
             // TODO Remove this logic, when new activity design is implemented
             // and items are loaded in order
-            const lastVisibleItem = itemAtIndex(lastVisibleIndex)
-            const newItem = itemAt(lastVisibleItemPos.x, lastVisibleItemPos.y)
-            const lastVisibleItemY = lastVisibleItem ? lastVisibleItem.y : -1
-            if (newItem) {
-                if (newItem.y < lastVisibleItemY) { // item inserted higher than last visible
-                    lastVisibleIndex = indexAt(lastVisibleItemPos.x, lastVisibleItemPos.y)
+            onMovingVerticallyChanged: {
+                if (!userScrolled) {
+                    userScrolled = true
+                    currentIndex = Qt.binding(() => lastVisibleIndex >= 0 ? lastVisibleIndex : (count - 1))
                 }
-            }
-        }
-        currentIndex: 0
 
-        property bool userScrolled: false
-
-        // TODO Remove this logic, when new activity design is implemented
-        // and items are loaded in order
-        onMovingVerticallyChanged: {
-            if (!userScrolled) {
-                userScrolled = true
-                currentIndex = Qt.binding(() => lastVisibleIndex >= 0 ? lastVisibleIndex : (count - 1))
+                lastVisibleIndex = indexAt(lastVisibleItemPos.x, lastVisibleItemPos.y)
             }
 
-            lastVisibleIndex = indexAt(lastVisibleItemPos.x, lastVisibleItemPos.y)
-        }
+            ScrollBar.vertical: StatusScrollBar {}
 
-        ScrollBar.vertical: StatusScrollBar {}
+            section.property: "date"
+            topMargin: -20 // Top margin for first section. Section cannot have different sizes
+            section.delegate: ColumnLayout {
+                id: sectionDelegate
 
-        section.property: "date"
-        topMargin: -20 // Top margin for first section. Section cannot have different sizes
-        section.delegate: ColumnLayout {
-            id: sectionDelegate
+                readonly property bool isFirstSection: ListView.view.firstSection === section
 
-            readonly property bool isFirstSection: ListView.view.firstSection === section
+                width: ListView.view.width
+                // display always first section. Other sections when more items are being fetched must not be visible
+                // 1 because we don't use empty for loading state
+                // Additionaly height must be defined so all sections use same height to to glitch sections when updating model
+                height: isFirstSection || section.length > 1 ? 58 : 0
+                visible: height > 0 // display always first section. Other sections when more items are being fetched must not be visible
+                spacing: 0
 
-            width: ListView.view.width
-            // display always first section. Other sections when more items are being fetched must not be visible
-            // 1 because we don't use empty for loading state
-            // Additionaly height must be defined so all sections use same height to to glitch sections when updating model
-            height: isFirstSection || section.length > 1 ? 58 : 0
-            visible: height > 0 // display always first section. Other sections when more items are being fetched must not be visible
-            spacing: 0
+                required property string section
 
-            required property string section
-
-            Separator {
-                Layout.fillWidth: true
-                Layout.topMargin: 20
-                implicitHeight: 1
-                visible: !sectionDelegate.isFirstSection
-            }
-
-            StatusTextWithLoadingState {
-                id: sectionText
-                Layout.alignment: Qt.AlignBottom
-                leftPadding: 16
-                bottomPadding: 8
-                text: loading ? "dummy" : parent.section // dummy text because loading component height depends on text height, and not visible with height == 0
-                Binding on width {
-                    when: sectionText.loading
-                    value: 56
-                    restoreMode: Binding.RestoreBindingOrValue
+                Separator {
+                    Layout.fillWidth: true
+                    Layout.topMargin: 20
+                    implicitHeight: 1
                 }
-                customColor: Theme.palette.baseColor1
-                font.pixelSize: 13
-                verticalAlignment: Qt.AlignBottom
-                loading: { // First section must be loading when first item in the list is loading. Other sections are never visible until have date value
-                    if (parent.ListView.view.count > 0) {
-                        const firstItem = parent.ListView.view.itemAtIndex(0)
-                        if (sectionDelegate.isFirstSection && firstItem && firstItem.loading) {
-                            return true
-                        }
+
+                StatusTextWithLoadingState {
+                    id: sectionText
+                    Layout.alignment: Qt.AlignBottom
+                    leftPadding: 16
+                    bottomPadding: 8
+                    text: loading ? "dummy" : parent.section // dummy text because loading component height depends on text height, and not visible with height == 0
+                    Binding on width {
+                        when: sectionText.loading
+                        value: 56
+                        restoreMode: Binding.RestoreBindingOrValue
                     }
-                    return false
+                    customColor: Theme.palette.baseColor1
+                    font.pixelSize: 13
+                    verticalAlignment: Qt.AlignBottom
+                    loading: { // First section must be loading when first item in the list is loading. Other sections are never visible until have date value
+                        if (parent.ListView.view.count > 0) {
+                            const firstItem = parent.ListView.view.itemAtIndex(0)
+                            if (sectionDelegate.isFirstSection && firstItem && firstItem.loading) {
+                                return true
+                            }
+                        }
+                        return false
+                    }
                 }
             }
+            onAtYEndChanged: if(atYEnd) RootStore.fetchMoreTransactions()
         }
-        onAtYEndChanged: if(atYEnd && RootStore.historyTransactions.count > 0 && RootStore.historyTransactions.hasMore) fetchHistory()
+
+        Separator {
+            id: topListSeparator
+            width: parent.width
+            visible: !transactionListRoot.atYBeginning
+        }
     }
 
     StatusMenu {
@@ -237,7 +225,7 @@ ColumnLayout {
 
             delegateMenu.transactionDelegate = delegate
             delegateMenu.transaction = delegate.modelData
-            repeatTransactionAction.enabled = !overview.isWatchOnlyAccount && delegate.transactionType === TransactionDelegate.Send
+            repeatTransactionAction.enabled = !overview.isWatchOnlyAccount && delegate.modelData.txType === TransactionDelegate.Send
             popup(delegate, mouse.x, mouse.y)
         }
 
@@ -285,19 +273,18 @@ ColumnLayout {
         id: transactionDelegate
         TransactionDelegate {
             width: ListView.view.width
-            modelData: model
-            transactionType: isModelDataValid && modelData.to.toLowerCase() === root.overview.mixedcaseAddress.toLowerCase() ? Constants.TransactionType.Receive : Constants.TransactionType.Send
+            modelData: model.activityEntry
             currentCurrency: RootStore.currentCurrency
-            cryptoValue: isModelDataValid ? modelData.value.amount : 0.0
+            cryptoValue: isModelDataValid ? modelData.value : 0.0
             fiatValue: isModelDataValid ? RootStore.getFiatValue(cryptoValue, symbol, currentCurrency): 0.0
             networkIcon: isModelDataValid ? RootStore.getNetworkIcon(modelData.chainId) : ""
             networkColor: isModelDataValid ? RootStore.getNetworkColor(modelData.chainId) : ""
             networkName: isModelDataValid ? RootStore.getNetworkFullName(modelData.chainId) : ""
             symbol: isModelDataValid && !!modelData.symbol ? modelData.symbol : ""
-            transferStatus: isModelDataValid ? RootStore.hex2Dec(modelData.txStatus) : ""
+            transactionStatus: isModelDataValid ? modelData.status : 0
             timeStampText: isModelDataValid ? LocaleUtils.formatRelativeTimestamp(modelData.timestamp * 1000) : ""
-            addressNameTo: isModelDataValid ? WalletStores.RootStore.getNameForAddress(modelData.to) : ""
-            addressNameFrom: isModelDataValid ? WalletStores.RootStore.getNameForAddress(modelData.from) : ""
+            addressNameTo: isModelDataValid ? WalletStores.RootStore.getNameForAddress(modelData.recipient) : ""
+            addressNameFrom: isModelDataValid ? WalletStores.RootStore.getNameForAddress(modelData.sender) : ""
             rootStore: RootStore
             walletRootStore: WalletStores.RootStore
             onClicked: {
@@ -307,7 +294,7 @@ ColumnLayout {
                     launchTransactionDetail(modelData)
                 }
             }
-            loading: isModelDataValid ? modelData.loadingTransaction : false
+            loading: false // TODO handle loading state
 
             Component.onCompleted: {
                 if (index == 0)
