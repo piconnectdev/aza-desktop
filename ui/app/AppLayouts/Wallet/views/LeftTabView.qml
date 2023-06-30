@@ -16,12 +16,12 @@ import shared.panels 1.0
 import shared.controls 1.0
 import shared.popups 1.0
 import shared.popups.keycard 1.0
+import shared.popups.addaccount 1.0
 import shared.stores 1.0
 
 import "../controls"
 import "../popups"
 import "../stores"
-import "../addaccount"
 
 Rectangle {
     id: root
@@ -125,7 +125,7 @@ Rectangle {
         function onDestroyAddAccountPopup() {
             addAccount.active = false
         }
-        function onFilterChanged(address, excludeWatchOnly, allAddresses) {
+        function onFilterChanged(address, includeWatchOnly, allAddresses) {
             root.currentAddress = allAddresses ? "" : address
             root.showAllAccounts = allAddresses
         }
@@ -426,7 +426,7 @@ Rectangle {
             model: SortFilterProxyModel {
                 sourceModel: RootStore.accounts
 
-                sorters: RoleSorter { roleName: "createdAt"; sortOrder: Qt.AscendingOrder }
+                sorters: RoleSorter { roleName: "position"; sortOrder: Qt.AscendingOrder }
             }
             
         }

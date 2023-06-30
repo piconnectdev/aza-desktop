@@ -44,8 +44,9 @@ type
     tokenService: token_service.Service
     collectibleService: collectible_service.Service
     communityTokensService: community_tokens_service.Service
-    tmpRequestToJoinCommunityId: string
+    tmpAuthenticationForJoinInProgress: bool
     tmpRequestToJoinEnsName: string
+    tmpRequestToJoinAddressesToShare: seq[string]
 
 proc newController*(delegate: io_interface.AccessInterface, sectionId: string, isCommunity: bool, events: EventEmitter,
   settingsService: settings_service.Service, nodeConfigurationService: node_configuration_service.Service, 
@@ -74,8 +75,9 @@ proc newController*(delegate: io_interface.AccessInterface, sectionId: string, i
   result.tokenService = tokenService
   result.collectibleService = collectibleService
   result.communityTokensService = communityTokensService
-  result.tmpRequestToJoinCommunityId = ""
+  result.tmpAuthenticationForJoinInProgress = false
   result.tmpRequestToJoinEnsName = ""
+  result.tmpRequestToJoinAddressesToShare = @[]
 
 proc delete*(self: Controller) =
   self.events.disconnect()
@@ -90,21 +92,21 @@ proc setIsCurrentSectionActive*(self: Controller, active: bool) =
   self.isCurrentSectionActive = active
 
 proc requestToJoinCommunityAuthenticated*(self: Controller, password: string) =
-  self.communityService.asyncRequestToJoinCommunity(self.tmpRequestToJoinCommunityId, self.tmpRequestToJoinEnsName, password)
-  self.tmpRequestToJoinCommunityId = ""
+  self.communityService.asyncRequestToJoinCommunity(self.sectionId, self.tmpRequestToJoinEnsName,
+    password, self.tmpRequestToJoinAddressesToShare)
+  self.tmpAuthenticationForJoinInProgress = false
   self.tmpRequestToJoinEnsName = ""
-
-proc requestToJoinCommunity*(self: Controller, communityId: string, ensName: string) =
-  self.communityService.asyncRequestToJoinCommunity(communityId, ensName, "")
+  self.tmpRequestToJoinAddressesToShare = @[]
 
 proc authenticate*(self: Controller, keyUid = "") =
   let data = SharedKeycarModuleAuthenticationArgs(uniqueIdentifier: UNIQUE_MAIN_MODULE_AUTH_IDENTIFIER,
     keyUid: keyUid)
   self.events.emit(SIGNAL_SHARED_KEYCARD_MODULE_AUTHENTICATE_USER, data)
 
-proc authenticateToRequestToJoinCommunity*(self: Controller, communityId: string, ensName: string) =
-  self.tmpRequestToJoinCommunityId = communityId
+proc authenticateToRequestToJoinCommunity*(self: Controller, ensName: string, addressesToShare: seq[string]) =
+  self.tmpAuthenticationForJoinInProgress = true
   self.tmpRequestToJoinEnsName = ensName
+  self.tmpRequestToJoinAddressesToShare = addressesToShare
   self.authenticate()
 
 proc getMySectionId*(self: Controller): string =
@@ -114,10 +116,10 @@ proc asyncCheckPermissionsToJoin*(self: Controller) =
   self.communityService.asyncCheckPermissionsToJoin(self.getMySectionId())
 
 proc asyncCheckAllChannelsPermissions*(self: Controller) =
-  self.communityService.asyncCheckAllChannelsPermissions(self.getMySectionId())
+  self.chatService.asyncCheckAllChannelsPermissions(self.getMySectionId())
 
 proc asyncCheckChannelPermissions*(self: Controller, communityId: string, chatId: string) =
-  self.communityService.asyncCheckChannelPermissions(communityId, chatId)
+  self.chatService.asyncCheckChannelPermissions(communityId, chatId)
 
 proc asyncCheckPermissions*(self: Controller) =
   self.asyncCheckPermissionsToJoin()
@@ -192,7 +194,7 @@ proc init*(self: Controller) =
     let args = SharedKeycarModuleArgs(e)
     if args.uniqueIdentifier != UNIQUE_MAIN_MODULE_AUTH_IDENTIFIER:
       return
-    if self.tmpRequestToJoinCommunityId == self.sectionId:
+    if self.tmpAuthenticationForJoinInProgress:
       self.delegate.onUserAuthenticated(args.pin, args.password, args.keyUid)
 
   if (self.isCommunitySection):
@@ -317,17 +319,10 @@ proc init*(self: Controller) =
       if args.communityId == self.sectionId:
         self.delegate.onCommunityCheckAllChannelsPermissionsResponse(args.checkAllChannelsPermissionsResponse)
 
-    self.events.on(SIGNAL_COMMUNITY_TOKEN_METADATA_ADDED) do(e: Args):
-      let args = CommunityTokenMetadataArgs(e)
-      if (args.communityId == self.sectionId):
-        self.delegate.onCommunityTokenMetadataAdded(args.communityId, args.tokenMetadata)
-
     self.events.on(SIGNAL_OWNED_COLLECTIBLES_UPDATE_FINISHED) do(e: Args):
-      self.delegate.onOwnedCollectiblesUpdated()
       self.asyncCheckPermissions()
 
     self.events.on(SIGNAL_WALLET_ACCOUNT_TOKENS_REBUILT) do(e: Args):
-      self.delegate.onWalletAccountTokensRebuilt()
       self.asyncCheckPermissions()
 
     self.events.on(SIGNAL_COMMUNITY_KICKED) do (e: Args):
@@ -636,8 +631,8 @@ proc muteCategory*(self: Controller, categoryId: string, interval: int) =
 proc unmuteCategory*(self: Controller, categoryId: string) =
   self.communityService.unmuteCategory(self.sectionId, categoryId)
 
-proc setCommunityMuted*(self: Controller, muted: bool) =
-  self.communityService.setCommunityMuted(self.sectionId, muted)
+proc setCommunityMuted*(self: Controller, mutedType: int) =
+  self.communityService.setCommunityMuted(self.sectionId, mutedType)
 
 proc inviteUsersToCommunity*(self: Controller, pubKeys: string, inviteMessage: string): string =
   result = self.communityService.inviteUsersToCommunityById(self.sectionId, pubKeys, inviteMessage)
@@ -699,4 +694,3 @@ proc getContractAddressesForToken*(self: Controller, symbol: string): Table[int,
 
 proc getCommunityTokenList*(self: Controller): seq[CommunityTokenDto] =
   return self.communityTokensService.getCommunityTokens(self.getMySectionId())
-

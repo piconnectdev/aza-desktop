@@ -304,7 +304,7 @@ method unbanUserFromCommunity*(self: AccessInterface, pubKey: string) {.base.} =
 method exportCommunity*(self: AccessInterface): string {.base.} =
   raise newException(ValueError, "No implementation available")
 
-method setCommunityMuted*(self: AccessInterface, muted: bool) {.base.} =
+method setCommunityMuted*(self: AccessInterface, mutedType: int) {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method inviteUsersToCommunity*(self: AccessInterface, pubKeysJSON: string, inviteMessage: string): string {.base.} =
@@ -367,12 +367,6 @@ method onCommunityTokenPermissionDeleted*(self: AccessInterface, communityId: st
 method onCommunityTokenPermissionDeletionFailed*(self: AccessInterface, communityId: string) {.base.} =
   raise newException(ValueError, "No implementation available")
 
-method onCommunityTokenMetadataAdded*(self: AccessInterface, communityId: string, tokenMetadata: CommunityTokensMetadataDto) {.base.} =
-  raise newException(ValueError, "No implementation available")
-
-method onWalletAccountTokensRebuilt*(self: AccessInterface) {.base.} =
-  raise newException(ValueError, "No implementation available")
-
 method onKickedFromCommunity*(self: AccessInterface) {.base.} =
   raise newException(ValueError, "No implementation available")
 
@@ -385,16 +379,10 @@ method onAcceptRequestToJoinFailedNoPermission*(self: AccessInterface, community
 method onUserAuthenticated*(self: AccessInterface, pin: string, password: string, keyUid: string) {.base.} =
   raise newException(ValueError, "No implementation available")
 
-method requestToJoinCommunity*(self: AccessInterface, communityId: string, ensName: string) {.base.} =
-  raise newException(ValueError, "No implementation available")
-
 method onDeactivateChatLoader*(self: AccessInterface, chatId: string) {.base.} =
   raise newException(ValueError, "No implementation available")
 
-method requestToJoinCommunityWithAuthentication*(self: AccessInterface, communityId: string, ensName: string) {.base.} =
-  raise newException(ValueError, "No implementation available")
-
-method onOwnedcollectiblesUpdated*(self: AccessInterface) {.base.} =
+method requestToJoinCommunityWithAuthentication*(self: AccessInterface, ensName: string, addressesToShare: seq[string]) {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method onCommunityCheckPermissionsToJoinResponse*(self: AccessInterface, checkPermissionsToJoinResponse: CheckPermissionsToJoinResponseDto) {.base.} =

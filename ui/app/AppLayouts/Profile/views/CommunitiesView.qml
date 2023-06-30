@@ -16,14 +16,14 @@ import shared.popups 1.0
 import SortFilterProxyModel 0.2
 
 import "../panels"
-import "../../Chat/popups/community"
+import AppLayouts.Communities.popups 1.0
+import AppLayouts.Communities.panels 1.0
 
 SettingsContentBase {
     id: root
 
     property var profileSectionStore
     property var rootStore
-    property var contactStore
 
     clip: true
 
@@ -41,7 +41,7 @@ SettingsContentBase {
         ColumnLayout {
             id: noCommunitiesLayout
             anchors.fill: parent
-            visible: communitiesList.count === 0
+            visible: !root.profileSectionStore.communitiesList.count
             Layout.alignment: Qt.AlignHCenter | Qt.AlignTop
 
             Image {
@@ -90,52 +90,139 @@ SettingsContentBase {
             anchors.left: parent.left
             spacing: Style.current.padding
 
-            StatusBaseText {
-                anchors.left: parent.left
-                anchors.leftMargin: Style.current.padding
-                color: Theme.palette.baseColor1
-                text: qsTr("Communities you've joined")
+            Heading {
+                text: qsTr("Owner")
+                visible: panelOwners.count
             }
 
-            CommunitiesListPanel {
-                id: communitiesList
-
-                objectName: "CommunitiesView_communitiesListPanel"
-                width: parent.width
-
-                model: SortFilterProxyModel {
-                    id: filteredModel
-
-                    sourceModel: root.profileSectionStore.communitiesList
-                    filters: [
-                        ValueFilter {
-                            roleName: "joined"
-                            value: true
-                        }
-                    ]
+            Panel {
+                id: panelOwners
+                filters: ValueFilter {
+                    readonly property int role: Constants.memberRole.owner
+                    roleName: "memberRole"
+                    value: role
                 }
+            }
 
-                onCloseCommunityClicked: {
-                    root.profileSectionStore.communitiesProfileModule.leaveCommunity(communityId)
-                }
+            Heading {
+                text: qsTr("Admin")
+                visible: panelAdmins.count
+            }
 
-                onLeaveCommunityClicked: {
-                    Global.leaveCommunityRequested(community, communityId, outroMessage)
+            Panel {
+                id: panelAdmins
+                filters: ValueFilter {
+                    readonly property int role: Constants.memberRole.admin
+                    roleName: "memberRole"
+                    value: role
                 }
+            }
 
-                onSetCommunityMutedClicked: {
-                    root.profileSectionStore.communitiesProfileModule.setCommunityMuted(communityId, muted)
-                }
+            Heading {
+                text: qsTr("Member")
+                visible: panelMembers.count
+            }
 
-                onSetActiveCommunityClicked: {
-                    rootStore.setActiveCommunity(communityId)
+            Panel {
+                id: panelMembers
+                filters: ExpressionFilter {
+                    readonly property int ownerRole: Constants.memberRole.owner
+                    readonly property int adminRole: Constants.memberRole.admin
+                    expression: model.joined && model.memberRole !== ownerRole && model.memberRole !== adminRole
                 }
+            }
 
-                onInviteFriends: {
-                    Global.openInviteFriendsToCommunityPopup(communityData,
-                                                             root.profileSectionStore.communitiesProfileModule,
-                                                             null)
+            Heading {
+                text: qsTr("Pending")
+                visible: panelPendingRequests.count
+            }
+
+            Panel {
+                id: panelPendingRequests
+                filters: ExpressionFilter {
+                    expression: model.spectated && !model.joined
                 }
+            }
+        }
+    }
+
+    component Heading: StatusBaseText {
+        anchors.left: parent.left
+        anchors.leftMargin: Style.current.padding
+        color: Theme.palette.baseColor1
+    }
+
+    component Panel: CommunitiesListPanel {
+        id: panel
+
+        property var filters
+
+        width: parent.width
+        rootStore: root.rootStore
+
+        model: SortFilterProxyModel {
+            sourceModel: root.profileSectionStore.communitiesList
+            filters: panel.filters
+        }
+
+        onCloseCommunityClicked: {
+            root.profileSectionStore.communitiesProfileModule.leaveCommunity(communityId)
+        }
+
+        onLeaveCommunityClicked: {
+            Global.leaveCommunityRequested(community, communityId, outroMessage)
+        }
+
+        onSetCommunityMutedClicked: {
+            root.profileSectionStore.communitiesProfileModule.setCommunityMuted(communityId, mutedType)
+        }
+
+        onSetActiveCommunityClicked: {
+            rootStore.setActiveCommunity(communityId)
+        }
+
+        onInviteFriends: {
+            Global.openInviteFriendsToCommunityPopup(communityData,
+                                                     root.profileSectionStore.communitiesProfileModule,
+                                                     null)
+        }
+        onShowCommunityIntroDialog: {
+            Global.openPopup(communityIntroDialogPopup, {
+                communityId: communityId,
+                isInvitationPending: root.rootStore.isCommunityRequestPending(communityId),
+                name: name,
+                introMessage: introMessage,
+                imageSrc: imageSrc,
+                accessType: accessType
+            })
+        }
+        onCancelMembershipRequest: {
+            root.rootStore.cancelPendingRequest(communityId)
+        }
+    }
+
+    readonly property var communityIntroDialogPopup: Component {
+        id: communityIntroDialogPopup
+        CommunityIntroDialog {
+            id: communityIntroDialog
+
+            property string communityId
+
+            readonly property var chatCommunitySectionModule: {
+                root.rootStore.mainModuleInst.prepareCommunitySectionModuleForCommunityId(communityIntroDialog.communityId)
+                return root.rootStore.mainModuleInst.getCommunitySectionModule()
+            }
+
+            onJoined: {
+                chatCommunitySectionModule.requestToJoinCommunityWithAuthentication(root.rootStore.userProfileInst.name)
+            }
+
+            onCancelMembershipRequest: {
+                root.rootStore.cancelPendingRequest(communityIntroDialog.communityId)
+            }
+
+            onClosed: {
+                destroy()
             }
         }
     }

@@ -400,7 +400,8 @@ proc storeKeycardAccountAndLogin*(self: Controller, storeToKeychain: bool, newKe
       self.storeMetadataForNewKeycardUser()
     else:
       self.syncKeycardBasedOnAppWalletStateAfterLogin()
-    self.accountsService.setupAccountKeycard(KeycardEvent(), self.tmpDisplayName, useImportedAcc = true)
+    let (_, flowEvent) = self.keycardService.getLastReceivedKeycardData() # we need this to get the correct instanceUID
+    self.accountsService.setupAccountKeycard(flowEvent, self.tmpDisplayName, useImportedAcc = true)
     self.setupKeychain(storeToKeychain)
   else:
     error "an error ocurred while importing mnemonic"
@@ -454,7 +455,13 @@ proc login*(self: Controller) =
 
 proc loginLocalPairingAccount*(self: Controller) =
   self.delegate.moveToLoadingAppState()
-  self.accountsService.login(self.localPairingStatus.account, self.localPairingStatus.password)
+  if self.localPairingStatus.chatKey.len == 0:
+    self.accountsService.login(self.localPairingStatus.account, self.localPairingStatus.password)
+  else:
+    var kcEvent = KeycardEvent()
+    kcEvent.whisperKey.privateKey = self.localPairingStatus.chatKey
+    kcEvent.encryptionKey.publicKey = self.localPairingStatus.password
+    discard self.accountsService.loginAccountKeycard(self.localPairingStatus.account, kcEvent)
 
 proc loginAccountKeycard*(self: Controller, storeToKeychainValue: string, syncWalletAfterLogin = false) =
   if syncWalletAfterLogin:

@@ -61,9 +61,6 @@ method isCommunityRequestPending*(self: AccessInterface, communityId: string): b
 method cancelRequestToJoinCommunity*(self: AccessInterface, communityId: string) {.base.} =
   raise newException(ValueError, "No implementation available")
 
-method requestToJoinCommunity*(self: AccessInterface, communityId: string, ensName: string) {.base.} =
-  raise newException(ValueError, "No implementation available")
-
 method requestCommunityInfo*(self: AccessInterface, communityId: string, importing: bool) {.base.} =
   raise newException(ValueError, "No implementation available")
 
@@ -149,4 +146,13 @@ method curatedCommunitiesLoaded*(self: AccessInterface, curatedCommunities: seq[
   raise newException(ValueError, "No implementation available")
 
 method communityInfoAlreadyRequested*(self: AccessInterface) {.base.} = 
+  raise newException(ValueError, "No implementation available")
+
+method onCommunityTokenMetadataAdded*(self: AccessInterface, communityId: string, tokenMetadata: CommunityTokensMetadataDto) {.base.} = 
+  raise newException(ValueError, "No implementation available")
+
+method onOwnedCollectiblesUpdated*(self: AccessInterface) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method onWalletAccountTokensRebuilt*(self: AccessInterface) {.base.} =
   raise newException(ValueError, "No implementation available")

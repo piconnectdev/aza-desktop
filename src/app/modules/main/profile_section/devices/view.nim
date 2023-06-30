@@ -105,10 +105,6 @@ QtObject:
     read = getLocalPairingError
     notify = localPairingStatusChanged
 
-  proc localPairingEvent(self: View, eventType: int, action: int, error: string) {.signal.}
-  proc onLocalPairingEvent*(self: View, eventType: EventType, action: Action, error: string) =
-    self.localPairingEvent(ord(eventType), ord(action), error)
-
   proc getLocalPairingInstallationId*(self: View): string {.slot.}  =
     return self.localPairingStatus.installation.id
   QtProperty[string] localPairingInstallationId:
@@ -133,17 +129,15 @@ QtObject:
 
   # LocalPairing actions
 
-  proc userAuthenticated*(self: View, pin: string, password: string, keyUid: string) {.signal.}
-  proc emitUserAuthenticated*(self: View, pin: string, password: string, keyUid: string) =
-    self.userAuthenticated(pin, password, keyUid)
-  proc authenticateUser*(self: View, keyUid: string) {.slot.} =
-    self.delegate.authenticateUser(keyUid)
+  proc openPopupWithConnectionStringSignal*(self: View, rawConnectionString: string) {.signal.}
+  proc openPopupWithConnectionString*(self: View, rawConnectionString: string) =
+    self.openPopupWithConnectionStringSignal(rawConnectionString)
+
+  proc generateConnectionStringAndRunSetupSyncingPopup*(self: View) {.slot.} =
+    self.delegate.generateConnectionStringAndRunSetupSyncingPopup()
 
   proc validateConnectionString*(self: View, connectionString: string): string {.slot.} =
     return self.delegate.validateConnectionString(connectionString)
-
-  proc getConnectionStringForBootstrappingAnotherDevice*(self: View, keyUid: string, password: string): string {.slot.} =
-    return self.delegate.getConnectionStringForBootstrappingAnotherDevice(keyUid, password)
 
   proc inputConnectionStringForBootstrapping*(self: View, connectionString: string): string {.slot.} =
     return self.delegate.inputConnectionStringForBootstrapping(connectionString)

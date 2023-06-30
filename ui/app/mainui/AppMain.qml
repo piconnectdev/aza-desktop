@@ -12,11 +12,12 @@ import AppLayouts.Browser 1.0
 import AppLayouts.Chat 1.0
 import AppLayouts.Chat.views 1.0
 import AppLayouts.Profile 1.0
-import AppLayouts.CommunitiesPortal 1.0
+import AppLayouts.Communities 1.0
 
 import utils 1.0
 import shared 1.0
 import shared.controls 1.0
+import shared.controls.chat.menuItems 1.0
 import shared.panels 1.0
 import shared.popups 1.0
 import shared.popups.keycard 1.0
@@ -34,7 +35,7 @@ import StatusQ.Core 0.1
 import AppLayouts.Browser.stores 1.0 as BrowserStores
 import AppLayouts.stores 1.0
 import AppLayouts.Chat.stores 1.0 as ChatStores
-import AppLayouts.CommunitiesPortal.stores 1.0
+import AppLayouts.Communities.stores 1.0
 
 import mainui.activitycenter.stores 1.0
 import mainui.activitycenter.popups 1.0
@@ -118,6 +119,7 @@ Item {
         popupParent: appMain
         rootStore: appMain.rootStore
         communitiesStore: appMain.communitiesStore
+        isDevBuild: !production
     }
 
     Connections {
@@ -327,7 +329,7 @@ Item {
                 popupMenu: Component {
                     StatusMenu {
                         id: communityContextMenu
-
+                        width: 180
                         property var chatCommunitySectionModule
 
                         openHandler: function () {
@@ -356,11 +358,21 @@ Item {
 
                         StatusMenuSeparator {}
 
+                        MuteChatMenuItem {
+                            enabled: !model.muted
+                            title: qsTr("Mute Community")
+                            onMuteTriggered: {
+                                communityContextMenu.chatCommunitySectionModule.setCommunityMuted(interval)
+                                communityContextMenu.close()
+                            }
+                        }
+
                         StatusAction {
-                            text: model.muted ? qsTr("Unmute Community") : qsTr("Mute Community")
-                            icon.name: model.muted ? "notification-muted" : "notification"
+                            enabled: model.muted
+                            text: qsTr("Unmute Community")
+                            icon.name: "notification"
                             onTriggered: {
-                                communityContextMenu.chatCommunitySectionModule.setCommunityMuted(!model.muted)
+                                communityContextMenu.chatCommunitySectionModule.setCommunityMuted(Constants.MutingVariations.Unmuted)
                             }
                         }
 
@@ -368,7 +380,7 @@ Item {
 
                         StatusAction {
                             id: leaveCommunityMenuItem
-                            enabled: !model.amISectionAdmin
+                            enabled: model.memberRole !== Constants.memberRole.owner
                             text: {
                                 if (model.spectated)
                                     return qsTr("Close Community")
@@ -1083,6 +1095,15 @@ Item {
                                     value: chatLayoutComponent.currentIndex === 0 // Meaning: Chats / channels view
                                     when: visible
                                     restoreMode: Binding.RestoreBindingOrValue
+                                }
+
+                                Connections {
+                                    target: Global
+                                    function onSwitchToCommunitySettings(communityId: string) {
+                                        if (communityId !== model.id)
+                                            return
+                                        chatLayoutComponent.currentIndex = 1 // Settings
+                                    }
                                 }
 
                                 emojiPopup: statusEmojiPopup.item

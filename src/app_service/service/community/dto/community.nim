@@ -16,6 +16,15 @@ type RequestToJoinType* {.pure.}= enum
   Accepted = 3,
   Canceled = 4
 
+type MutedType* {.pure.}= enum
+  For15min = 1,
+  For1hr = 2,
+  For8hr = 3,
+  For1week = 4,
+  TillUnmuted = 5,
+  For1min = 6,
+  Unmuted = 7
+
 type CommunityMembershipRequestDto* = object
   id*: string
   publicKey*: string
@@ -74,24 +83,10 @@ type AccountChainIDsCombinationDto* = object
   address*: string
   chainIds*: seq[int]
 
-type CheckPermissionsResultDto* = object
-  criteria*: seq[bool]
-
 type CheckPermissionsToJoinResponseDto* = object
   satisfied*: bool
   permissions*: Table[string, CheckPermissionsResultDto]
   validCombinations*: seq[AccountChainIDsCombinationDto]
-
-type ViewOnlyOrViewAndPostPermissionsResponseDto* = object
-  satisfied*: bool
-  permissions*: Table[string, CheckPermissionsResultDto]
-
-type CheckChannelPermissionsResponseDto* = object
-  viewOnlyPermissions*: ViewOnlyOrViewAndPostPermissionsResponseDto
-  viewAndPostPermissions*: ViewOnlyOrViewAndPostPermissionsResponseDto
-
-type CheckAllChannelsPermissionsResponseDto* = object
-  channels*: Table[string, CheckChannelPermissionsResponseDto]
 
 type CommunityDto* = object
   id*: string
@@ -273,13 +268,6 @@ proc toCommunityTokenPermissionDto*(jsonObj: JsonNode): CommunityTokenPermission
   if jsonObj.hasKey("key"):
     discard jsonObj.getProp("key", result.id)
 
-proc toCheckPermissionsResultDto*(jsonObj: JsonNode): CheckPermissionsResultDto =
-  result = CheckPermissionsResultDto()
-  var criteriaObj: JsonNode
-  if(jsonObj.getProp("criteria", criteriaObj) and criteriaObj.kind == JArray):
-    for c in criteriaObj:
-      result.criteria.add(c.getBool)
-
 proc toAccountChainIDsCombinationDto*(jsonObj: JsonNode): AccountChainIDsCombinationDto =
   result = AccountChainIDsCombinationDto()
   discard jsonObj.getProp("address", result.address)
@@ -302,27 +290,6 @@ proc toCheckPermissionsToJoinResponseDto*(jsonObj: JsonNode): CheckPermissionsTo
     result.permissions = initTable[string, CheckPermissionsResultDto]()
     for permissionId, permission in permissionsObj:
       result.permissions[permissionId] = permission.toCheckPermissionsResultDto
-
-proc toViewOnlyOrViewAndPostPermissionsResponseDto*(jsonObj: JsonNode): ViewOnlyOrViewAndPostPermissionsResponseDto =
-  result = ViewOnlyOrViewAndPostPermissionsResponseDto()
-  discard jsonObj.getProp("satisfied", result.satisfied)
-
-  var permissionsObj: JsonNode
-  if(jsonObj.getProp("permissions", permissionsObj) and permissionsObj.kind == JObject):
-    result.permissions = initTable[string, CheckPermissionsResultDto]()
-    for permissionId, permission in permissionsObj:
-      result.permissions[permissionId] = permission.toCheckPermissionsResultDto
-
-proc toCheckChannelPermissionsResponseDto*(jsonObj: JsonNode): CheckChannelPermissionsResponseDto =
-  result = CheckChannelPermissionsResponseDto()
-
-  var viewOnlyPermissionsObj: JsonNode
-  if(jsonObj.getProp("viewOnlyPermissions", viewOnlyPermissionsObj) and viewOnlyPermissionsObj.kind == JObject):
-    result.viewOnlyPermissions = viewOnlyPermissionsObj.toViewOnlyOrViewAndPostPermissionsResponseDto()
-
-  var viewAndPostPermissionsObj: JsonNode
-  if(jsonObj.getProp("viewAndPostPermissions", viewAndPostPermissionsObj) and viewAndPostPermissionsObj.kind == JObject):
-    result.viewAndPostPermissions = viewAndPostPermissionsObj.toViewOnlyOrViewAndPostPermissionsResponseDto()
 
 proc toCheckAllChannelsPermissionsResponseDto*(jsonObj: JsonNode): CheckAllChannelsPermissionsResponseDto =
   result = CheckAllChannelsPermissionsResponseDto()

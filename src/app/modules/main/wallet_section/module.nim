@@ -11,10 +11,10 @@ import ./assets/module as assets_module
 import ./transactions/module as transactions_module
 import ./saved_addresses/module as saved_addresses_module
 import ./buy_sell_crypto/module as buy_sell_crypto_module
-import ./add_account/module as add_account_module
 import ./networks/module as networks_module
 import ./overview/module as overview_module
 import ./send/module as send_module
+import ../../shared_modules/add_account/module as add_account_module
 
 import ./activity/controller as activityc
 
@@ -101,7 +101,7 @@ proc newModule*(
   result.overviewModule = overview_module.newModule(result, events, walletAccountService, currencyService)
   result.networksModule = networks_module.newModule(result, events, networkService, walletAccountService, settingsService)
   result.networksService = networkService
-  result.activityController = activityc.newController(result.transactionsModule, events, currencyService)
+  result.activityController = activityc.newController(result.transactionsModule, currencyService, tokenService, events)
   result.filter = initFilter(result.controller, result.activityController)
 
   result.view = newView(result, result.activityController)
@@ -132,29 +132,29 @@ method getCurrentCurrency*(self: Module): string =
 method setTotalCurrencyBalance*(self: Module) =
   var addresses: seq[string] = @[]
   let walletAccounts = self.controller.getWalletAccounts()
-  if self.filter.excludeWatchOnly:
-    addresses = walletAccounts.filter(a => a.walletType != "watch").map(a => a.address)
-  else:
+  if self.controller.isIncludeWatchOnlyAccount():
     addresses = walletAccounts.map(a => a.address)
+  else:
+    addresses = walletAccounts.filter(a => a.walletType != "watch").map(a => a.address)
 
   self.view.setTotalCurrencyBalance(self.controller.getCurrencyBalance(addresses))
 
 method notifyFilterChanged(self: Module) =
-  self.overviewModule.filterChanged(self.filter.addresses, self.filter.chainIds, self.filter.excludeWatchOnly, self.filter.allAddresses)
+  let includeWatchOnly = self.controller.isIncludeWatchOnlyAccount()
+  self.overviewModule.filterChanged(self.filter.addresses, self.filter.chainIds, includeWatchOnly, self.filter.allAddresses)
   self.assetsModule.filterChanged(self.filter.addresses, self.filter.chainIds)
   self.collectiblesModule.filterChanged(self.filter.addresses, self.filter.chainIds)
   self.transactionsModule.filterChanged(self.filter.addresses, self.filter.chainIds)
-  self.accountsModule.filterChanged(self.filter.addresses, self.filter.chainIds, self.filter.excludeWatchOnly)
+  self.accountsModule.filterChanged(self.filter.addresses, self.filter.chainIds)
   self.sendModule.filterChanged(self.filter.addresses, self.filter.chainIds)
-  self.view.filterChanged(self.filter.addresses[0], self.filter.excludeWatchOnly, self.filter.allAddresses)
+  if self.filter.addresses.len > 0:
+    self.view.filterChanged(self.filter.addresses[0], includeWatchOnly, self.filter.allAddresses)
 
 method getCurrencyAmount*(self: Module, amount: float64, symbol: string): CurrencyAmount =
   return self.controller.getCurrencyAmount(amount, symbol)
 
 method toggleWatchOnlyAccounts*(self: Module) =
   self.filter.toggleWatchOnlyAccounts()
-  self.notifyFilterChanged()
-  self.setTotalCurrencyBalance()
 
 method setFilterAddress*(self: Module, address: string) =
   self.filter.setAddress(address)
@@ -200,6 +200,12 @@ method load*(self: Module) =
     if not args.success:
       return
     self.notifyFilterChanged()
+  self.events.on(SIGNAL_WALLET_ACCOUNT_POSITION_UPDATED) do(e:Args):
+    self.notifyFilterChanged()
+  self.events.on(SIGNAL_INCLUDE_WATCH_ONLY_ACCOUNTS_UPDATED) do(e: Args):
+    self.filter.includeWatchOnlyToggled()
+    self.notifyFilterChanged()
+    self.setTotalCurrencyBalance()
 
   self.controller.init()
   self.view.load()

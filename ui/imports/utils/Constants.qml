@@ -545,6 +545,8 @@ QtObject {
             readonly property int oneToOneChat: 1
             readonly property int groupChat: 2
         }
+
+        property string dotSepString: '<font size="3">  &#x2022; </font>'
     }
 
     readonly property QtObject ephemeralNotificationType: QtObject {
@@ -601,6 +603,7 @@ QtObject {
             readonly property int profile: 0
             readonly property int seedImport: 1
             readonly property int privateKeyImport: 2
+            readonly property int watchOnly: 3
         }
 
         readonly property QtObject shared: QtObject {
@@ -623,7 +626,7 @@ QtObject {
         readonly property string alphanumericalRegExp: qsTr("Only letters and numbers allowed")
         readonly property string alphanumericalWithSpaceRegExp: qsTr("Special characters are not allowed")
         readonly property string alphanumericalExpandedRegExp: qsTr("Only letters, numbers, underscores, whitespaces and hyphens allowed")
-        readonly property string asciiRegExp: qsTr("Only letters, numbers and ASII characters allowed")
+        readonly property string asciiRegExp: qsTr("Only letters, numbers and ASCII characters allowed")
     }
 
     readonly property QtObject socialLinkType: QtObject {
@@ -1078,6 +1081,7 @@ QtObject {
         For8hr = 3,
         For1week = 4,
         TillUnmuted = 5,
-        For1min = 6
+        For1min = 6,
+        Unmuted = 7
     }
 }

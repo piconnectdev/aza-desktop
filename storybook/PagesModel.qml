@@ -14,11 +14,11 @@ ListModel {
          section: "Views"
     }
     ListElement {
-         title: "CommunityNewPermissionView"
+         title: "EditPermissionView"
          section: "Views"
     }
     ListElement {
-         title: "CommunityNewAirdropView"
+         title: "EditAirdropView"
          section: "Views"
     }
     ListElement {
@@ -34,7 +34,7 @@ ListModel {
          section: "Views"
     }
     ListElement {
-         title: "CommunityPermissionsView"
+         title: "PermissionsView"
          section: "Views"
     }
     ListElement {
@@ -42,7 +42,7 @@ ListModel {
          section: "Views"
     }
     ListElement {
-         title: "CommunityNewTokenView"
+         title: "EditCommunityTokenView"
          section: "Views"
     }
     ListElement {
@@ -50,7 +50,7 @@ ListModel {
          section: "Views"
     }
     ListElement {
-         title: "CommunityMintedTokensView"
+         title: "MintedTokensView"
          section: "Views"
     }
     ListElement {
@@ -70,15 +70,19 @@ ListModel {
         section: "Views"
     }
     ListElement {
+        title: "CommunitiesView"
+        section: "Views"
+    }
+    ListElement {
          title: "StatusCommunityCard"
          section: "Panels"
     }
     ListElement {
-        title: "CommunityProfilePopupInviteFriendsPanel"
+        title: "ProfilePopupInviteFriendsPanel"
         section: "Panels"
     }
     ListElement {
-        title: "CommunityProfilePopupInviteMessagePanel"
+        title: "ProfilePopupInviteMessagePanel"
         section: "Panels"
     }
     ListElement {
@@ -86,7 +90,7 @@ ListModel {
         section: "Panels"
     }
     ListElement {
-         title: "CommunityPermissionsSettingsPanel"
+         title: "PermissionsSettingsPanel"
          section: "Panels"
     }
     ListElement {
@@ -98,7 +102,7 @@ ListModel {
          section: "Panels"
     }
     ListElement {
-         title: "CommunityColumnHeaderPanel"
+         title: "ColumnHeaderPanel"
          section: "Panels"
     }
     ListElement {
@@ -110,11 +114,11 @@ ListModel {
         section: "Panels"
     }
     ListElement {
-         title: "CommunityMintTokensSettingsPanel"
+         title: "MintTokensSettingsPanel"
          section: "Panels"
     }
     ListElement {
-         title: "CommunityAirdropsSettingsPanel"
+         title: "AirdropsSettingsPanel"
          section: "Panels"
     }
     ListElement {
@@ -194,7 +198,7 @@ ListModel {
          section: "Popups"
     }
     ListElement {
-         title: "CommunityTokenPermissionsPopup"
+         title: "TokenPermissionsPopup"
          section: "Popups"
     }
     ListElement {
@@ -314,7 +318,7 @@ ListModel {
         section: "Components"
     }
     ListElement {
-        title: "CommunityPermissionsRow"
+        title: "PermissionsRow"
         section: "Components"
     }
     ListElement {
@@ -383,6 +387,10 @@ ListModel {
     }
     ListElement {
         title: "ActivityFilterMenu"
+        section: "Wallet"
+    }
+    ListElement {
+        title: "ProfileAccounts"
         section: "Wallet"
     }
 }

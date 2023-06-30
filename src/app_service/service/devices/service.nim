@@ -6,17 +6,17 @@ import ./dto/installation as Installation_dto
 import ./dto/local_pairing_event
 import ./dto/local_pairing_status
 
-import ../settings/service as settings_service
-import ../accounts/service as accounts_service
+import app_service/service/settings/service as settings_service
+import app_service/service/accounts/service as accounts_service
 
-import ../../../app/global/global_singleton
-import ../../../app/core/[main]
-import ../../../app/core/signals/types
-import ../../../app/core/eventemitter
-import ../../../app/core/tasks/[qt, threadpool]
-import ../../../backend/installations as status_installations
-import ../../common/utils as utils
-import ../../../constants as main_constants
+import app/global/global_singleton
+import app/core/[main]
+import app/core/signals/types
+import app/core/eventemitter
+import app/core/tasks/[qt, threadpool]
+import backend/installations as status_installations
+import app_service/common/utils as utils
+import constants as main_constants
 
 import status_go
 
@@ -46,7 +46,6 @@ type
 const SIGNAL_UPDATE_DEVICE* = "updateDevice"
 const SIGNAL_DEVICES_LOADED* = "devicesLoaded"
 const SIGNAL_ERROR_LOADING_DEVICES* = "devicesErrorLoading"
-const SIGNAL_LOCAL_PAIRING_EVENT* = "localPairingEvent"
 const SIGNAL_LOCAL_PAIRING_STATUS_UPDATE* = "localPairingStatusUpdate"
 const SIGNAL_INSTALLATION_NAME_UPDATED* = "installationNameUpdated"
 
@@ -62,7 +61,7 @@ QtObject:
     self.QObject.delete
     self.localPairingStatus.delete
 
-  proc newService*(events: EventEmitter, 
+  proc newService*(events: EventEmitter,
                   threadpool: ThreadPool,
                   settingsService: settings_service.Service,
                   accountsService: accounts_service.Service): Service =
@@ -75,9 +74,19 @@ QtObject:
     result.localPairingStatus = newLocalPairingStatus()
 
   proc updateLocalPairingStatus(self: Service, data: LocalPairingEventArgs) =
-    self.events.emit(SIGNAL_LOCAL_PAIRING_EVENT, data)
     self.localPairingStatus.update(data)
     self.events.emit(SIGNAL_LOCAL_PAIRING_STATUS_UPDATE, self.localPairingStatus)
+
+  proc createKeycardPairingFile(data: string) =
+    var file = open(main_constants.KEYCARDPAIRINGDATAFILE, fmWrite)
+    if file == nil:
+      error "failed to open local keycard pairing file"
+      return
+    try:
+      file.write(data)
+    except:
+      error "failed to write data to local keycard pairing file"
+    file.close()
 
   proc doConnect(self: Service) =
     self.events.on(SignalType.Message.event) do(e:Args):
@@ -89,6 +98,8 @@ QtObject:
 
     self.events.on(SignalType.LocalPairing.event) do(e:Args):
       let signalData = LocalPairingSignal(e)
+      if not signalData.accountData.isNil and signalData.accountData.keycardPairings.len > 0:
+        createKeycardPairingFile(signalData.accountData.keycardPairings)
       let data = LocalPairingEventArgs(
         eventType: signalData.eventType,
         action: signalData.action,
@@ -176,13 +187,23 @@ QtObject:
   proc validateConnectionString*(self: Service, connectionString: string): string =
     return status_go.validateConnectionString(connectionString)
 
-  proc getConnectionStringForBootstrappingAnotherDevice*(self: Service, keyUid: string, password: string): string =
+  proc getConnectionStringForBootstrappingAnotherDevice*(self: Service, password: string, chatKey: string): string =
+    let keyUid = singletonInstance.userProfile.getKeyUid()
+    let keycardUser = singletonInstance.userProfile.getIsKeycardUser()
+    var finalPassword = utils.hashPassword(password)
+    var keycardPairingJsonString = ""
+    if keycardUser:
+      finalPassword = password
+      keycardPairingJsonString = readFile(main_constants.KEYCARDPAIRINGDATAFILE)
+
     let configJSON = %* {
       "senderConfig": %* {
         "keystorePath": joinPath(main_constants.ROOTKEYSTOREDIR, keyUid),
         "deviceType": hostOs,
         "keyUID": keyUid,
-        "password": utils.hashPassword(password),
+        "password": finalPassword,
+        "chatKey": chatKey,
+        "keycardPairings": keycardPairingJsonString
       },
       "serverConfig": %* {
         "timeout": 5 * 60 * 1000,

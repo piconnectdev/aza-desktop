@@ -22,6 +22,14 @@ QtObject {
     property var flatCollectibles: Global.appIsReady ? walletSectionCollectibles.model : null
     property var assets: walletSectionAssets.assets
     property var accounts: Global.appIsReady? accountsModule.accounts : null
+    property var originModel: accountsModule.keyPairModel
+    property bool includeWatchOnlyAccount: accountsModule.includeWatchOnlyAccount
+
+    function toggleIncludeWatchOnlyAccount() {
+       accountsModule.toggleIncludeWatchOnlyAccount()
+    }
+
+    property string userProfilePublicKey: userProfile.pubKey
     
     function deleteAccount(address) {
         return accountsModule.deleteAccount(address)
@@ -31,21 +39,15 @@ QtObject {
         return accountsModule.updateAccount(address, accountName, colorId, emoji)
     }
 
-    property var dappList: Global.appIsReady? dappPermissionsModule.dapps : null
-
-    function disconnect(dappName) {
-        dappPermissionsModule.disconnect(dappName)
+    function updateAccountPosition(address, position) {
+        return accountsModule.updateAccountPosition(address, position)
     }
 
-    function accountsForDapp(dappName) {
-        return dappPermissionsModule.accountsForDapp(dappName)   
+    function getAllNetworksSupportedPrefix() {
+        return networksModule.getAllNetworksSupportedPrefix()
     }
 
-    function disconnectAddress(dappName, address) {
-        return dappPermissionsModule.disconnectAddress(dappName, address)
-    }
-
-    function loadDapps() {
-        dappPermissionsModule.loadDapps()
+    function runAddAccountPopup() {
+        walletSection.runAddAccountPopup(false)
     }
 }

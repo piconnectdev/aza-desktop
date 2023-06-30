@@ -6,15 +6,11 @@ import utils 1.0
 import SortFilterProxyModel 0.2
 import StatusQ.Core.Theme 0.1
 
-import "../addaccount/stores"
-
 QtObject {
     id: root
 
     readonly property string defaultSelectedKeyUid: userProfile.keyUid
     readonly property bool defaultSelectedKeyUidMigratedToKeycard: userProfile.isKeycardUser
-
-    property bool loggedInUserAuthenticated: false
 
     property string backButtonName: ""
     property var overview: walletSectionOverview

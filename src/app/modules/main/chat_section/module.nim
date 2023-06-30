@@ -90,8 +90,6 @@ proc addOrUpdateChat(self: Module,
     insertIntoModel: bool = true,
   ): Item
 
-proc buildTokenList*(self: Module)
-
 proc newModule*(
     delegate: delegate_interface.AccessInterface,
     events: EventEmitter,
@@ -279,8 +277,6 @@ proc initContactRequestsModel(self: Module) =
   self.view.contactRequestsModel().addItems(contactsWhoAddedMe)
 
 proc rebuildCommunityTokenPermissionsModel(self: Module) =
-  self.buildTokenList()
-
   let community = self.controller.getMyCommunity()
   var tokenPermissionsItems: seq[TokenPermissionItem] = @[]
 
@@ -306,45 +302,6 @@ proc reevaluateRequiresTokenPermissionToJoin(self: Module) =
   self.view.setRequiresTokenPermissionToJoin(hasBecomeMemberOrBecomeAdminPermissions)
 
 proc initCommunityTokenPermissionsModel(self: Module, channelGroup: ChannelGroupDto) =
-  self.rebuildCommunityTokenPermissionsModel()
-
-proc buildTokenList(self: Module) =
-  var tokenListItems: seq[TokenListItem]
-  var collectiblesListItems: seq[TokenListItem]
-
-  let community = self.controller.getMyCommunity()
-  let erc20Tokens = self.controller.getTokenList()
-
-  for token in erc20Tokens:
-    let tokenListItem = initTokenListItem(
-      key = token.symbol,
-      name = token.name,
-      symbol = token.symbol,
-      color = token.color,
-      image = "",
-      category = ord(TokenListItemCategory.General)
-    )
-
-    tokenListItems.add(tokenListItem)
-
-  for token in community.communityTokensMetadata:
-    let tokenListItem = initTokenListItem(
-      key = token.symbol,
-      name = token.name,
-      symbol = token.symbol,
-      color = "", # community tokens don't have `color`
-      image = token.image,
-      category = ord(TokenListItemCategory.Community)
-    )
-    collectiblesListItems.add(tokenListItem)
-
-  self.view.setTokenListItems(tokenListItems)
-  self.view.setCollectiblesListItems(collectiblesListItems)
-
-method onWalletAccountTokensRebuilt*(self: Module) =
-  self.rebuildCommunityTokenPermissionsModel()
-
-method onOwnedcollectiblesUpdated*(self: Module) =
   self.rebuildCommunityTokenPermissionsModel()
 
 proc convertPubKeysToJson(self: Module, pubKeys: string): seq[string] =
@@ -403,6 +360,7 @@ method onChatsLoaded*(
     let community = self.controller.getMyCommunity()
     self.view.setAmIMember(community.joined)
     self.initCommunityTokenPermissionsModel(channelGroup)
+    self.onCommunityCheckAllChannelsPermissionsResponse(channelGroup.channelPermissions)
     self.controller.asyncCheckPermissionsToJoin()
 
   let activeChatId = self.controller.getActiveChatId()
@@ -895,8 +853,9 @@ proc updateChannelPermissionViewData*(self: Module, chatId: string, viewOnlyPerm
   self.updateTokenPermissionModel(viewAndPostPermissions.permissions, community)
   self.updateChatRequiresPermissions(chatId)
   self.updateChatLocked(chatId)
-  self.chatContentModules[chatId].onUpdateViewOnlyPermissionsSatisfied(viewOnlyPermissions.satisfied)
-  self.chatContentModules[chatId].onUpdateViewAndPostPermissionsSatisfied(viewAndPostPermissions.satisfied)
+  if self.chatContentModules.hasKey(chatId):
+    self.chatContentModules[chatId].onUpdateViewOnlyPermissionsSatisfied(viewOnlyPermissions.satisfied)
+    self.chatContentModules[chatId].onUpdateViewAndPostPermissionsSatisfied(viewAndPostPermissions.satisfied)
 
 method onCommunityCheckPermissionsToJoinResponse*(self: Module, checkPermissionsToJoinResponse: CheckPermissionsToJoinResponseDto) =
   let community = self.controller.getMyCommunity()
@@ -921,29 +880,16 @@ method onCommunityTokenPermissionDeletionFailed*(self: Module, communityId: stri
 
 method onCommunityCheckChannelPermissionsResponse*(self: Module, chatId: string, checkChannelPermissionsResponse: CheckChannelPermissionsResponseDto) =
   let community = self.controller.getMyCommunity()
-  self.updateChannelPermissionViewData(chatId, checkChannelPermissionsResponse.viewOnlyPermissions, checkChannelPermissionsResponse.viewAndPostPermissions, community)
+  if community.id != "":
+    self.updateChannelPermissionViewData(chatId, checkChannelPermissionsResponse.viewOnlyPermissions, checkChannelPermissionsResponse.viewAndPostPermissions, community)
 
 method onCommunityCheckAllChannelsPermissionsResponse*(self: Module, checkAllChannelsPermissionsResponse: CheckAllChannelsPermissionsResponseDto) =
   let community = self.controller.getMyCommunity()
-  for chatId, permissionResult in checkAllChannelsPermissionsResponse.channels:
-    self.updateChannelPermissionViewData(chatId, permissionResult.viewOnlyPermissions, permissionResult.viewAndPostPermissions, community)
-
-method onCommunityTokenMetadataAdded*(self: Module, communityId: string, tokenMetadata: CommunityTokensMetadataDto) = 
-  let tokenListItem = initTokenListItem(
-    key = tokenMetadata.symbol,
-    name = tokenMetadata.name,
-    symbol = tokenMetadata.symbol,
-    color = "", # tokenMetadata doesn't provide a color
-    image = tokenMetadata.image,
-    category = ord(TokenListItemCategory.Community)
-  )
-
-  if tokenMetadata.tokenType == community_dto.TokenType.ERC721 and not self.view.collectiblesListModel().hasItem(tokenMetadata.symbol):
-    self.view.collectiblesListModel.addItems(@[tokenListItem])
+  if community.id == "":
     return
 
-  if tokenMetadata.tokenType == community_dto.TokenType.ERC20 and not self.view.tokenListModel().hasItem(tokenMetadata.symbol):
-    self.view.tokenListModel.addItems(@[tokenListItem])
+  for chatId, permissionResult in checkAllChannelsPermissionsResponse.channels:
+    self.updateChannelPermissionViewData(chatId, permissionResult.viewOnlyPermissions, permissionResult.viewAndPostPermissions, community)
 
 method onKickedFromCommunity*(self: Module) =
   self.view.setAmIMember(false)
@@ -1164,8 +1110,8 @@ method editCommunity*(self: Module, name: string,
 method exportCommunity*(self: Module): string =
   self.controller.exportCommunity()
 
-method setCommunityMuted*(self: Module, muted: bool) =
-  self.controller.setCommunityMuted(muted)
+method setCommunityMuted*(self: Module, mutedType: int) =
+  self.controller.setCommunityMuted(mutedType)
 
 method inviteUsersToCommunity*(self: Module, pubKeysJSON: string, inviteMessage: string): string =
   result = self.controller.inviteUsersToCommunity(pubKeysJSON, inviteMessage)
@@ -1378,11 +1324,8 @@ method createOrEditCommunityTokenPermission*(self: Module, communityId: string, 
 method deleteCommunityTokenPermission*(self: Module, communityId: string, permissionId: string) =
   self.controller.deleteCommunityTokenPermission(communityId, permissionId)
 
-method requestToJoinCommunity*(self: Module, communityId: string, ensName: string) =
-  self.controller.requestToJoinCommunity(communityId, ensName)
-
-method requestToJoinCommunityWithAuthentication*(self: Module, communityId: string, ensName: string) =
-  self.controller.authenticateToRequestToJoinCommunity(communityId, ensName)
+method requestToJoinCommunityWithAuthentication*(self: Module, ensName: string, addressesToShare: seq[string]) =
+  self.controller.authenticateToRequestToJoinCommunity(ensName, addressesToShare)
 
 method onDeactivateChatLoader*(self: Module, chatId: string) =
   self.view.chatsModel().disableChatLoader(chatId)

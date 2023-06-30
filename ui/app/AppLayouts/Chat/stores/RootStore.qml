@@ -33,7 +33,7 @@ QtObject {
     property var communityItemsModel: chatCommunitySectionModule.model
 
     property var assetsModel: SortFilterProxyModel {
-        sourceModel: chatCommunitySectionModule.tokenList
+        sourceModel: communitiesModuleInst.tokenList
 
         proxyRoles: ExpressionRole {
             function tokenIcon(symbol) {
@@ -45,7 +45,7 @@ QtObject {
     }
 
     property var collectiblesModel: SortFilterProxyModel {
-        sourceModel: chatCommunitySectionModule.collectiblesModel
+        sourceModel: communitiesModuleInst.collectiblesModel
 
         proxyRoles: ExpressionRole {
             function icon(icon) {
@@ -376,12 +376,8 @@ QtObject {
         return communitiesModuleInst.spectateCommunity(id, ensName)
     }
 
-    function requestToJoinCommunity(id, ensName) {
-        chatCommunitySectionModule.requestToJoinCommunity(id, ensName)
-    }
-
-    function requestToJoinCommunityWithAuthentication(id, ensName) {
-        chatCommunitySectionModule.requestToJoinCommunityWithAuthentication(id, ensName)
+    function requestToJoinCommunityWithAuthentication(ensName) {
+        chatCommunitySectionModule.requestToJoinCommunityWithAuthentication(ensName)
     }
 
     function userCanJoin(id) {
@@ -477,7 +473,7 @@ QtObject {
             const userCanJoin = userCanJoin(result.communityId)
             // TODO find what to do when you can't join
             if (userCanJoin) {
-                requestToJoinCommunity(result.communityId, userProfileInst.preferredName)
+                requestToJoinCommunityWithAuthentication(userProfileInst.preferredName)
             }
         }
         return result

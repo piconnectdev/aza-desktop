@@ -6,9 +6,9 @@ import utils 1.0
 import shared.popups 1.0
 
 import "views"
-import "views/communities"
+import AppLayouts.Communities.views 1.0
 import "stores"
-import "popups/community"
+import AppLayouts.Communities.popups 1.0
 
 import AppLayouts.Chat.stores 1.0
 
@@ -91,25 +91,6 @@ StackLayout {
                     }
                 }
             }
-
-            CommunityIntroDialog {
-                id: communityIntroDialog
-
-                isInvitationPending: joinCommunityView.isInvitationPending
-                name: communityData.name
-                introMessage: communityData.introMessage
-                imageSrc: communityData.image
-                accessType: communityData.access
-
-                onJoined: {
-                    root.rootStore.requestToJoinCommunityWithAuthentication(communityData.id, root.rootStore.userProfileInst.name)
-                }
-
-                onCancelMembershipRequest: {
-                    root.rootStore.cancelPendingRequest(communityData.id)
-                    joinCommunityView.isInvitationPending = root.rootStore.isCommunityRequestPending(communityData.id)
-                }
-            }
         }
     }
 
@@ -136,7 +117,7 @@ StackLayout {
             viewAndPostPermissionsModel: root.permissionsStore.viewAndPostPermissionsModel
             assetsModel: root.rootStore.assetsModel
             collectiblesModel: root.rootStore.collectiblesModel
-            isInvitationPending: root.rootStore.isCommunityRequestPending(root.sectionItemModel.id)
+            isInvitationPending: root.rootStore.isCommunityRequestPending(chatView.communityId)
 
             onCommunityInfoButtonClicked: root.currentIndex = 1
             onCommunityManageButtonClicked: root.currentIndex = 1
@@ -149,8 +130,8 @@ StackLayout {
             }
             onRevealAddressClicked: {
                 Global.openPopup(communityIntroDialogPopup, {
-                    communityId: root.sectionItemModel.id,
-                    isInvitationPending: root.rootStore.isCommunityRequestPending(root.sectionItemModel.id),
+                    communityId: chatView.communityId,
+                    isInvitationPending: root.rootStore.isCommunityRequestPending(chatView.communityId),
                     name: root.sectionItemModel.name,
                     introMessage: root.sectionItemModel.introMessage,
                     imageSrc: root.sectionItemModel.image,
@@ -158,8 +139,8 @@ StackLayout {
                 })
             }
             onInvitationPendingClicked: {
-                root.rootStore.cancelPendingRequest(root.sectionItemModel.id)
-                chatView.isInvitationPending = root.rootStore.isCommunityRequestPending(root.sectionItemModel.id)
+                root.rootStore.cancelPendingRequest(chatView.communityId)
+                chatView.isInvitationPending = root.rootStore.isCommunityRequestPending(chatView.communityId)
             }
         }
     }
@@ -196,7 +177,7 @@ StackLayout {
             property string communityId
 
             onJoined: {
-                root.rootStore.requestToJoinCommunityWithAuthentication(communityIntroDialog.communityId, root.rootStore.userProfileInst.name)
+                root.rootStore.requestToJoinCommunityWithAuthentication(root.rootStore.userProfileInst.name)
             }
 
             onCancelMembershipRequest: {

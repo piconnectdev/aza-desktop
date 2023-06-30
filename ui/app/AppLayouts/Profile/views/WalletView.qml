@@ -25,8 +25,12 @@ SettingsContentBase {
 
     readonly property int mainViewIndex: 0;
     readonly property int networksViewIndex: 1;
-    readonly property int accountViewIndex: 2;
-    readonly property int dappPermissionViewIndex: 3;
+    readonly property int accountOrderViewIndex: 2;
+    readonly property int accountViewIndex: 3;
+
+    Component.onCompleted: {
+        root.titleRowComponentLoader.sourceComponent = addNewAccountButtonComponent
+    }
 
     function resetStack() {
         stackContainer.currentIndex = mainViewIndex;
@@ -43,6 +47,10 @@ SettingsContentBase {
             root.sectionTitle = qsTr("Wallet")
             root.titleRowComponentLoader.sourceComponent = undefined
 
+            if (currentIndex == root.mainViewIndex) {
+                root.titleRowComponentLoader.sourceComponent = addNewAccountButtonComponent
+            }
+
             if(currentIndex == root.networksViewIndex) {
                 root.rootStore.backButtonName = qsTr("Wallet")
                 root.sectionTitle = qsTr("Networks")
@@ -53,9 +61,9 @@ SettingsContentBase {
                 root.rootStore.backButtonName = qsTr("Wallet")
                 root.sectionTitle = ""
             }
-            else if(currentIndex == root.dappPermissionViewIndex) {
+            else if(currentIndex == root.accountOrderViewIndex) {
                 root.rootStore.backButtonName = qsTr("Wallet")
-                root.sectionTitle = qsTr("DApp Permissions")
+                root.sectionTitle = qsTr("Edit account order")
             }
         }
 
@@ -65,6 +73,7 @@ SettingsContentBase {
             Layout.fillWidth: true
 
             walletStore: root.walletStore
+            emojiPopup: root.emojiPopup
 
             onGoToNetworksView: {
                 stackContainer.currentIndex = networksViewIndex
@@ -75,14 +84,21 @@ SettingsContentBase {
                 stackContainer.currentIndex = accountViewIndex
             }
 
-            onGoToDappPermissionsView: {
-                stackContainer.currentIndex = dappPermissionViewIndex
+            onGoToAccountOrderView: {
+                stackContainer.currentIndex = accountOrderViewIndex
             }
         }
 
         NetworksView {
             walletStore: root.walletStore
 
+            onGoBack: {
+                stackContainer.currentIndex = mainViewIndex
+            }
+        }
+
+        AccountOrderView {
+            walletStore: root.walletStore
             onGoBack: {
                 stackContainer.currentIndex = mainViewIndex
             }
@@ -109,6 +125,14 @@ SettingsContentBase {
                 text: qsTr("Testnet Mode")
                 checked: walletStore.areTestNetworksEnabled
                 onClicked: walletStore.toggleTestNetworksEnabled()
+            }
+        }
+
+        Component {
+            id: addNewAccountButtonComponent
+            StatusButton {
+                text: qsTr("Add new account")
+                onClicked: root.walletStore.runAddAccountPopup()
             }
         }
     }

@@ -68,6 +68,15 @@ type
     chainId*: int
     success*: bool
 
+proc `$`*(self: TransactionMinedArgs): string =
+  result = fmt"""TransactionMinedArgs(
+    transactionHash: {$self.transactionHash},
+    chainId: {$self.chainId},
+    success: {$self.success},
+    data: {self.data},
+    ]"""
+
+
 type
   HistoryArgs* = ref object of Args
     addresses*: seq[string]
@@ -439,7 +448,7 @@ QtObject:
 
       let network = self.networkService.getNetwork(chainID)
 
-      let token = self.tokenService.findTokenBySymbol(network, tokenSymbol)
+      let token = self.tokenService.findTokenBySymbol(network.chainId, tokenSymbol)
       let amountToSend = conversion.eth2Wei(parseFloat(value), token.decimals)
       let toAddress = token.address
       let transfer = Transfer(

@@ -85,11 +85,12 @@ type
     communityId: string
     ensName: string
     password: string
+    addressesToShare: seq[string]
 
 const asyncRequestToJoinCommunityTask: Task = proc(argEncoded: string) {.gcsafe, nimcall.} =
   let arg = decode[AsyncRequestToJoinCommunityTaskArg](argEncoded)
   try:
-    let response = status_go.requestToJoinCommunity(arg.communityId, arg.ensName, arg.password)
+    let response = status_go.requestToJoinCommunity(arg.communityId, arg.ensName, arg.password, arg.addressesToShare)
     arg.finish(%* {
       "response": response,
       "communityId": arg.communityId,
@@ -111,47 +112,6 @@ const asyncCheckPermissionsToJoinTask: Task = proc(argEncoded: string) {.gcsafe,
   let arg = decode[AsyncCheckPermissionsToJoinTaskArg](argEncoded)
   try:
     let response = status_go.checkPermissionsToJoinCommunity(arg.communityId)
-    arg.finish(%* {
-      "response": response,
-      "communityId": arg.communityId,
-      "error": "",
-    })
-  except Exception as e:
-    arg.finish(%* {
-      "communityId": arg.communityId,
-      "error": e.msg,
-    })
-
-type
-  AsyncCheckChannelPermissionsTaskArg = ref object of QObjectTaskArg
-    communityId: string
-    chatId: string
-
-const asyncCheckChannelPermissionsTask: Task = proc(argEncoded: string) {.gcsafe, nimcall.} =
-  let arg = decode[AsyncCheckChannelPermissionsTaskArg](argEncoded)
-  try:
-    let response = status_go.checkCommunityChannelPermissions(arg.communityId, arg.chatId)
-    arg.finish(%* {
-      "response": response,
-      "communityId": arg.communityId,
-      "chatId": arg.chatId,
-      "error": "",
-    })
-  except Exception as e:
-    arg.finish(%* {
-      "communityId": arg.communityId,
-      "chatId": arg.chatId,
-      "error": e.msg,
-    })
-
-type
-  AsyncCheckAllChannelsPermissionsTaskArg = ref object of QObjectTaskArg
-    communityId: string
-
-const asyncCheckAllChannelsPermissionsTask: Task = proc(argEncoded: string) {.gcsafe, nimcall.} =
-  let arg = decode[AsyncCheckAllChannelsPermissionsTaskArg](argEncoded)
-  try:
-    let response = status_go.checkAllCommunityChannelsPermissions(arg.communityId)
     arg.finish(%* {
       "response": response,
       "communityId": arg.communityId,

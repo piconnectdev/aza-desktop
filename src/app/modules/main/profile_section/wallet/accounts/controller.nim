@@ -28,6 +28,9 @@ proc getWalletAccounts*(self: Controller): seq[wallet_account_service.WalletAcco
 proc updateAccount*(self: Controller, address: string, accountName: string, colorId: string, emoji: string) =
   discard self.walletAccountService.updateWalletAccount(address, accountName, colorId, emoji)
 
+proc updateAccountPosition*(self: Controller, address: string, position: int) =
+  self.walletAccountService.updateWalletAccountPosition(address, position)
+
 proc deleteAccount*(self: Controller, address: string) =
   self.walletAccountService.deleteAccount(address)
 
@@ -39,3 +42,15 @@ proc isKeycardAccount*(self: Controller, account: WalletAccountDto): bool =
 
 proc getWalletAccount*(self: Controller, address: string): WalletAccountDto =
   return self.walletAccountService.getAccountByAddress(address)
+
+proc getKeypairs*(self: Controller): seq[KeypairDto] =
+  return self.walletAccountService.getKeypairs()
+
+proc getAllKnownKeycardsGroupedByKeyUid*(self: Controller): seq[KeycardDto] =
+  return self.walletAccountService.getAllKnownKeycardsGroupedByKeyUid()
+
+proc toggleIncludeWatchOnlyAccount*(self: Controller) =
+  self.walletAccountService.toggleIncludeWatchOnlyAccount()
+
+proc isIncludeWatchOnlyAccount*(self: Controller): bool =
+  return self.walletAccountService.isIncludeWatchOnlyAccount()

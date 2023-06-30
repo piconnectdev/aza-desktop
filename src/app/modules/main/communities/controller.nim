@@ -1,4 +1,4 @@
-import Tables, stint
+import stint
 import ./io_interface
 
 import ../../../core/signals/types
@@ -8,8 +8,8 @@ import ../../../../app_service/service/contacts/service as contacts_service
 import ../../../../app_service/service/network/service as networks_service
 import ../../../../app_service/service/community_tokens/service as community_tokens_service
 import ../../../../app_service/service/token/service as token_service
-
-import ../../shared_models/token_permissions_model
+import ../../../../app_service/service/wallet_account/service as wallet_account_service
+import ../../../../app_service/service/collectible/service as collectible_service
 
 type
   Controller* = ref object of RootObj
@@ -116,6 +116,16 @@ proc init*(self: Controller) =
     let args = CommunitiesArgs(e)
     self.delegate.curatedCommunitiesLoaded(args.communities)
 
+  self.events.on(SIGNAL_COMMUNITY_TOKEN_METADATA_ADDED) do(e: Args):
+    let args = CommunityTokenMetadataArgs(e)
+    self.delegate.onCommunityTokenMetadataAdded(args.communityId, args.tokenMetadata)
+
+  self.events.on(SIGNAL_OWNED_COLLECTIBLES_UPDATE_FINISHED) do(e: Args):
+    self.delegate.onOwnedCollectiblesUpdated()
+
+  self.events.on(SIGNAL_WALLET_ACCOUNT_TOKENS_REBUILT) do(e: Args):
+    self.delegate.onWalletAccountTokensRebuilt()
+
 proc getCommunityTags*(self: Controller): string =
   result = self.communityService.getCommunityTags()
 
@@ -130,9 +140,6 @@ proc spectateCommunity*(self: Controller, communityId: string): string =
 
 proc cancelRequestToJoinCommunity*(self: Controller, communityId: string) =
   self.communityService.cancelRequestToJoinCommunity(communityId)
-
-proc requestToJoinCommunity*(self: Controller, communityId: string, ensName: string) =
-  self.communityService.asyncRequestToJoinCommunity(communityId, ensName, password="")
 
 proc createCommunity*(
     self: Controller,
@@ -210,8 +217,8 @@ proc requestCommunityInfo*(self: Controller, communityId: string, importing: boo
 proc importCommunity*(self: Controller, communityKey: string) =
   self.communityService.importCommunity(communityKey)
 
-proc setCommunityMuted*(self: Controller, communityId: string, muted: bool) =
-  self.communityService.setCommunityMuted(communityId, muted)
+proc setCommunityMuted*(self: Controller, communityId: string, mutedType: int) =
+  self.communityService.setCommunityMuted(communityId, mutedType)
 
 proc getContactNameAndImage*(self: Controller, contactId: string):
     tuple[name: string, image: string, largeImage: string] =

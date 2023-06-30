@@ -31,12 +31,18 @@ proc getAllCommunities*(): RpcResponse[JsonNode] {.raises: [Exception].} =
 proc spectateCommunity*(communityId: string): RpcResponse[JsonNode] {.raises: [Exception].} =
   result = callPrivateRPC("spectateCommunity".prefix, %*[communityId])
 
-proc requestToJoinCommunity*(communityId: string, ensName: string, password: string): RpcResponse[JsonNode] {.raises: [Exception].} =
+proc requestToJoinCommunity*(
+    communityId: string,
+    ensName: string,
+    password: string,
+    addressesToShare: seq[string],
+  ): RpcResponse[JsonNode] {.raises: [Exception].} =
   var passwordToSend = password
   result = callPrivateRPC("requestToJoinCommunity".prefix, %*[{
     "communityId": communityId,
     "ensName": ensName,
-    "password": if passwordToSend != "": utils.hashPassword(password) else: ""
+    "password": if passwordToSend != "": utils.hashPassword(password) else: "",
+    "addressesToShare": addressesToShare,
   }])
 
 proc checkPermissionsToJoinCommunity*(communityId: string): RpcResponse[JsonNode] {.raises: [Exception].} =
@@ -370,8 +376,11 @@ proc unbanUserFromCommunity*(communityId: string, pubKey: string): RpcResponse[J
     "user": pubKey
   }])
 
-proc setCommunityMuted*(communityId: string, muted: bool): RpcResponse[JsonNode] {.raises: [Exception].}  =
-  return callPrivateRPC("setCommunityMuted".prefix, %*[communityId, muted])
+proc setCommunityMuted*(communityId: string, mutedType: int): RpcResponse[JsonNode] {.raises: [Exception].}  =
+  return callPrivateRPC("setCommunityMuted".prefix, %*[{ 
+    "communityId": communityId, 
+    "mutedType": mutedType 
+  }])
 
 proc inviteUsersToCommunity*(communityId: string, pubKeys: seq[string]): RpcResponse[JsonNode] {.raises: [Exception].} =
   return callPrivateRPC("inviteUsersToCommunity".prefix, %*[{
@@ -392,3 +401,5 @@ proc getCommunitiesSettings*(): RpcResponse[JsonNode] {.raises: [Exception].} =
 proc requestExtractDiscordChannelsAndCategories*(filesToImport: seq[string]): RpcResponse[JsonNode] {.raises: [Exception].} =
   return callPrivateRPC("requestExtractDiscordChannelsAndCategories".prefix, %*[filesToImport])
 
+proc getCheckChannelPermissionResponses*(communityId: string,): RpcResponse[JsonNode] {.raises: [Exception].} =
+  return callPrivateRPC("getCheckChannelPermissionResponses".prefix, %*[communityId])

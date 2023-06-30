@@ -16,7 +16,7 @@ import shared.controls 1.0
 import shared.views.chat 1.0
 import SortFilterProxyModel 0.2
 
-import AppLayouts.Chat.popups.community 1.0
+import AppLayouts.Communities.popups 1.0
 
 import "../helpers"
 import "../controls"
@@ -24,7 +24,7 @@ import "../popups"
 import "../panels"
 import "../../Wallet"
 import "../stores"
-import "../panels/communities"
+import AppLayouts.Communities.panels 1.0
 
 Item {
     id: root
@@ -252,14 +252,17 @@ Item {
                     id: chatInput
                     width: parent.width
                     visible: !!d.activeChatContentModule
-
-                    enabled: !!d.activeChatContentModule
-                             && !d.activeChatContentModule.chatDetails.blocked
-                             && root.rootStore.sectionDetails.joined
-                             && !root.rootStore.sectionDetails.amIBanned
-                             && root.rootStore.isUserAllowedToSendMessage
-                             && !channelPostRestrictions.visible
-                             && root.viewAndPostPermissionsSatisfied
+                    
+                    // When `enabled` is switched true->false, `textInput.text` is cleared before d.activeChatContentModule updates.
+                    // We delay the binding so that the `inputAreaModule.preservedProperties.text` doesn't get overriden with empty value.
+                    Binding on enabled {
+                        delayed: true
+                        value: !!d.activeChatContentModule
+                                 && !d.activeChatContentModule.chatDetails.blocked
+                                 && root.rootStore.sectionDetails.joined
+                                 && !root.rootStore.sectionDetails.amIBanned
+                                 && root.rootStore.isUserAllowedToSendMessage
+                    }
 
                     store: root.rootStore
                     usersStore: d.activeUsersStore
@@ -358,7 +361,7 @@ Item {
                     anchors.left: parent.left
                     anchors.leftMargin: (2*Style.current.bigPadding)
                     visible: (!!root.viewAndPostHoldingsModel && (root.viewAndPostHoldingsModel.count > 0)
-                              && !root.amISectionAdmin)
+                              && !root.amISectionAdmin && !root.viewAndPostPermissionsSatisfied)
                     assetsModel: root.rootStore.assetsModel
                     collectiblesModel: root.rootStore.collectiblesModel
                     holdingsModel: root.viewAndPostHoldingsModel

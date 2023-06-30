@@ -212,55 +212,70 @@ QtObject:
   proc init*(self: Service) =
     self.fetchAllTokenOwners()
     self.tokenOwnersTimer.start()
+
     self.events.on(PendingTransactionTypeDto.CollectibleDeployment.event) do(e: Args):
       var receivedData = TransactionMinedArgs(e)
-      let deployState = if receivedData.success: DeployState.Deployed else: DeployState.Failed
-      let tokenDto = toCommunityTokenDto(parseJson(receivedData.data))
-      if not receivedData.success:
-        error "Collectible contract not deployed", chainId=tokenDto.chainId, address=tokenDto.address
       try:
-        discard updateCommunityTokenState(tokenDto.chainId, tokenDto.address, deployState) #update db state
-      except RpcException:
-        error "Error updating collectibles contract state", message = getCurrentExceptionMsg()
-      let data = CommunityTokenDeployedStatusArgs(communityId: tokenDto.communityId, contractAddress: tokenDto.address,
-                                                  deployState: deployState, chainId: tokenDto.chainId,
-                                                  transactionHash: receivedData.transactionHash)
-      self.events.emit(SIGNAL_COMMUNITY_TOKEN_DEPLOY_STATUS, data)
+        let deployState = if receivedData.success: DeployState.Deployed else: DeployState.Failed
+        let tokenDto = toCommunityTokenDto(parseJson(receivedData.data))
+        if not receivedData.success:
+          error "Collectible contract not deployed", chainId=tokenDto.chainId, address=tokenDto.address
+        try:
+          discard updateCommunityTokenState(tokenDto.chainId, tokenDto.address, deployState) #update db state
+        except RpcException:
+          error "Error updating collectibles contract state", message = getCurrentExceptionMsg()
+        let data = CommunityTokenDeployedStatusArgs(communityId: tokenDto.communityId, contractAddress: tokenDto.address,
+                                                    deployState: deployState, chainId: tokenDto.chainId,
+                                                    transactionHash: receivedData.transactionHash)
+        self.events.emit(SIGNAL_COMMUNITY_TOKEN_DEPLOY_STATUS, data)
+      except Exception as e:
+        error "Error processing Collectible deployment pending transaction event", msg=e.msg, receivedData
+     
 
     self.events.on(PendingTransactionTypeDto.CollectibleAirdrop.event) do(e: Args):
       let receivedData = TransactionMinedArgs(e)
-      let tokenDto = toCommunityTokenDto(parseJson(receivedData.data))
-      let transactionStatus = if receivedData.success: ContractTransactionStatus.Completed else: ContractTransactionStatus.Failed
-      let data = AirdropArgs(communityToken: tokenDto, transactionHash: receivedData.transactionHash, status: transactionStatus)
-      self.events.emit(SIGNAL_AIRDROP_STATUS, data)
+      try:
+        let tokenDto = toCommunityTokenDto(parseJson(receivedData.data))
+        let transactionStatus = if receivedData.success: ContractTransactionStatus.Completed else: ContractTransactionStatus.Failed
+        let data = AirdropArgs(communityToken: tokenDto, transactionHash: receivedData.transactionHash, status: transactionStatus)
+        self.events.emit(SIGNAL_AIRDROP_STATUS, data)
 
-      # update owners list if burn was successfull
-      if receivedData.success:
-        self.tempTokenOwnersToFetch = tokenDto
-        self.tokenOwners1SecTimer.start()
+        # update owners list if burn was successfull
+        if receivedData.success:
+          self.tempTokenOwnersToFetch = tokenDto
+          self.tokenOwners1SecTimer.start()
+      except Exception as e:
+        error "Error processing Collectible airdrop pending transaction event", msg=e.msg, receivedData
+
     self.events.on(PendingTransactionTypeDto.CollectibleRemoteSelfDestruct.event) do(e: Args):
       let receivedData = TransactionMinedArgs(e)
-      let tokenDto = toCommunityTokenDto(parseJson(receivedData.data))
-      let transactionStatus = if receivedData.success: ContractTransactionStatus.Completed else: ContractTransactionStatus.Failed
-      let data = RemoteDestructArgs(communityToken: tokenDto, transactionHash: receivedData.transactionHash, status: transactionStatus)
-      self.events.emit(SIGNAL_REMOTE_DESTRUCT_STATUS, data)
+      try:
+        let tokenDto = toCommunityTokenDto(parseJson(receivedData.data))
+        let transactionStatus = if receivedData.success: ContractTransactionStatus.Completed else: ContractTransactionStatus.Failed
+        let data = RemoteDestructArgs(communityToken: tokenDto, transactionHash: receivedData.transactionHash, status: transactionStatus)
+        self.events.emit(SIGNAL_REMOTE_DESTRUCT_STATUS, data)
 
-      # update owners list if burn was successfull
-      if receivedData.success:
-        self.tempTokenOwnersToFetch = tokenDto
-        self.tokenOwners1SecTimer.start()
+        # update owners list if burn was successfull
+        if receivedData.success:
+          self.tempTokenOwnersToFetch = tokenDto
+          self.tokenOwners1SecTimer.start()
+      except Exception as e:
+        error "Error processing Collectible self destruct pending transaction event", msg=e.msg, receivedData
 
     self.events.on(PendingTransactionTypeDto.CollectibleBurn.event) do(e: Args):
       let receivedData = TransactionMinedArgs(e)
-      let tokenDto = toCommunityTokenDto(parseJson(receivedData.data))
-      let transactionStatus = if receivedData.success: ContractTransactionStatus.Completed else: ContractTransactionStatus.Failed
-      if receivedData.success:
-        try:
-          discard updateCommunityTokenSupply(tokenDto.chainId, tokenDto.address, tokenDto.supply) #update db state
-        except RpcException:
-          error "Error updating collectibles supply", message = getCurrentExceptionMsg()
-      let data = RemoteDestructArgs(communityToken: tokenDto, transactionHash: receivedData.transactionHash, status: transactionStatus)
-      self.events.emit(SIGNAL_BURN_STATUS, data)
+      try:
+        let tokenDto = toCommunityTokenDto(parseJson(receivedData.data))
+        let transactionStatus = if receivedData.success: ContractTransactionStatus.Completed else: ContractTransactionStatus.Failed
+        if receivedData.success:
+          try:
+            discard updateCommunityTokenSupply(tokenDto.chainId, tokenDto.address, tokenDto.supply) #update db state
+          except RpcException:
+            error "Error updating collectibles supply", message = getCurrentExceptionMsg()
+        let data = RemoteDestructArgs(communityToken: tokenDto, transactionHash: receivedData.transactionHash, status: transactionStatus)
+        self.events.emit(SIGNAL_BURN_STATUS, data)
+      except Exception as e:
+        error "Error processing Collectible burn pending transaction event", msg=e.msg, receivedData
 
   proc buildTransactionDataDto(self: Service, addressFrom: string, chainId: int, contractAddress: string): TransactionDataDto =
     let gasUnits = self.tempGasTable.getOrDefault((chainId, contractAddress), 0)
@@ -273,20 +288,29 @@ QtObject:
       if suggestedFees.eip1559Enabled: $suggestedFees.maxPriorityFeePerGas else: "",
       if suggestedFees.eip1559Enabled: $suggestedFees.maxFeePerGasM else: "")
 
-  proc deployCollectibles*(self: Service, communityId: string, addressFrom: string, password: string, deploymentParams: DeploymentParameters, tokenMetadata: CommunityTokensMetadataDto, chainId: int) =
+  proc deployContract*(self: Service, communityId: string, addressFrom: string, password: string, deploymentParams: DeploymentParameters, tokenMetadata: CommunityTokensMetadataDto, chainId: int) =
     try:
       let txData = self.buildTransactionDataDto(addressFrom, chainId, "")
       if txData.source == parseAddress(ZERO_ADDRESS):
         return
 
-      let response = tokens_backend.deployCollectibles(chainId, %deploymentParams, %txData, password)
+      var response: RpcResponse[JsonNode]
+      case tokenMetadata.tokenType
+      of TokenType.ERC721:
+        response = tokens_backend.deployCollectibles(chainId, %deploymentParams, %txData, password)
+      of TokenType.ERC20:
+        response = tokens_backend.deployAssets(chainId, %deploymentParams, %txData, password)
+      else:
+        error "Contract deployment error - unknown token type", tokenType=tokenMetadata.tokenType
+        return
+
       let contractAddress = response.result["contractAddress"].getStr()
       let transactionHash = response.result["transactionHash"].getStr()
       debug "Deployed contract address ", contractAddress=contractAddress
       debug "Deployment transaction hash ", transactionHash=transactionHash
 
       var communityToken: CommunityTokenDto
-      communityToken.tokenType = TokenType.ERC721
+      communityToken.tokenType = tokenMetadata.tokenType
       communityToken.communityId = communityId
       communityToken.address = contractAddress
       communityToken.name = deploymentParams.name
@@ -300,6 +324,7 @@ QtObject:
       communityToken.chainId = chainId
       communityToken.deployState = DeployState.InProgress
       communityToken.image = tokenMetadata.image
+      communityToken.decimals = deploymentParams.decimals
 
       # save token to db
       let communityTokenJson = tokens_backend.addCommunityToken(communityToken)
@@ -409,8 +434,11 @@ QtObject:
     let price = self.tokenService.getTokenPrice(cryptoSymbol, currentCurrency)
     return cryptoBalance * price
 
-  proc computeDeployFee*(self: Service, chainId: int, accountAddress: string) =
+  proc computeDeployFee*(self: Service, chainId: int, accountAddress: string, tokenType: TokenType) =
     try:
+      if tokenType != TokenType.ERC20 and tokenType != TokenType.ERC721:
+        error "Error loading fees: unknown token type", tokenType = tokenType
+        return
       self.tempAccountAddress = accountAddress
       self.tempChainId = chainId
       let arg = AsyncGetDeployFeesArg(
@@ -418,6 +446,7 @@ QtObject:
         vptr: cast[ByteAddress](self.vptr),
         slot: "onDeployFees",
         chainId: chainId,
+        tokenType: tokenType
       )
       self.threadpool.start(arg)
     except Exception as e:
@@ -717,14 +746,18 @@ QtObject:
     except Exception as e:
       error "Error computing airdrop fees", msg = e.msg
 
-  proc fetchCommunityOwners*(self: Service, communityId: string, chainId: int, contractAddress: string) =
+  proc fetchCommunityOwners*(self: Service,  communityToken: CommunityTokenDto) =
+    if communityToken.tokenType != TokenType.ERC721:
+      # TODO we need a new implementation for ERC20
+      # we will be able to show only tokens hold by community members
+      return
     let arg = FetchCollectibleOwnersArg(
       tptr: cast[ByteAddress](fetchCollectibleOwnersTaskArg),
       vptr: cast[ByteAddress](self.vptr),
       slot: "onCommunityTokenOwnersFetched",
-      chainId: chainId,
-      contractAddress: contractAddress,
-      communityId: communityId
+      chainId: communityToken.chainId,
+      contractAddress: communityToken.address,
+      communityId: communityToken.communityId
     )
     self.threadpool.start(arg)
 
@@ -752,12 +785,12 @@ QtObject:
     let allTokens = self.getAllCommunityTokens()
     for token in allTokens:
       if token.transferable:
-        self.fetchCommunityOwners(token.communityId, token.chainId, token.address)
+        self.fetchCommunityOwners(token)
 
   proc onFetchTempTokenOwners*(self: Service) {.slot.} =
-    self.fetchCommunityOwners(self.tempTokenOwnersToFetch.communityId, self.tempTokenOwnersToFetch.chainId, self.tempTokenOwnersToFetch.address)
+    self.fetchCommunityOwners(self.tempTokenOwnersToFetch)
 
   proc fetchAllTokenOwners*(self: Service) =
     let allTokens = self.getAllCommunityTokens()
     for token in allTokens:
-      self.fetchCommunityOwners(token.communityId, token.chainId, token.address)
+      self.fetchCommunityOwners(token)

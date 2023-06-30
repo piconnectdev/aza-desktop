@@ -3,8 +3,6 @@ import model as chats_model
 import item, active_item
 import ../../shared_models/user_model as user_model
 import ../../shared_models/token_permissions_model
-import ../../shared_models/token_list_model
-import ../../shared_models/token_list_item
 import io_interface
 
 QtObject:
@@ -25,10 +23,6 @@ QtObject:
       loadingHistoryMessagesInProgress: bool 
       tokenPermissionsModel: TokenPermissionsModel
       tokenPermissionsVariant: QVariant
-      tokenListModel: TokenListModel
-      tokenListModelVariant: QVariant
-      collectiblesListModel: TokenListModel
-      collectiblesListModelVariant: QVariant
       allTokenRequirementsMet: bool
       requiresTokenPermissionToJoin: bool
       amIMember: bool
@@ -47,10 +41,6 @@ QtObject:
     self.editCategoryChannelsVariant.delete
     self.tokenPermissionsModel.delete
     self.tokenPermissionsVariant.delete
-    self.tokenListModel.delete
-    self.tokenListModelVariant.delete
-    self.collectiblesListModel.delete
-    self.collectiblesListModelVariant.delete
 
     self.QObject.delete
 
@@ -71,10 +61,6 @@ QtObject:
     result.loadingHistoryMessagesInProgress = false
     result.tokenPermissionsModel = newTokenPermissionsModel()
     result.tokenPermissionsVariant = newQVariant(result.tokenPermissionsModel)
-    result.tokenListModel = newTokenListModel()
-    result.tokenListModelVariant = newQVariant(result.tokenListModel)
-    result.collectiblesListModel = newTokenListModel()
-    result.collectiblesListModelVariant = newQVariant(result.collectiblesListModel)
     result.amIMember = false
     result.requiresTokenPermissionToJoin = false
     result.chatsLoaded = false
@@ -254,11 +240,16 @@ QtObject:
   proc createGroupChat*(self: View, communityID: string, groupName: string, pubKeys: string) {.slot.} =
     self.delegate.createGroupChat(communityID, groupName, pubKeys)
 
-  proc requestToJoinCommunity*(self: View, communityId: string, ensName: string) {.slot.} =
-    self.delegate.requestToJoinCommunity(communityId, ensName)
+  proc requestToJoinCommunityWithAuthentication*(self: View, ensName: string) {.slot.} =
+    self.delegate.requestToJoinCommunityWithAuthentication(ensName, @[])
 
-  proc requestToJoinCommunityWithAuthentication*(self: View, communityId: string, ensName: string) {.slot.} =
-    self.delegate.requestToJoinCommunityWithAuthentication(communityId, ensName)
+  proc requestToJoinCommunityWithAuthenticationWithSharedAddresses*(self: View, ensName: string,
+      addressesToShare: string) {.slot.} =
+    try:
+      let addressesArray = map(parseJson(addressesToShare).getElems(), proc(x:JsonNode):string = x.getStr())
+      self.delegate.requestToJoinCommunityWithAuthentication(ensName, addressesArray)
+    except Exception as e:
+      echo "Error requesting to join community with authetication and shared addresses: ", e.msg
 
   proc joinGroupChatFromInvitation*(self: View, groupName: string, chatId: string, adminPK: string) {.slot.} =
     self.delegate.joinGroupChatFromInvitation(groupName, chatId, adminPK)
@@ -324,8 +315,8 @@ QtObject:
   proc exportCommunity*(self: View): string {.slot.} =
     self.delegate.exportCommunity()
 
-  proc setCommunityMuted*(self: View, muted: bool) {.slot.} =
-    self.delegate.setCommunityMuted(muted)
+  proc setCommunityMuted*(self: View, mutedType: int) {.slot.} =
+    self.delegate.setCommunityMuted(mutedType)
 
   proc inviteUsersToCommunity*(self: View, pubKeysJSON: string, inviteMessage: string): string {.slot.} =
     result = self.delegate.inviteUsersToCommunity(pubKeysJSON, inviteMessage)
@@ -367,30 +358,6 @@ QtObject:
 
   proc downloadMessages*(self: View, chatId: string, filePath: string) {.slot.} =
     self.delegate.downloadMessages(chatId, filePath)
-
-  proc tokenListModel*(self: View): TokenListModel =
-    result = self.tokenListModel
-
-  proc getTokenListModel(self: View): QVariant{.slot.} =
-    return self.tokenListModelVariant
-
-  QtProperty[QVariant] tokenList:
-    read = getTokenListModel
-
-  proc setTokenListItems*(self: View, tokenListItems: seq[TokenListItem]) =
-    self.tokenListModel.setItems(tokenListItems)
-
-  proc collectiblesListModel*(self: View): TokenListModel =
-    result = self.collectiblesListModel
-
-  proc getCollectiblesListModel(self: View): QVariant{.slot.} =
-    return self.collectiblesListModelVariant
-
-  QtProperty[QVariant] collectiblesModel:
-    read = getCollectiblesListModel
-
-  proc setCollectiblesListItems*(self: View, tokenListItems: seq[TokenListItem]) =
-    self.collectiblesListModel.setItems(tokenListItems)
 
   proc tokenPermissionsModel*(self: View): TokenPermissionsModel =
     result = self.tokenPermissionsModel

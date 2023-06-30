@@ -11,7 +11,7 @@ import StatusQ.Popups 0.1
 
 import AppLayouts.Chat.popups 1.0
 import AppLayouts.Profile.popups 1.0
-import AppLayouts.CommunitiesPortal.popups 1.0
+import AppLayouts.Communities.popups 1.0
 
 import shared.popups 1.0
 import shared.status 1.0
@@ -24,6 +24,7 @@ QtObject {
     required property var popupParent
     required property var rootStore
     property var communitiesStore
+    property bool isDevBuild
 
     property var activePopupComponents: []
 
@@ -467,6 +468,7 @@ QtObject {
             id: createCommunitiesPopupComponent
             CreateCommunityPopup {
                 store: root.communitiesStore
+                isDevBuild: root.isDevBuild
                 onClosed: {
                     destroy()
                 }
@@ -549,8 +551,8 @@ QtObject {
                         type: StatusBaseButton.Type.Danger
                         text: qsTr("Leave %1").arg(leavePopup.community)
                         onClicked: {
-                            root.rootStore.profileSectionStore.communitiesProfileModule.leaveCommunity(leavePopup.communityId)
                             leavePopup.close()
+                            root.rootStore.profileSectionStore.communitiesProfileModule.leaveCommunity(leavePopup.communityId)
                         }
                     }
                 ]

@@ -15,12 +15,15 @@ function Install-Scoop {
 # Install Git and other dependencies
 function Install-Dependencies {
     Write-Host "Installing dependencies..."
+    if (!(scoop bucket list | Where { $_.Name -eq "extras" })) {
+        scoop bucket add extras
+    }
+    scoop install --global go@1.20.4
+    scoop install --global vcredist2022
     scoop install --global `
         7zip git dos2unix findutils `
         wget rcedit inno-setup `
-        make cmake gcc go@1.20.4
-    scoop bucket add extras
-    scoop install --global vcredist2019
+        make cmake gcc
 }
 
 function Install-Qt-SDK {
@@ -48,7 +51,8 @@ function Install-VC-BuildTools {
         "--add", "Microsoft.VisualStudio.Component.Windows10SDK.10240",
         "--add", "Microsoft.VisualStudio.Component.Windows10SDK.14393",
         "--add", "Microsoft.VisualStudio.Component.Windows81SDK",
-        "--add", "Microsoft.VisualStudio.ComponentGroup.NativeDesktop.Win81"
+        "--add", "Microsoft.VisualStudio.ComponentGroup.NativeDesktop.Win81",
+        "--add", "Microsoft.VisualStudio.ComponentGroup.UWP.VC.v141.BuildTools"
     )
     Start-Process -Wait -PassThru -FilePath $VCBuildToolsExe -ArgumentList $VCBuildToolsArgs
 }
@@ -67,7 +71,7 @@ export VCINSTALLDIR="/c/BuildTools/VC"
 You might also have to include the following paths in your `$PATH:
 
 export PATH=`"/c/BuildTools/MSBuild/Current/Bin:`$PATH`"
-export PATH=`"/c/BuildTools/VC/Tools/MSVC/14.27.29110/bin:`$PATH`"
+export PATH=`"/c/BuildTools/VC/Tools/MSVC/14.29.30133/bin:`$PATH`"
 export PATH=`"/c/ProgramData/scoop/apps/inno-setup/current:`$PATH`"
 "@
 }
