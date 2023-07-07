@@ -11,9 +11,10 @@ import StatusQ.Core.Utils 0.1
 import utils 1.0
 import shared.panels 1.0
 
+import AppLayouts.Communities.controls 1.0
 import AppLayouts.Communities.helpers 1.0
-import AppLayouts.Communities.popups 1.0
 import AppLayouts.Communities.panels 1.0
+import AppLayouts.Communities.popups 1.0
 
 StatusScrollView {
     id: root
@@ -56,7 +57,7 @@ StatusScrollView {
     property bool permissionTypeLimitReached: false
 
     signal createPermissionClicked
-    signal navigateToMintTokenSettings
+    signal navigateToMintTokenSettings(bool isAssetType)
 
     function resetChanges() {
         d.loadInitValues()
@@ -78,7 +79,7 @@ StatusScrollView {
         modelA: root.dirtyValues.selectedChannelsModel
         modelB: root.selectedChannelsModel
 
-        roles: ["itemId"]
+        roles: ["key"]
         mode: ModelsComparator.CompareMode.Set
     }
 
@@ -318,7 +319,7 @@ StatusScrollView {
                 }
 
                 onNavigateToMintTokenSettings: {
-                    root.navigateToMintTokenSettings()
+                    root.navigateToMintTokenSettings(isAssetType)
                     close()
                 }
             }

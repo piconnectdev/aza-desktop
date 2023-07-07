@@ -102,7 +102,7 @@ proc newModule*(
   result.networksModule = networks_module.newModule(result, events, networkService, walletAccountService, settingsService)
   result.networksService = networkService
   result.activityController = activityc.newController(result.transactionsModule, currencyService, tokenService, events)
-  result.filter = initFilter(result.controller, result.activityController)
+  result.filter = initFilter(result.controller)
 
   result.view = newView(result, result.activityController)
 
@@ -147,6 +147,7 @@ method notifyFilterChanged(self: Module) =
   self.transactionsModule.filterChanged(self.filter.addresses, self.filter.chainIds)
   self.accountsModule.filterChanged(self.filter.addresses, self.filter.chainIds)
   self.sendModule.filterChanged(self.filter.addresses, self.filter.chainIds)
+  self.activityController.globalFilterChanged(self.filter.addresses, self.filter.chainIds)
   if self.filter.addresses.len > 0:
     self.view.filterChanged(self.filter.addresses[0], includeWatchOnly, self.filter.allAddresses)
 
@@ -170,15 +171,15 @@ method load*(self: Module) =
   self.events.on(SIGNAL_WALLET_ACCOUNT_UPDATED) do(e:Args):
     self.notifyFilterChanged()
   self.events.on(SIGNAL_WALLET_ACCOUNT_SAVED) do(e:Args):
-    let args = AccountSaved(e)
+    let args = AccountArgs(e)
     self.setTotalCurrencyBalance()
     self.filter.setAddress(args.account.address)
     self.view.showToastAccountAdded(args.account.name)
     self.notifyFilterChanged()
   self.events.on(SIGNAL_WALLET_ACCOUNT_DELETED) do(e:Args):
-    let args = AccountDeleted(e)
+    let args = AccountArgs(e)
     self.setTotalCurrencyBalance()
-    self.filter.removeAddress(args.address)
+    self.filter.removeAddress(args.account.address)
     self.notifyFilterChanged()
   self.events.on(SIGNAL_WALLET_ACCOUNT_NETWORK_ENABLED_UPDATED) do(e:Args):
     self.filter.updateNetworks()
@@ -191,11 +192,6 @@ method load*(self: Module) =
     self.setTotalCurrencyBalance()
     self.notifyFilterChanged()
   self.events.on(SIGNAL_NEW_KEYCARD_SET) do(e: Args):
-    let args = KeycardActivityArgs(e)
-    if not args.success:
-      return
-    self.notifyFilterChanged()
-  self.events.on(SIGNAL_KEYCARDS_SYNCHRONIZED) do(e: Args):
     let args = KeycardActivityArgs(e)
     if not args.success:
       return

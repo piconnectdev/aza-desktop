@@ -1,17 +1,18 @@
-import NimQml, logging, std/json, sequtils, sugar, options, strutils, times
+import NimQml, logging, std/json, sequtils, sugar, options, strutils
 import tables, stint, sets
 
 import model
 import entry
 import recipients_model
+import events_handler
+import status
 
 import web3/conversions
 
+import app/core/eventemitter
+
 import ../transactions/item
 import ../transactions/module as transactions_module
-
-import app/core/eventemitter
-import app/core/signals/types
 
 import backend/activity as backend_activity
 import backend/backend as backend
@@ -39,10 +40,8 @@ QtObject:
       currencyService: currency_service.Service
       tokenService: token_service.Service
 
-      events: EventEmitter
-
-      loadingData: bool
-      errorCode: backend_activity.ErrorCode
+      eventsHandler: EventsHandler
+      status: Status
 
       # call updateAssetsIdentities after updating filterTokenCodes
       filterTokenCodes: HashSet[string]
@@ -50,8 +49,6 @@ QtObject:
       addresses: seq[string]
       # call updateAssetsIdentities after updating chainIds
       chainIds: seq[int]
-
-      startTimestamp: int
 
   proc setup(self: Controller) =
     self.QObject.setup
@@ -167,51 +164,41 @@ QtObject:
             error "failed to find pending transaction with identity: ", identity
           ptIndex += 1
 
-  proc loadingDataChanged*(self: Controller) {.signal.}
-
-  proc setLoadingData(self: Controller, loadingData: bool) =
-    self.loadingData = loadingData
-    self.loadingDataChanged()
-
-  proc errorCodeChanged*(self: Controller) {.signal.}
-
-  proc setErrorCode(self: Controller, errorCode: int) =
-    self.errorCode = backend_activity.ErrorCode(errorCode)
-    self.errorCodeChanged()
-
   proc processResponse(self: Controller, response: JsonNode) =
+    defer: self.status.setLoadingData(false)
+
     let res = fromJson(response, backend_activity.FilterResponse)
 
-    defer: self.setErrorCode(res.errorCode.int)
-
-    if res.errorCode == ErrorCodeFilterCanceled and self.model.getCount() == 0:
-      # Only successful initial response can change loading flag
-      return
+    defer: self.status.setErrorCode(res.errorCode.int)
 
     if res.errorCode != ErrorCodeSuccess:
-      self.setLoadingData(false)
       error "error fetching activity entries: ", res.errorCode
       return
     
-    let entries = self.backendToPresentation(res.activities)
-    self.model.setEntries(entries, res.offset, res.hasMore)
-    self.setLoadingData(false)
+    try: 
+      let entries = self.backendToPresentation(res.activities)
+      self.model.setEntries(entries, res.offset, res.hasMore)
+    except Exception as e:
+      error "Error converting activity entries: ", e.msg
 
   proc updateFilter*(self: Controller) {.slot.} =
-    self.setLoadingData(true)
+    self.status.setLoadingData(true)
     self.model.resetModel(@[])
+    self.eventsHandler.updateSubscribedAddresses(self.addresses)
+    self.status.setNewDataAvailable(false)
 
     let response = backend_activity.filterActivityAsync(self.addresses, seq[backend_activity.ChainId](self.chainIds), self.currentActivityFilter, 0, FETCH_BATCH_COUNT_DEFAULT)
     if response.error != nil:
       error "error fetching activity entries: ", response.error
-      self.setLoadingData(false)
+      self.status.setLoadingData(false)
       return
 
   proc loadMoreItems(self: Controller) {.slot.} =
-    self.setLoadingData(true)
+    self.status.setLoadingData(true)
 
     let response = backend_activity.filterActivityAsync(self.addresses, seq[backend_activity.ChainId](self.chainIds), self.currentActivityFilter, self.model.getCount(), FETCH_BATCH_COUNT_DEFAULT)
     if response.error != nil:
+      self.status.setLoadingData(false)
       error "error fetching activity entries: ", response.error
       return
 
@@ -230,37 +217,64 @@ QtObject:
 
     self.currentActivityFilter.types = types
 
-  proc startTimestampChanged*(self: Controller) {.signal.}
-
-  proc getOldestActivityTimestamp(self: Controller): int {.slot.} =
-    let resJson = backend_activity.getOldestActivityTimestamp(self.addresses)
-    if resJson.error != nil or resJson.result.kind != JInt:
-      error "error fetching oldest activity timestamp: ", resJson.error, ", ", resJson.result.kind
-      return
-
-    return resJson.result.getInt()
-
   # Call this method on every data update (ideally only if updates are before the last timestamp retrieved)
   # This depends on self.addresses being set, call on every address change
   proc updateStartTimestamp*(self: Controller) {.slot.} =
-    self.startTimestamp = self.getOldestActivityTimestamp()
-    self.startTimestampChanged()
+    self.status.setLoadingStartTimestamp(true)
+
+    let resJson = backend_activity.getOldestActivityTimestampAsync(self.addresses)
+    if resJson.error != nil:
+      self.status.setLoadingStartTimestamp(false)
+      error "error requesting oldest activity timestamp: ", resJson.error
+      return
+
+  proc setupEventHandlers(self: Controller) =
+    self.eventsHandler.onFilteringDone(proc (jsonObj: JsonNode) =
+      self.processResponse(jsonObj)
+    )
+
+    self.eventsHandler.onGetRecipientsDone(proc (jsonObj: JsonNode) =
+      defer: self.status.setLoadingRecipients(false)
+      let res = fromJson(jsonObj, backend_activity.GetRecipientsResponse)
+
+      if res.errorCode != ErrorCodeSuccess:
+        error "error fetching recipients: ", res.errorCode
+        return
+
+      self.recipientsModel.addAddresses(res.addresses, res.offset, res.hasMore)
+    )
+
+    self.eventsHandler.onGetOldestTimestampDone(proc (jsonObj: JsonNode) =
+      defer: self.status.setLoadingStartTimestamp(false)
+      let res = fromJson(jsonObj, backend_activity.GetOldestTimestampResponse)
+
+      if res.errorCode != ErrorCodeSuccess:
+        error "error fetching start timestamp: ", res.errorCode
+        return
+
+      self.status.setStartTimestamp(res.timestamp)
+    )
+
+    self.eventsHandler.onNewDataAvailable(proc () =
+      self.status.setNewDataAvailable(true)
+    )
 
   proc newController*(transactionsModule: transactions_module.AccessInterface,
                       currencyService: currency_service.Service,
                       tokenService: token_service.Service,
                       events: EventEmitter): Controller =
     new(result, delete)
+
     result.model = newModel()
     result.recipientsModel = newRecipientsModel()
     result.transactionsModule = transactionsModule
     result.tokenService = tokenService
     result.currentActivityFilter = backend_activity.getIncludeAllActivityFilter()
-    result.events = events
-    result.currencyService = currencyService
 
-    result.loadingData = false
-    result.errorCode = backend_activity.ErrorCode.ErrorCodeSuccess
+    result.eventsHandler = newEventsHandler(events)
+    result.status = newStatus()
+
+    result.currencyService = currencyService
 
     result.filterTokenCodes = initHashSet[string]()
 
@@ -269,22 +283,7 @@ QtObject:
 
     result.setup()
 
-    # Register and process events
-    let controller = result
-    proc handleEvent(e: Args) =
-      var data = WalletSignal(e)
-      case data.eventType:
-        of backend_activity.eventActivityFilteringDone:
-          let responseJson = parseJson(data.message)
-          if responseJson.kind != JObject:
-            error "unexpected json type", responseJson.kind
-            return
-
-          controller.processResponse(responseJson)
-        else:
-          discard
-
-    result.events.on(SignalType.Wallet.event, handleEvent)
+    result.setupEventHandlers()
 
   proc setFilterStatus*(self: Controller, statusesArrayJsonString: string) {.slot.} =
     let statusesJson = parseJson(statusesArrayJsonString)
@@ -344,6 +343,7 @@ QtObject:
 
   proc setFilterAddresses*(self: Controller, addresses: seq[string]) =
     self.addresses = addresses
+
     self.updateStartTimestamp()
 
   proc setFilterToAddresses*(self: Controller, addresses: seq[string]) =
@@ -354,49 +354,40 @@ QtObject:
 
     self.updateAssetsIdentities()
 
-  proc getLoadingData*(self: Controller): bool {.slot.} =
-    return self.loadingData
-
-  QtProperty[bool] loadingData:
-    read = getLoadingData
-    notify = loadingDataChanged
-
-  proc getErrorCode*(self: Controller): int {.slot.} =
-    return self.errorCode.int
-
-  QtProperty[int] errorCode:
-    read = getErrorCode
-    notify = errorCodeChanged
-
   proc updateRecipientsModel*(self: Controller) {.slot.} =
-    let response = backend_activity.getAllRecipients(0, FETCH_RECIPIENTS_BATCH_COUNT_DEFAULT)
-    if response.error != nil:
-      error "error fetching recipients: ", response.error
+    self.status.setLoadingRecipients(true)
+    let res = backend_activity.getRecipientsAsync(0, FETCH_RECIPIENTS_BATCH_COUNT_DEFAULT)
+    if res.error != nil or res.result.kind != JBool:
+      self.status.setLoadingRecipients(false)
+      error "error fetching recipients: ", res.error, "; kind ", res.result.kind
       return
 
-    if response.result["addresses"] != newJNull():
-      let result = json.to(response.result, backend_activity.GetAllRecipientsResponse)
-      self.recipientsModel.addAddresses(deduplicate(result.addresses), 0, result.hasMore)
+    # If the request was enqueued and already waiting for a response, we don't need to do anything
+    if res.result.getBool():
+      self.status.setLoadingRecipients(false)
 
   proc loadMoreRecipients(self: Controller) {.slot.} =
-    let response = backend_activity.getAllRecipients(self.recipientsModel.getCount(), FETCH_RECIPIENTS_BATCH_COUNT_DEFAULT)
-    if response.error != nil:
-      error "error fetching more recipient entries: ", response.error
+    self.status.setLoadingRecipients(true)
+    let res = backend_activity.getRecipientsAsync(self.recipientsModel.getCount(), FETCH_RECIPIENTS_BATCH_COUNT_DEFAULT)
+    if res.error != nil:
+      self.status.setLoadingRecipients(false)
+      error "error fetching more recipient entries: ", res.error
       return
 
-    if response.result["addresses"] != newJNull():
-      let result = json.to(response.result, backend_activity.GetAllRecipientsResponse)
-      self.recipientsModel.addAddresses(deduplicate(result.addresses), self.recipientsModel.getCount(), result.hasMore)
-
-  proc getStartTimestamp*(self: Controller): int {.slot.} =
-    return  if self.startTimestamp > 0:
-              self.startTimestamp
-            else:
-              int(times.parse("2000-01-01", "yyyy-MM-dd").toTime().toUnix())
-
-  QtProperty[int] startTimestamp:
-    read = getStartTimestamp
-    notify = startTimestampChanged
+    # If the request was enqueued and waiting for an answer, we don't need to do anything
+    if res.result.getBool():
+      self.status.setLoadingRecipients(false)
 
   proc updateFilterBase(self: Controller) {.slot.} =
     self.updateStartTimestamp()
+
+  proc getStatus*(self: Controller): QVariant {.slot.} =
+    return newQVariant(self.status)
+
+  QtProperty[QVariant] status:
+    read = getStatus
+
+  proc globalFilterChanged*(self: Controller, addresses: seq[string], chainIds: seq[int]) = 
+    self.setFilterAddresses(addresses)
+    self.setFilterChains(chainIds)
+    self.updateFilter()

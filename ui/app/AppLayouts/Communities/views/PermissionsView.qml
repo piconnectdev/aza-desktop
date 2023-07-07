@@ -5,8 +5,10 @@ import StatusQ.Core 0.1
 
 import SortFilterProxyModel 0.2
 import shared.popups 1.0
+import utils 1.0
 
 import AppLayouts.Communities.controls 1.0
+import AppLayouts.Communities.panels 1.0
 
 StatusScrollView {
     id: root
@@ -16,7 +18,7 @@ StatusScrollView {
     required property var collectiblesModel
     required property var channelsModel
 
-    // id, name, image, color, owner properties expected
+    // id, name, image, color, owner, admin properties expected
     required property var communityDetails
 
     property int viewWidth: 560 // by design
@@ -24,6 +26,11 @@ StatusScrollView {
     signal editPermissionRequested(int index)
     signal duplicatePermissionRequested(int index)
     signal removePermissionRequested(int index)
+
+    readonly property alias count: repeater.count
+
+    padding: 0
+    topPadding: count ? 16 : 0
 
     QtObject {
         id: d
@@ -48,7 +55,24 @@ StatusScrollView {
             }
         }
 
+        IntroPanel {
+            Layout.fillWidth: true
+
+            visible: root.count === 0
+
+            image: Style.png("community/permissions2_3")
+            title: qsTr("Permissions")
+            subtitle: qsTr("You can manage your community by creating and issuing membership and access permissions")
+            checkersModel: [
+                qsTr("Give individual members access to private channels"),
+                qsTr("Monetise your community with subscriptions and fees"),
+                qsTr("Require holding a token or NFT to obtain exclusive membership rights")
+            ]
+        }
+
         Repeater {
+            id: repeater
+
             model: root.permissionsModel
 
             delegate: PermissionItem {
@@ -73,7 +97,7 @@ StatusScrollView {
                                    ? channelsSelectionModel : communityItemModel
                 isPrivate: model.isPrivate
 
-                showButtons: root.communityDetails.owner
+                showButtons: root.communityDetails.owner || (root.communityDetails.admin && model.permissionType !== PermissionTypes.Type.Admin)
 
                 onEditClicked: root.editPermissionRequested(model.index)
                 onDuplicateClicked: root.duplicatePermissionRequested(model.index)

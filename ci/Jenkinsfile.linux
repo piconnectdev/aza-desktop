@@ -5,10 +5,10 @@ def isPRBuild = utils.isPRBuild()
 
 pipeline {
   agent {
-    /* Necessary image with Ubuntu 18.04 for older Glibc. */
+    /* Necessary image with Ubuntu 20.04 for older Glibc. */
     docker {
       label 'linux'
-      image 'statusteam/nim-status-client-build:1.2.2-qt5.15.2'
+      image 'statusteam/nim-status-client-build:1.3.0-qt5.15.2'
       /* allows jenkins use cat and mounts '/dev/fuse' for linuxdeployqt */
       args '--entrypoint="" --cap-add SYS_ADMIN --security-opt apparmor:unconfined --device /dev/fuse'
     }
@@ -79,6 +79,11 @@ pipeline {
     }
 
     stage('Client') {
+      environment {
+        /* Hack-fix for wrong config path location causing:
+         * Error: unhandled exception: Read-only file system */
+        RESOURCES_LAYOUT = '-d:production'
+      }
       steps { script {
         /* Temporary hack-fix for failing Linux builds:
          * https://github.com/status-im/infra-ci/issues/88 */

@@ -42,6 +42,7 @@ const SIGNAL_TRANSACTIONS_LOADED* = "transactionsLoaded"
 const SIGNAL_TRANSACTION_SENT* = "transactionSent"
 const SIGNAL_SUGGESTED_ROUTES_READY* = "suggestedRoutesReady"
 const SIGNAL_TRANSACTION_LOADING_COMPLETED_FOR_ALL_NETWORKS* = "transactionsLoadingCompleteForAllNetworks"
+# TODO: soon to be removed with old transactions module
 const SIGNAL_HISTORY_FETCHING* = "historyFetching"
 const SIGNAL_HISTORY_READY* = "historyReady"
 const SIGNAL_HISTORY_NON_ARCHIVAL_NODE* = "historyNonArchivalNode"
@@ -148,15 +149,13 @@ QtObject:
     self.events.on(SignalType.Wallet.event) do(e:Args):
       var data = WalletSignal(e)
       case data.eventType:
-        of "recent-history-fetching":
-          self.events.emit(SIGNAL_HISTORY_FETCHING, HistoryArgs(addresses: data.accounts))
-        of "recent-history-ready":
+        of transactions.EventRecentHistoryReady:
           for account in data.accounts:
             self.loadTransactions(account, stint.fromHex(Uint256, "0x0"))
           self.events.emit(SIGNAL_HISTORY_READY, HistoryArgs(addresses: data.accounts))
-        of "non-archival-node-detected":
+        of transactions.EventNonArchivalNodeDetected:
           self.events.emit(SIGNAL_HISTORY_NON_ARCHIVAL_NODE, Args())
-        of "fetching-history-error":
+        of transactions.EventFetchingHistoryError:
           self.events.emit(SIGNAL_HISTORY_ERROR, Args())
 
   proc getPendingTransactions*(self: Service): seq[TransactionDto] =
@@ -259,7 +258,7 @@ QtObject:
     let allTxLoaded = historyData["allTxLoaded"].getBool
     var transactions: seq[TransactionDto] = @[]
     var collectibles: seq[CollectibleDto] = @[]
-     
+
     for tx in historyData["history"].getElems():
       let dto = tx.toTransactionDto()
       self.allTransactions.mgetOrPut(address, initTable[string, TransactionDto]())[dto.txHash] = dto

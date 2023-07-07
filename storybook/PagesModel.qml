@@ -174,6 +174,14 @@ ListModel {
         section: "Panels"
     }
     ListElement {
+        title: "PrivilegedTokenArtworkPanel"
+        section: "Panels"
+    }
+    ListElement {
+        title: "EditSettingsPanel"
+        section: "Panels"
+    }
+    ListElement {
          title: "BurnTokensPopup"
          section: "Popups"
     }
@@ -350,6 +358,10 @@ ListModel {
          section: "Components"
     }
     ListElement {
+         title: "SettingsPageHeader"
+         section: "Components"
+    }
+    ListElement {
          title: "BrowserSettings"
          section: "Settings"
     }
@@ -359,6 +371,10 @@ ListModel {
     }
     ListElement {
         title: "ProfileSocialLinksPanel"
+        section: "Panels"
+    }
+    ListElement {
+        title: "IntroPanel"
         section: "Panels"
     }
     ListElement {

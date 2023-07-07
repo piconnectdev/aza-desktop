@@ -77,9 +77,9 @@ communitySettings_Community_LetterIdenticon = {"container": communitySettings_Co
 
 # Community Edit:
 communitySettings_EditCommunity_ScrollView = {"container": statusDesktop_mainWindow, "objectName": "communityEditPanelScrollView", "type": "StatusScrollView", "visible": True}
-communitySettings_EditCommunity_Name_Input = {"container": communitySettings_EditCommunity_ScrollView, "objectName": "editCommunityNameInput", "type": "TextEdit",  "visible": True}
-communitySettings_EditCommunity_Description_Input = {"container": communitySettings_EditCommunity_ScrollView, "objectName": "editCommunityDescriptionInput", "type": "TextEdit",  "visible": True}
-communitySettings_EditCommunity_ColorPicker_Button = {"container": communitySettings_EditCommunity_ScrollView, "objectName": "editCommunityColorPicker", "type": "ColorPicker", "visible": True}
+communitySettings_EditCommunity_Name_Input = {"container": communitySettings_EditCommunity_ScrollView, "objectName": "communityNameInput", "type": "TextEdit",  "visible": True}
+communitySettings_EditCommunity_Description_Input = {"container": communitySettings_EditCommunity_ScrollView, "objectName": "communityDescriptionInput", "type": "TextEdit",  "visible": True}
+communitySettings_EditCommunity_ColorPicker_Button = {"container": communitySettings_EditCommunity_ScrollView, "objectName": "communityColorPicker", "type": "ColorPicker", "visible": True}
 
 # Community color popup:
 communitySettings_ColorPanel_HexColor_Input = {"container": statusDesktop_mainWindow_overlay, "objectName": "communityColorPanelHexInput", "type": "TextEdit",  "visible": True}
@@ -102,4 +102,4 @@ community_welcome_screen_subtitle = {"container": statusDesktop_mainWindow, "obj
 community_welcome_screen_checkList_element1 = {"container": statusDesktop_mainWindow, "objectName": "checkListText_0", "type": "StatusBaseText", "visible": True}
 community_welcome_screen_checkList_element2 = {"container": statusDesktop_mainWindow, "objectName": "checkListText_1", "type": "StatusBaseText", "visible": True}
 community_welcome_screen_checkList_element3 = {"container": statusDesktop_mainWindow, "objectName": "checkListText_2", "type": "StatusBaseText", "visible": True}
-community_welcome_screen_add_new_item = {"container": statusDesktop_mainWindow, "objectName": "primaryHeaderButton", "type": "StatusButton", "visible": True}
+community_welcome_screen_add_new_item = {"container": statusDesktop_mainWindow, "objectName": "addNewItemButton", "type": "StatusButton", "visible": True}
