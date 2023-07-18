@@ -109,9 +109,7 @@ proc blockContact*(self: Controller, publicKey: string) =
   self.contactsService.blockContact(publicKey)
 
 proc removeContact*(self: Controller, publicKey: string) =
-  let response = self.contactsService.removeContact(publicKey)
-  # TODO: segfault if using SIGNAL_CHAT_REQUEST_UPDATE_AFTER_SEND
-  discard self.chatService.processMessageUpdateAfterSend(response)
+  self.contactsService.removeContact(publicKey)
 
 proc changeContactNickname*(self: Controller, publicKey: string, nickname: string) =
   self.contactsService.changeContactNickname(publicKey, nickname)
@@ -166,3 +164,12 @@ proc getStatusForContactWithId*(self: Controller, publicKey: string): StatusUpda
 
 proc requestContactInfo*(self: Controller, publicKey: string) =
   self.contactsService.requestContactInfo(publicKey)
+
+proc shareUserUrlWithData*(self: Controller, pubkey: string): string =
+  self.contactsService.shareUserUrlWithData(pubkey)
+
+proc shareUserUrlWithChatKey*(self: Controller, pubkey: string): string =
+  self.contactsService.shareUserUrlWithChatKey(pubkey)
+
+proc shareUserUrlWithENS*(self: Controller, pubkey: string): string =
+  self.contactsService.shareUserUrlWithENS(pubkey)

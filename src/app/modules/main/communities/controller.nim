@@ -90,6 +90,10 @@ proc init*(self: Controller) =
     let args = CommunityRequestArgs(e)
     self.delegate.communityAccessRequested(args.communityRequest.communityId)
 
+  self.events.on(SIGNAL_COMMUNITY_MY_REQUEST_FAILED) do(e:Args):
+    let args = CommunityRequestFailedArgs(e)
+    self.delegate.communityAccessFailed(args.communityId, args.error)
+
   self.events.on(SIGNAL_DISCORD_CATEGORIES_AND_CHANNELS_EXTRACTED) do(e:Args):
     let args = DiscordCategoriesAndChannelsArgs(e)
     self.delegate.discordCategoriesAndChannelsExtracted(args.categories, args.channels, args.oldestMessageTimestamp, args.errors, args.errorsCount)
@@ -256,3 +260,15 @@ proc getNetwork*(self:Controller, chainId: int): NetworkDto =
 
 proc getTokenList*(self: Controller): seq[TokenDto] =
   return self.tokenService.getTokenList()
+
+proc shareCommunityUrlWithChatKey*(self: Controller, communityId: string): string =
+  return self.communityService.shareCommunityUrlWithChatKey(communityId)
+
+proc shareCommunityUrlWithData*(self: Controller, communityId: string): string =
+  return self.communityService.shareCommunityUrlWithData(communityId)
+
+proc shareCommunityChannelUrlWithChatKey*(self: Controller, communityId: string, chatId: string): string =
+  return self.communityService.shareCommunityChannelUrlWithChatKey(communityId, chatId)
+
+proc shareCommunityChannelUrlWithData*(self: Controller, communityId: string, chatId: string): string =
+  return self.communityService.shareCommunityChannelUrlWithData(communityId, chatId)

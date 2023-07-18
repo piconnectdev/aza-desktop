@@ -133,7 +133,7 @@ proc delete*(self: Controller) =
 proc init*(self: Controller) =
   var handlerId = self.events.onWithUUID(SignalType.NodeLogin.event) do(e:Args):
     let signal = NodeSignal(e)
-    self.delegate.onNodeLogin(signal.event.error)
+    self.delegate.onNodeLogin(signal.error)
     self.cleanTmpData()
   self.connectionIds.add(handlerId)
 
@@ -149,7 +149,7 @@ proc init*(self: Controller) =
   self.connectionIds.add(handlerId)
 
   handlerId = self.events.onWithUUID(SIGNAL_KEYCARD_RESPONSE) do(e: Args):
-    let args = KeycardArgs(e)
+    let args = KeycardLibArgs(e)
     self.delegate.onKeycardResponse(args.flowType, args.flowEvent)
   self.connectionIds.add(handlerId)
 
@@ -463,9 +463,9 @@ proc loginLocalPairingAccount*(self: Controller) =
     kcEvent.encryptionKey.publicKey = self.localPairingStatus.password
     discard self.accountsService.loginAccountKeycard(self.localPairingStatus.account, kcEvent)
 
-proc loginAccountKeycard*(self: Controller, storeToKeychainValue: string, syncWalletAfterLogin = false) =
-  if syncWalletAfterLogin:
-    self.syncKeycardBasedOnAppWalletStateAfterLogin()
+proc loginAccountKeycard*(self: Controller, storeToKeychainValue: string, keycardReplacement = false) =
+  if keycardReplacement:
+    self.delegate.applyKeycardReplacementAfterLogin()
   singletonInstance.localAccountSettings.setStoreToKeychainValue(storeToKeychainValue)
   self.delegate.moveToLoadingAppState()
   let selAcc = self.getSelectedLoginAccount()

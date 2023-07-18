@@ -46,6 +46,10 @@ type
   CommunityRequestArgs* = ref object of Args
     communityRequest*: CommunityMembershipRequestDto
 
+  CommunityRequestFailedArgs* = ref object of Args
+    communityId*: string
+    error*: string
+
   CommunityChatOrderArgs* = ref object of Args
     communityId*: string
     chat*: ChatDto
@@ -122,6 +126,7 @@ const SIGNAL_COMMUNITY_DATA_LOADED* = "communityDataLoaded"
 const SIGNAL_COMMUNITY_JOINED* = "communityJoined"
 const SIGNAL_COMMUNITY_SPECTATED* = "communitySpectated"
 const SIGNAL_COMMUNITY_MY_REQUEST_ADDED* = "communityMyRequestAdded"
+const SIGNAL_COMMUNITY_MY_REQUEST_FAILED* = "communityMyRequestFailed"
 const SIGNAL_COMMUNITY_LEFT* = "communityLeft"
 const SIGNAL_COMMUNITY_CREATED* = "communityCreated"
 const SIGNAL_COMMUNITY_ADDED* = "communityAdded"
@@ -1353,7 +1358,7 @@ QtObject:
 
   proc asyncCommunityInfoLoaded*(self: Service, communityIdAndRpcResponse: string) {.slot.} =
     let rpcResponseObj = communityIdAndRpcResponse.parseJson
-    if (rpcResponseObj{"error"}.kind != JNull):
+    if rpcResponseObj{"error"}.kind != JNull and rpcResponseObj{"error"}.getStr != "":
       error "Error requesting community info", msg = rpcResponseObj{"error"}
       return
 
@@ -1387,7 +1392,7 @@ QtObject:
       let rpcResponseObj = rpcResponse.parseJson
       if rpcResponseObj{"error"}.kind != JNull and rpcResponseObj{"error"}.getStr != "":
         let error = Json.decode($rpcResponseObj["error"], RpcError)
-        error "Error requesting community info", msg = error.message
+        error "Error checking permissions to join", msg = error.message
         return
 
       let communityId = rpcResponseObj{"communityId"}.getStr()
@@ -1398,7 +1403,7 @@ QtObject:
       error "error checking permissions to join: ", errMsg
 
   proc asyncRequestToJoinCommunity*(self: Service, communityId: string, ensName: string, password: string,
-      addressesToShare: seq[string]) =
+      addressesToShare: seq[string], airdropAddress: string) =
     try:
       let arg = AsyncRequestToJoinCommunityTaskArg(
         tptr: cast[ByteAddress](asyncRequestToJoinCommunityTask),
@@ -1408,27 +1413,30 @@ QtObject:
         ensName: ensName,
         password: password,
         addressesToShare: addressesToShare,
+        airdropAddress: airdropAddress,
       )
       self.threadpool.start(arg)
     except Exception as e:
       error "Error request to join community", msg = e.msg 
     
   proc onAsyncRequestToJoinCommunityDone*(self: Service, communityIdAndRpcResponse: string) {.slot.} =
+    let rpcResponseObj = communityIdAndRpcResponse.parseJson
     try:
-      let rpcResponseObj = communityIdAndRpcResponse.parseJson
-      if (rpcResponseObj{"response"}{"error"}.kind != JNull):
-        let error = Json.decode($rpcResponseObj["response"]["error"], RpcError)
-        error "Error requesting community info", msg = error.message
-        return
+      if (rpcResponseObj{"error"}.kind != JNull and rpcResponseObj{"error"}.getStr != ""):
+        raise newException(CatchableError, rpcResponseObj{"error"}.getStr)
 
       let rpcResponse = Json.decode($rpcResponseObj["response"], RpcResponse[JsonNode])
       self.activityCenterService.parseActivityCenterResponse(rpcResponse)
       
       if not self.processRequestsToJoinCommunity(rpcResponse.result):
-        error "error: ", procName="onAsyncRequestToJoinCommunityDone", errDesription = "no 'requestsToJoinCommunity' key in response"
+        raise newException(CatchableError, "no 'requestsToJoinCommunity' key in response")
 
     except Exception as e:
       error "Error requesting to join the community", msg = e.msg
+      self.events.emit(SIGNAL_COMMUNITY_MY_REQUEST_FAILED, CommunityRequestFailedArgs(
+        communityId: rpcResponseObj["communityId"].getStr,
+        error: e.msg
+      ))
 
   proc asyncAcceptRequestToJoinCommunity*(self: Service, communityId: string, requestId: string) =
     try:
@@ -1497,7 +1505,7 @@ QtObject:
     try:
       let rpcResponseObj = response.parseJson
       if (rpcResponseObj{"error"}.kind != JNull and rpcResponseObj{"error"}.getStr != ""):
-        error "Error requesting community info", msg = rpcResponseObj{"error"}.getStr
+        error "Error loading curated communities", msg = rpcResponseObj{"error"}.getStr
         self.events.emit(SIGNAL_CURATED_COMMUNITIES_LOADING_FAILED, Args())
         return
       let curatedCommunities = parseCuratedCommunities(rpcResponseObj["response"]["result"])
@@ -1857,3 +1865,30 @@ QtObject:
     let community = self.getCommunityById(communityId)
     return community.channelPermissions.channels.hasKey(chatId) and not community.channelPermissions.channels[chatId].viewAndPostPermissions.satisfied
 
+  proc shareCommunityUrlWithChatKey*(self: Service, communityId: string): string =
+    try:
+      let response = status_go.shareCommunityUrlWithChatKey(communityId)
+      return response.result.getStr
+    except Exception as e:
+        error "error while getting community url with chat key", msg = e.msg
+
+  proc shareCommunityUrlWithData*(self: Service, communityId: string): string =
+    try:
+      let response = status_go.shareCommunityUrlWithData(communityId)
+      return response.result.getStr
+    except Exception as e:
+        error "error while getting community url with data", msg = e.msg
+
+  proc shareCommunityChannelUrlWithChatKey*(self: Service, communityId: string, chatId: string): string =
+    try:
+      let response = status_go.shareCommunityChannelUrlWithChatKey(communityId, chatId)
+      return response.result.getStr
+    except Exception as e:
+        error "error while getting community channel url with chat key ", msg = e.msg
+
+  proc shareCommunityChannelUrlWithData*(self: Service, communityId: string, chatId: string): string =
+    try:
+      let response = status_go.shareCommunityChannelUrlWithData(communityId, chatId)
+      return response.result.getStr
+    except Exception as e:
+        error "error while getting community channel url with data ", msg = e.msg

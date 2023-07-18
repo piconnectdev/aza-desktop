@@ -110,7 +110,7 @@ QtObject:
       let response = backend.getTransfersForIdentities(transactionIdentities)
       let res = response.result
       if response.error != nil or res.kind != JArray or res.len == 0:
-        raise newException(Defect, "failed fetching transaction details")
+        error "failed fetching transaction details; err: ", response.error, ", kind: ", res.kind, ", res.len: ", res.len
 
       let transactionsDtos = res.getElems().map(x => x.toTransactionDto())
       let trItems = self.transactionsModule.transactionsToItems(transactionsDtos, @[])
@@ -122,7 +122,7 @@ QtObject:
       let response = backend.getPendingTransactionsForIdentities(pendingTransactionIdentities)
       let res = response.result
       if response.error != nil or res.kind != JArray or res.len == 0:
-        raise newException(Defect, "failed fetching pending transactions details")
+        error "failed fetching pending transactions details; err: ", response.error, ", kind: ", res.kind, ", res.len: ", res.len
 
       let pendingTransactionsDtos = res.getElems().map(x => x.toPendingTransactionDto())
       let trItems = self.transactionsModule.transactionsToItems(pendingTransactionsDtos, @[])
@@ -174,17 +174,19 @@ QtObject:
     if res.errorCode != ErrorCodeSuccess:
       error "error fetching activity entries: ", res.errorCode
       return
-    
-    try: 
-      let entries = self.backendToPresentation(res.activities)
-      self.model.setEntries(entries, res.offset, res.hasMore)
-    except Exception as e:
-      error "Error converting activity entries: ", e.msg
+
+    let entries = self.backendToPresentation(res.activities)
+    self.model.setEntries(entries, res.offset, res.hasMore)
+
+    if len(entries) > 0:
+      self.eventsHandler.updateRelevantTimestamp(entries[len(entries) - 1].getTimestamp())
 
   proc updateFilter*(self: Controller) {.slot.} =
     self.status.setLoadingData(true)
+    self.status.setIsFilterDirty(false)
     self.model.resetModel(@[])
     self.eventsHandler.updateSubscribedAddresses(self.addresses)
+    self.eventsHandler.updateSubscribedChainIDs(self.chainIds)
     self.status.setNewDataAvailable(false)
 
     let response = backend_activity.filterActivityAsync(self.addresses, seq[backend_activity.ChainId](self.chainIds), self.currentActivityFilter, 0, FETCH_BATCH_COUNT_DEFAULT)
@@ -388,6 +390,8 @@ QtObject:
     read = getStatus
 
   proc globalFilterChanged*(self: Controller, addresses: seq[string], chainIds: seq[int]) = 
+    if (self.addresses == addresses and self.chainIds == chainIds):
+      return
     self.setFilterAddresses(addresses)
     self.setFilterChains(chainIds)
-    self.updateFilter()
+    self.status.setIsFilterDirty(true)

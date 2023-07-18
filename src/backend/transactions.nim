@@ -37,6 +37,10 @@ const EventRecentHistoryReady*: string = "recent-history-ready"
 const EventFetchingHistoryError*: string = "fetching-history-error"
 const EventNonArchivalNodeDetected*: string = "non-archival-node-detected"
 
+# Mirrors the pending transfer event from status-go, status-go/services/wallet/transfer/transaction.go
+const EventPendingTransactionUpdate*: string = "pending-transaction-update"
+const EventMTTransactionUpdate*: string = "multi-transaction-update"
+
 proc getTransactionByHash*(chainId: int, hash: string): RpcResponse[JsonNode] {.raises: [Exception].} =
   core.callPrivateRPCWithChainId("eth_getTransactionByHash", chainId, %* [hash])
 
@@ -50,29 +54,8 @@ proc getTransfersByAddress*(chainId: int, address: string, toBlock: Uint256, lim
 
   core.callPrivateRPC("wallet_getTransfersByAddressAndChainID", %* [chainId, address, toBlockParsed, limitAsHexWithoutLeadingZeros, loadMore])
 
-proc trackPendingTransaction*(hash: string, fromAddress: string, toAddress: string, trxType: string, data: string, chainId: int):
-  RpcResponse[JsonNode] {.raises: [Exception].} =
-  let payload = %* [{
-    "hash": hash,
-    "from": fromAddress,
-    "to": toAddress,
-    "type": trxType,
-    "additionalData": data,
-    "data": "",
-    "value": 0,
-    "timestamp": 0,
-    "gasPrice": 0,
-    "gasLimit": 0,
-    "network_id": chainId
-  }]
-  core.callPrivateRPC("wallet_storePendingTransaction", payload)
-
 proc getTransactionReceipt*(chainId: int, transactionHash: string): RpcResponse[JsonNode] {.raises: [Exception].} =
   core.callPrivateRPCWithChainId("eth_getTransactionReceipt", chainId, %* [transactionHash])
-
-proc deletePendingTransaction*(chainId: int, transactionHash: string): RpcResponse[JsonNode] {.raises: [Exception].} =
-  let payload = %* [chainId, transactionHash]
-  result = core.callPrivateRPC("wallet_deletePendingTransactionByChainID", payload)
 
 proc fetchCryptoServices*(): RpcResponse[JsonNode] {.raises: [Exception].} =
   result = core.callPrivateRPC("wallet_getCryptoOnRamps", %* [])

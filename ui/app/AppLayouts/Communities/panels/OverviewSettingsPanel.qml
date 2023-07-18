@@ -35,6 +35,7 @@ StackLayout {
 
     property bool editable: false
     property bool owned: false
+    property int loginType: Constants.LoginType.Password
 
     function navigateBack() {
         if (editSettingsPanelLoader.item.dirty)
@@ -52,38 +53,29 @@ StackLayout {
     clip: true
 
     SettingsPage {
-        title: qsTr("Overview")
 
         rightPadding: 64
         bottomPadding: 64
-
+        topPadding: 0
+        header: null
         contentItem: ColumnLayout {
             spacing: 16
-
             RowLayout {
                 Layout.fillWidth: true
 
                 spacing: 16
 
-                StatusSmartIdenticon {
-                    objectName: "communityOverviewSettingsPanelIdenticon"
-                    name: root.name
-                    asset.width: 80
-                    asset.height: 80
-                    asset.color: root.color
-                    asset.letterSize: width / 2.4
-                    asset.name: root.logoImageData
-                    asset.isImage: true
-                }
-
                 ColumnLayout {
                     Layout.fillWidth: true
+                    Layout.maximumWidth: 747
 
                     StatusBaseText {
                         id: nameText
                         objectName: "communityOverviewSettingsCommunityName"
                         Layout.fillWidth: true
-                        font.pixelSize: 24
+                        font.pixelSize: 28
+                        font.bold: true
+                        font.letterSpacing: -0.4
                         color: Theme.palette.directColor1
                         wrapMode: Text.WordWrap
                         text: root.name
@@ -100,11 +92,16 @@ StackLayout {
                     }
                 }
 
+                Item { Layout.fillWidth: true }
+
                 StatusButton {
+                    Layout.preferredHeight: 38
+                    Layout.alignment: Qt.AlignTop
                     objectName: "communityOverviewSettingsEditCommunityButton"
                     visible: root.editable
                     text: qsTr("Edit Community")
                     onClicked: root.currentIndex = 1
+                    size: StatusBaseButton.Size.Small
                 }
             }
 
@@ -138,40 +135,19 @@ StackLayout {
             Item {
                 Layout.fillHeight: true
             }
+        }
 
-            RowLayout {
-                BannerPanel {
-                    objectName: "invitePeopleBanner"
-                    text: qsTr("Welcome to your community!")
-                    buttonText: qsTr("Invite new people")
-                    icon.name: "invite-users"
-                    onButtonClicked: root.inviteNewPeopleClicked()
-                }
-                Item {
-                   Layout.fillWidth: true
-                }
-                BannerPanel {
-                    objectName: "airdropBanner"
-                    visible: root.owned
-                    text: qsTr("Try an airdrop to reward your community for engagement!")
-                    buttonText: qsTr("Airdrop Tokens")
-                    icon.name: "airdrop"
-                    onButtonClicked: root.airdropTokensClicked()
-                }
-
-                Item {
-                   Layout.fillWidth: true
-                }
-
-                BannerPanel {
-                    objectName: "backUpBanner"
-                    visible: root.owned
-                    text: qsTr("Back up community key")
-                    buttonText: qsTr("Back up")
-                    icon.name: "objects"
-                    onButtonClicked: root.backUpClicked()
-                }
-            }
+        footer: OverviewSettingsFooter {
+            rightPadding: 64
+            leftPadding: 64
+            bottomPadding: 50
+            loginType: root.loginType
+            communityName: root.name
+            //TODO connect to backend
+            isControlNode: root.owned
+            onPrimaryButtonClicked: isControlNode = !isControlNode
+            //TODO update once the domain changes
+            onSecondaryButtonClicked: Global.openLink(Constants.statusHelpLinkPrefix + "en/status-communities/about-the-control-node-in-status-communities")
         }
     }
 

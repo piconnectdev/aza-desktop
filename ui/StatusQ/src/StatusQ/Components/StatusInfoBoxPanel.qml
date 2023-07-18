@@ -6,53 +6,63 @@ import StatusQ.Controls 0.1
 import StatusQ.Core 0.1
 import StatusQ.Core.Theme 0.1
 
-import utils 1.0
 
 Control {
     id: root
 
-    signal airdropRequested
+    property alias title: titleComponent.text
+    property alias text: textComponent.text
+    property alias buttonText: button.text
+    property alias buttonVisible: button.visible
+
+    signal clicked
 
     verticalPadding: 40
     horizontalPadding: 56
 
     background: Rectangle {
         color: Theme.palette.statusListItem.backgroundColor
-        radius: Style.current.radius
+        radius: 8
         border.color: Theme.palette.baseColor2
     }
 
     contentItem: ColumnLayout {
         StatusBaseText {
+            id: titleComponent
+
             Layout.fillWidth: true
 
             wrapMode: Text.Wrap
-            font.pixelSize: Style.current.primaryTextFontSize + 2
+            font.pixelSize: 17
             font.weight: Font.Bold
 
             horizontalAlignment: Text.AlignHCenter
             color: Theme.palette.directColor1
-            text: qsTr("No hodlers just yet")
         }
 
         StatusBaseText {
+            id: textComponent
+
             Layout.fillWidth: true
-            Layout.topMargin: Style.current.halfPadding
-            Layout.bottomMargin: Style.current.padding
+            Layout.topMargin: 8
+            Layout.bottomMargin: 16
 
             wrapMode: Text.Wrap
-            font.pixelSize: Style.current.primaryTextFontSize
+            font.pixelSize: 15
+            lineHeight: 1.2
 
             horizontalAlignment: Text.AlignHCenter
             color: Theme.palette.baseColor1
-            text: qsTr("You can Airdrop tokens to deserving Community members or to give individuals token-based permissions.")
         }
 
         StatusButton {
-            Layout.alignment: Qt.AlignHCenter
-            text: qsTr("Airdrop")
+            id: button
 
-            onClicked: root.airdropRequested()
+            Layout.alignment: Qt.AlignHCenter
+
+            visible: true
+
+            onClicked: root.clicked()
         }
     }
 }

@@ -67,7 +67,6 @@ class CommunitySettingsComponents(Enum):
     BACK_TO_COMMUNITY_BUTTON = "communitySettings_BackToCommunity_Button"
     COMMUNITY_NAME_TEXT = "communitySettings_CommunityName_Text"
     COMMUNITY_DESCRIPTION_TEXT = "communitySettings_CommunityDescription_Text"
-    COMMUNITY_LETTER_IDENTICON = "communitySettings_Community_LetterIdenticon"
     OVERVIEW_BUTTON = "communitySettingsView_NavigationListItem_Overview"
     MEMBERS_BUTTON = "communitySettings_Members_NavigationListItem"
     PERMISSIONS_BUTTON = "communitySettings_Permissions_NavigationListItem" 
@@ -80,7 +79,7 @@ class CommunitySettingsComponents(Enum):
 class CommunityWelcomeScreenComponents(Enum):
     # Constants definitions:
     PERMISSIONS_OPTION = "Permissions"
-    TOKENS_OPTION = "Mint Tokens"
+    TOKENS_OPTION = "Tokens"
     AIRDROPS_OPTION = "Airdrops"
     WELCOME_SCREEN_TITLE_OPTION_AIRDROPS = "Airdrop community tokens"
     WELCOME_SCREEN_TITLE_OPTION_PERMISSIONS = "Permissions"
@@ -111,14 +110,7 @@ class CreateOrEditCommunityCategoryPopup(Enum):
     COMMUNITY_CATEGORY_LIST: str = "createOrEditCommunityCategoryChannelList_ListView"
     COMMUNITY_CATEGORY_LIST_ITEM_PLACEHOLDER: str = "createOrEditCommunityCategoryChannelList_ListItem_Placeholder"
     COMMUNITY_CATEGORY_BUTTON: str = "createOrEditCommunityCategoryBtn_StatusButton"
-    MODAL_CLOSE_BUTTON = "modal_Close_Button"
-
-class CommunityOverviewScreenComponents(Enum):
-    # Constants definitions: 
-    COMMUNITY_PRIVATE_KEY_LENGHT_UI = 35 # length of community PK on the Transfer Ownership popup
-    # Components:
-    COMMUNITY_OVERVIEW_BACK_UP_BUTTON ="communityOverview_Back_up_StatusButton"
-    COMMUNITY_OVERVIEW_AIRDROP_TOKENS_BUTTON="communityOverview_Airdrop_Tokens_StatusButton"           
+    MODAL_CLOSE_BUTTON = "modal_Close_Button"      
 
 class StatusCommunityScreen:
 
@@ -196,11 +188,7 @@ class StatusCommunityScreen:
         verify_text_matching(CommunitySettingsComponents.COMMUNITY_NAME_TEXT.value, communityName)
     
     def verify_community_overview_description(self, communityDescription: str):
-        verify_text_matching(CommunitySettingsComponents.COMMUNITY_DESCRIPTION_TEXT.value, communityDescription)
-        
-    def verify_community_overview_color(self, communityColor: str):
-        obj = get_obj(CommunitySettingsComponents.COMMUNITY_LETTER_IDENTICON.value)
-        expect_true(obj.color.name == communityColor, "Community color was not changed correctly")    
+        verify_text_matching(CommunitySettingsComponents.COMMUNITY_DESCRIPTION_TEXT.value, communityDescription) 
         
     def create_community_channel(self, communityChannelName: str, communityChannelDescription: str, method: str):
         if (method == CommunityCreateMethods.BOTTOM_MENU.value):
@@ -296,6 +284,7 @@ class StatusCommunityScreen:
     
     def open_edit_community_by_community_header(self):
         click_obj_by_name(CommunityScreenComponents.COMMUNITY_HEADER_BUTTON.value)
+        verify(is_loaded_visible_and_enabled(CommunitySettingsComponents.EDIT_COMMUNITY_BUTTON.value), "Edit community button is visible and enabled")
         click_obj_by_name(CommunitySettingsComponents.EDIT_COMMUNITY_BUTTON.value)
         
     def change_community_name(self, new_community_name: str):
@@ -571,22 +560,12 @@ class StatusCommunityScreen:
                 return False
             
     
-    def verify_action_button_enabled(self, option:str):
-        assert BaseElement(str(CommunityWelcomeScreenComponents.ADD_NEW_ITEM_BUTTON.value)).is_enabled
+    def verify_action_button_present(self, option:str, enabled: bool): 
+        button = BaseElement(str(CommunityWelcomeScreenComponents.ADD_NEW_ITEM_BUTTON.value))
+        if enabled:
+            assert button.is_enabled
+        else:
+            assert button.is_disabled
         button_title = get_obj(CommunityWelcomeScreenComponents.ADD_NEW_ITEM_BUTTON.value).text
         verify_equals(option, str(button_title))
-    
-    def verify_community_private_key(self):
-        Button(CommunityOverviewScreenComponents.COMMUNITY_OVERVIEW_BACK_UP_BUTTON.value).click()
-        transferOwnershipPopup = BackUpCommunityPrivateKeyPopup().wait_until_appears()
-        transferOwnershipPopup.copy_community_private_key()
-        community_private_key = transferOwnershipPopup.private_key
-        assert len(community_private_key) == (CommunityOverviewScreenComponents.COMMUNITY_PRIVATE_KEY_LENGHT_UI.value), f"Current key length: {len(community_private_key)}"
-        assert community_private_key.startswith("0x"), f"Current private key does not start with 0x: {community_private_key}"
-    
-    def open_airdrops_from_overview(self):
-        Button(CommunityOverviewScreenComponents.COMMUNITY_OVERVIEW_AIRDROP_TOKENS_BUTTON.value).click()
-        welcome_screen_title = get_obj(CommunityWelcomeScreenComponents.WELCOME_SCREEN_TITLE.value).text
-        ref_value = CommunityWelcomeScreenComponents.WELCOME_SCREEN_TITLE_OPTION_AIRDROPS.value
-        assert welcome_screen_title  == ref_value, f"Current screen title: {welcome_screen_title}, expected: {ref_value}"
                 

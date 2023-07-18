@@ -12,18 +12,28 @@ import AppLayouts.Communities.layouts 1.0
 import AppLayouts.Communities.popups 1.0
 import AppLayouts.Communities.views 1.0
 
+import shared.controls 1.0
+
 import utils 1.0
+import shared.popups 1.0
 import SortFilterProxyModel 0.2
 
 StackView {
     id: root
 
     // General properties:
-    property string communityName
+    required property bool isOwner
+    required property bool isTokenMasterOwner
+    required property bool isAdmin
+    required property string communityName
+    required property string communityLogo
+    required property color communityColor
+
     property int viewWidth: 560 // by design
 
     // Models:
     property var tokensModel
+    property var tokensModelWallet
     property var accounts // Expected roles: address, name, color, emoji, walletType
 
     // Transaction related properties:
@@ -69,30 +79,46 @@ StackView {
     function openNewTokenForm(isAssetView) {
         resetNavigation()
 
-        const properties = { isAssetView }
-        root.push(newTokenViewComponent, properties, StackView.Immediate)
+        if(d.isTokenOwnerDeployed) {
+            const properties = { isAssetView }
+            root.push(newTokenViewComponent, properties, StackView.Immediate)
+        } else {
+            root.push(ownerTokenViewComponent, StackView.Immediate)
+        }
     }
 
     property string previousPageName: depth > 1 ? qsTr("Back") : ""
+
+    QtObject {
+        id: d
+
+        readonly property bool isTokenOwnerDeployed: root.tokensModel.count > 0 // TODO: Checker to ensure owner token is deployed
+    }
 
     initialItem: SettingsPage {
         implicitWidth: 0
         title: qsTr("Tokens")
 
-        buttons: StatusButton {
-            objectName: "addNewItemButton"
+        buttons: DisabledTooltipButton {
+            readonly property bool isAdminOnly: root.isAdmin && !root.isOwner && !root.isTokenMasterOwner
+            readonly property bool buttonEnabled: (root.isOwner || root.isTokenMasterOwner) && d.isTokenOwnerDeployed
 
+            buttonType: DisabledTooltipButton.Normal
+            aliasedObjectName: "addNewItemButton"
             text: qsTr("Mint token")
-
+            enabled: isAdminOnly || buttonEnabled
+            interactive: buttonEnabled
             onClicked: root.push(newTokenViewComponent, StackView.Immediate)
+            tooltipText: qsTr("In order to mint, you must hodl the TokenMaster token for %1").arg(root.communityName)
         }
 
         contentItem: MintedTokensView {
             model: root.tokensModel
+            isOwner: root.isOwner
+            isAdmin: root.isAdmin
 
-            onItemClicked: {
-                root.push(tokenViewComponent, { tokenKey }, StackView.Immediate)
-            }
+            onItemClicked: root.push(tokenViewComponent, { tokenKey }, StackView.Immediate)
+            onMintOwnerTokenClicked: root.push(ownerTokenViewComponent, StackView.Immediate)
         }
     }
 
@@ -103,6 +129,24 @@ StackView {
     }
 
     // Mint tokens possible view contents:
+    Component {
+        id: ownerTokenViewComponent
+
+        SettingsPage {
+            id: ownerTokenPage
+
+            title: qsTr("Mint Owner token")
+
+            contentItem: OwnerTokenWelcomeView {
+                communityLogo: root.communityLogo
+                communityColor: root.communityColor
+                communityName: root.communityName
+
+                onNextClicked: root.push(newTokenViewComponent, StackView.Immediate) // TEMP: It will navigate to new token owner flow. Now, to current minting flow.
+            }
+        }
+    }
+
     Component {
         id: newTokenViewComponent
 
@@ -183,6 +227,7 @@ StackView {
                         allNetworks: root.allNetworks
                         accounts: root.accounts
                         tokensModel: root.tokensModel
+                        tokensModelWallet: root.tokensModelWallet
 
                         referenceName: newTokenPage.referenceName
                         referenceSymbol: newTokenPage.referenceSymbol

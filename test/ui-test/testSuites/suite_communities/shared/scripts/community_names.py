@@ -27,7 +27,7 @@ community_ProfilePopupInviteMessagePanel_MessageInput = {"container": community_
 community_InviteFriend_SendButton = {"container": statusDesktop_mainWindow_overlay, "objectName": "InviteFriendsToCommunityPopup_SendButton", "type": "StatusButton", "visible": True}
 communitySettings_Members_NavigationListItem = {"container": statusDesktop_mainWindow, "objectName": "CommunitySettingsView_NavigationListItem_Members", "type": "StatusNavigationListItem", "visible": True}
 communitySettingsView_NavigationListItem_Airdrops = {"container": statusDesktop_mainWindow, "objectName": "CommunitySettingsView_NavigationListItem_Airdrops", "type": "StatusNavigationListItem", "visible": True}
-communitySettingsView_NavigationListItem_Mint_Tokens = {"container": statusDesktop_mainWindow, "objectName": "CommunitySettingsView_NavigationListItem_Mint Tokens", "type": "StatusNavigationListItem", "visible": True}
+communitySettingsView_NavigationListItem_Mint_Tokens = {"container": statusDesktop_mainWindow, "objectName": "CommunitySettingsView_NavigationListItem_Tokens", "type": "StatusNavigationListItem", "visible": True}
 communitySettings_Permissions_NavigationListItem = {"container": statusDesktop_mainWindow, "objectName": "CommunitySettingsView_NavigationListItem_Permissions", "type": "StatusNavigationListItem", "visible": True}
 communitySettingsView_NavigationListItem_Overview = {"container": statusDesktop_mainWindow, "objectName": "CommunitySettingsView_NavigationListItem_Overview", "type": "StatusNavigationListItem", "visible": True}
 communitySettings_MembersTab_Members_ListView = {"container": statusDesktop_mainWindow, "objectName": "CommunityMembersTabPanel_MembersListViews", "type": "ListView", "visible": True}
@@ -73,7 +73,6 @@ communitySettings_BackToCommunity_Button = {"container": statusDesktop_mainWindo
 communitySettings_CommunityName_Text = {"container": statusDesktop_mainWindow, "objectName": "communityOverviewSettingsCommunityName", "type": "StatusBaseText", "visible": True}
 communitySettings_CommunityDescription_Text = {"container": statusDesktop_mainWindow, "objectName": "communityOverviewSettingsCommunityDescription", "type": "StatusBaseText", "visible": True}
 communitySettings_Community_Identicon = {"container": statusDesktop_mainWindow, "objectName": "communityOverviewSettingsPanelIdenticon", "type": "StatusSmartIdenticon", "visible": True}
-communitySettings_Community_LetterIdenticon = {"container": communitySettings_Community_Identicon, "objectName": "statusSmartIdenticonLetter", "type": "StatusLetterIdenticon", "visible": True}
 
 # Community Edit:
 communitySettings_EditCommunity_ScrollView = {"container": statusDesktop_mainWindow, "objectName": "communityEditPanelScrollView", "type": "StatusScrollView", "visible": True}
@@ -84,13 +83,6 @@ communitySettings_EditCommunity_ColorPicker_Button = {"container": communitySett
 # Community color popup:
 communitySettings_ColorPanel_HexColor_Input = {"container": statusDesktop_mainWindow_overlay, "objectName": "communityColorPanelHexInput", "type": "TextEdit",  "visible": True}
 communitySettings_SaveColor_Button = {"container": statusDesktop_mainWindow_overlay, "objectName": "communityColorPanelSelectColorButton", "type": "StatusButton", "visible": True}
-
-# Community Overview
-communityOverview_Back_up_Banner = {"container": statusDesktop_mainWindow, "objectName": "backUpBanner", "type": "BannerPanel", "visible": True}
-communityOverview_Back_up_StatusButton = {"container": communityOverview_Back_up_Banner, "objectName": "communityBannerButton", "type": "StatusButton", "visible": True}
-communityOverview_Airdrop_Tokens_Banner = {"container": statusDesktop_mainWindow, "objectName": "airdropBanner", "type": "BannerPanel", "visible": True}
-communityOverview_Airdrop_Tokens_StatusButton = {"container": communityOverview_Airdrop_Tokens_Banner, "objectName": "communityBannerButton", "type": "StatusButton", "visible": True}
-transferOwnerShipTextEdit = {"container": statusDesktop_mainWindow_overlay, "id": "edit", "type": "TextEdit", "unnamed": 1, "visible": True}
 
 # Community transfer ownership
 copyCommunityPrivateKeyButton = {"container": statusDesktop_mainWindow, "objectName": "copyCommunityPrivateKeyButton", "type": "StatusButton", "visible": True}

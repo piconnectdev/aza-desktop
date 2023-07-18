@@ -36,6 +36,7 @@ proc requestToJoinCommunity*(
     ensName: string,
     password: string,
     addressesToShare: seq[string],
+    airdropAddress: string,
   ): RpcResponse[JsonNode] {.raises: [Exception].} =
   var passwordToSend = password
   result = callPrivateRPC("requestToJoinCommunity".prefix, %*[{
@@ -43,6 +44,7 @@ proc requestToJoinCommunity*(
     "ensName": ensName,
     "password": if passwordToSend != "": utils.hashPassword(password) else: "",
     "addressesToShare": addressesToShare,
+    "airdropAddress": airdropAddress,
   }])
 
 proc checkPermissionsToJoinCommunity*(communityId: string): RpcResponse[JsonNode] {.raises: [Exception].} =
@@ -393,6 +395,24 @@ proc shareCommunityToUsers*(communityId: string, pubKeys: seq[string], inviteMes
     "communityId": communityId,
     "users": pubKeys,
     "inviteMessage": inviteMessage
+  }])
+
+proc shareCommunityUrlWithChatKey*(communityId: string): RpcResponse[JsonNode] {.raises: [Exception].} =
+  return callPrivateRPC("shareCommunityURLWithChatKey".prefix, %*[communityId])
+
+proc shareCommunityUrlWithData*(communityId: string): RpcResponse[JsonNode] {.raises: [Exception].} =
+  return callPrivateRPC("shareCommunityURLWithData".prefix, %*[communityId])
+
+proc shareCommunityChannelUrlWithChatKey*(communityId: string, channelId: string): RpcResponse[JsonNode] {.raises: [Exception].} =
+  return callPrivateRPC("shareCommunityChannelURLWithChatKey".prefix, %*[{
+    "communityId": communityId,
+    "channelId": channelId
+  }])
+
+proc shareCommunityChannelUrlWithData*(communityId: string, channelId: string): RpcResponse[JsonNode] {.raises: [Exception].} =
+  return callPrivateRPC("shareCommunityChannelURLWithData".prefix, %*[{
+    "communityId": communityId,
+    "channelId": channelId
   }])
 
 proc getCommunitiesSettings*(): RpcResponse[JsonNode] {.raises: [Exception].} =

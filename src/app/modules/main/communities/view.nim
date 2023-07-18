@@ -109,6 +109,7 @@ QtObject:
   proc discordOldestMessageTimestampChanged*(self: View) {.signal.}
   proc discordImportErrorsCountChanged*(self: View) {.signal.}
   proc communityAccessRequested*(self: View, communityId: string) {.signal.}
+  proc communityAccessFailed*(self: View, communityId: string, error: string) {.signal.}
   proc communityInfoAlreadyRequested*(self: View) {.signal.}
 
   proc communityTagsChanged*(self: View) {.signal.}
@@ -585,3 +586,15 @@ QtObject:
 
   proc setCollectiblesListItems*(self: View, tokenListItems: seq[TokenListItem]) =
     self.collectiblesListModel.setItems(tokenListItems)
+
+  proc shareCommunityUrlWithChatKey*(self: View, communityId: string): string {.slot.} =
+    return self.delegate.shareCommunityUrlWithChatKey(communityId)
+
+  proc shareCommunityUrlWithData*(self: View, communityId: string): string {.slot.} =
+    return self.delegate.shareCommunityUrlWithData(communityId)
+
+  proc shareCommunityChannelUrlWithChatKey*(self: View, communityId: string, chatId: string): string {.slot.} =
+    return self.delegate.shareCommunityChannelUrlWithChatKey(communityId, chatId)
+
+  proc shareCommunityChannelUrlWithData*(self: View, communityId: string, chatId: string): string {.slot.} =
+    return self.delegate.shareCommunityChannelUrlWithData(communityId, chatId)

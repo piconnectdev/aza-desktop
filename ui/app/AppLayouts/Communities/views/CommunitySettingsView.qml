@@ -169,6 +169,7 @@ StatusSectionLayout {
             pinMessagesEnabled: root.community.pinMessageAllMembersEnabled
             editable: true
             owned: root.community.memberRole === Constants.memberRole.owner
+            loginType: root.rootStore.loginType
 
             onEdited: {
                 const error = root.chatCommunitySectionModule.editCommunity(
@@ -269,7 +270,7 @@ StatusSectionLayout {
             id: mintPanel
 
             readonly property int sectionKey: Constants.CommunitySettingsSections.MintTokens
-            readonly property string sectionName: qsTr("Mint Tokens")
+            readonly property string sectionName: qsTr("Tokens")
             readonly property string sectionIcon: "token"
             readonly property bool sectionEnabled: root.isOwner
 
@@ -295,13 +296,18 @@ StatusSectionLayout {
                     mintPanel.isFeeLoading = true
                     return
                 }
-
                 mintPanel.errorText = qsTr("Unknown error")
                 mintPanel.isFeeLoading = true
             }
 
             communityName: root.community.name
+            communityLogo: root.community.image
+            communityColor: root.community.color
+            isOwner: root.isOwner
+            isAdmin: root.isAdmin
+            isTokenMasterOwner: false // TODO: Backend
             tokensModel: root.community.communityTokens
+            tokensModelWallet: root.rootStore.tokensModelWallet
             layer1Networks: communityTokensStore.layer1Networks
             layer2Networks: communityTokensStore.layer2Networks
             testNetworks: communityTokensStore.testNetworks
@@ -357,6 +363,11 @@ StatusSectionLayout {
             readonly property bool sectionEnabled: root.isOwner
 
             communityDetails: d.communityDetails
+            isOwner: root.isOwner
+            isTokenMasterOwner: false // TODO: Backend
+            isAdmin: root.isAdmin
+            tokensModel: root.community.communityTokens
+
             readonly property CommunityTokensStore communityTokensStore:
                 rootStore.communityTokensStore
 

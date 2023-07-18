@@ -87,6 +87,7 @@ Item {
         }
 
         Connections {
+            enabled: joinCommunityButton.loading
             target: root.store.communitiesModuleInst
             function onCommunityAccessRequested(communityId: string) {
                 if (communityId === communityData.id) {
@@ -94,9 +95,22 @@ Item {
                     joinCommunityButton.loading = false
                 }
             }
+            function onCommunityAccessFailed(communityId: string) {
+                if (communityId === communityData.id) {
+                    joinCommunityButton.invitationPending = false
+                    joinCommunityButton.loading = false
+                    Global.displayToastMessage(qsTr("Request to join failed"),
+                            qsTr("Please try again later"),
+                            "",
+                            false,
+                            Constants.ephemeralNotificationType.normal,
+                            "")
+                }
+            }
         }
 
         Connections {
+            enabled: joinCommunityButton.loading
             target: communitySectionModule
             function onUserAuthenticationCanceled() {
                 joinCommunityButton.invitationPending = false
@@ -293,7 +307,7 @@ Item {
                     type: StatusAction.Type.Danger
                     onTriggered: {
                         Global.openPopup(deleteCategoryConfirmationDialogComponent, {
-                            "header.title": qsTr("Delete '%1' category").arg(categoryItem.name),
+                            "headerSettings.title": qsTr("Delete '%1' category").arg(categoryItem.name),
                             confirmationText: qsTr("Are you sure you want to delete '%1' category? Channels inside the category won't be deleted.")
                                 .arg(categoryItem.name),
                             categoryId: categoryItem.itemId
@@ -527,7 +541,6 @@ Item {
         ConfirmationDialog {
             property string categoryId
             confirmButtonObjectName: "confirmDeleteCategoryButton"
-            btnType: "warn"
             showCancelButton: true
             onClosed: {
                 destroy()

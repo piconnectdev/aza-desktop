@@ -107,3 +107,6 @@ Makefile.*Release
 debug/
 release/
 .qmake.stash
+# ui-tests
+/test/ui-pytest/configs/_local.py
+*.pyc

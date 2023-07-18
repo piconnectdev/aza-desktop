@@ -78,6 +78,14 @@ ListModel {
         section: "Views"
     }
     ListElement {
+        title: "OwnerTokenWelcomeView"
+        section: "Views"
+    }
+    ListElement {
+         title: "EditNetworkView"
+         section: "Views"
+    }
+    ListElement {
          title: "StatusCommunityCard"
          section: "Panels"
     }
@@ -178,7 +186,19 @@ ListModel {
         section: "Panels"
     }
     ListElement {
+        title: "OverviewSettingsPanel"
+        section: "Panels"
+    }
+    ListElement {
         title: "EditSettingsPanel"
+        section: "Panels"
+    }
+    ListElement {
+        title: "OverviewSettingsFooter"
+        section: "Panels"
+    }
+    ListElement {
+        title: "StatusInfoBoxPanel"
         section: "Panels"
     }
     ListElement {
@@ -368,10 +388,6 @@ ListModel {
     ListElement {
         title: "LanguageCurrencySettings"
         section: "Settings"
-    }
-    ListElement {
-        title: "ProfileSocialLinksPanel"
-        section: "Panels"
     }
     ListElement {
         title: "IntroPanel"

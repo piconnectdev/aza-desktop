@@ -270,6 +270,9 @@ method communityMuted*(self: Module, communityId: string, muted: bool) =
 method communityAccessRequested*(self: Module, communityId: string) =
   self.view.communityAccessRequested(communityId)
 
+method communityAccessFailed*(self: Module, communityId, error: string) =
+  self.view.communityAccessFailed(communityId, error)
+
 method communityHistoryArchivesDownloadStarted*(self: Module, communityId: string) =
   self.view.setDownloadingCommunityHistoryArchives(true)
 
@@ -446,3 +449,15 @@ method onCommunityTokenMetadataAdded*(self: Module, communityId: string, tokenMe
   if tokenMetadata.tokenType == community_dto.TokenType.ERC20 and
       not self.view.tokenListModel().hasItem(tokenMetadata.symbol):
     self.view.tokenListModel.addItems(@[tokenListItem])
+
+method shareCommunityUrlWithChatKey*(self: Module, communityId: string): string =
+  return self.controller.shareCommunityUrlWithChatKey(communityId)
+
+method shareCommunityUrlWithData*(self: Module, communityId: string): string =
+  return self.controller.shareCommunityUrlWithData(communityId)
+
+method shareCommunityChannelUrlWithChatKey*(self: Module, communityId: string, chatId: string): string =
+  return self.controller.shareCommunityChannelUrlWithChatKey(communityId, chatId)
+
+method shareCommunityChannelUrlWithData*(self: Module, communityId: string, chatId: string): string =
+  return self.controller.shareCommunityChannelUrlWithData(communityId, chatId)

@@ -49,6 +49,7 @@ type
     enabled* {.serializedFieldName("enabled").}: bool
     chainColor* {.serializedFieldName("chainColor").}: string
     shortName* {.serializedFieldName("shortName").}: string
+    relatedChainID* {.serializedFieldName("relatedChainID").}: int
 
   ActivityCenterNotificationsRequest* = ref object of RootObj
     cursor* {.serializedFieldName("cursor").}: string
@@ -64,7 +65,7 @@ rpc(clientVersion, "web3"):
   discard
 
 rpc(getEthereumChains, "wallet"):
-  onlyEnabled: bool
+  discard
 
 rpc(addEthereumChain, "wallet"):
   network: Network
@@ -221,25 +222,22 @@ rpc(fetchMarketValues, "wallet"):
 rpc(fetchTokenDetails, "wallet"):
   symbols: seq[string]
 
-rpc(addKeycardOrAddAccountsIfKeycardIsAdded, "accounts"):
-  keycardUid: string
-  keyPairName: string
-  keyUid: string
-  accountAddresses: seq[string]
+rpc(saveOrUpdateKeycard, "accounts"):
+  keycard: JsonNode
   accountsComingFromKeycard: bool
 
-rpc(removeMigratedAccountsForKeycard, "accounts"):
+rpc(deleteKeycardAccounts, "accounts"):
   keycardUid: string
   accountsToRemove: seq[string]
 
 rpc(getAllKnownKeycards, "accounts"):
   discard
 
-rpc(getAllKnownKeycardsGroupedByKeyUID, "accounts"):
-  discard
-
-rpc(getKeycardByKeyUID, "accounts"):
+rpc(getKeycardsWithSameKeyUID, "accounts"):
   keyUid: string
+
+rpc(getKeycardByKeycardUID, "accounts"):
+  keycardUid: string
 
 rpc(setKeycardName, "accounts"):
   keycardUid: string
@@ -257,6 +255,9 @@ rpc(updateKeycardUID, "accounts"):
 
 rpc(deleteKeycard, "accounts"):
   keycardUid: string
+
+rpc(deleteAllKeycardsWithKeyUID, "accounts"):
+  keyUid: string
 
 rpc(updateAccountPosition, "accounts"):
   address: string

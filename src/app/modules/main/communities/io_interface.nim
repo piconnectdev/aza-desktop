@@ -118,6 +118,9 @@ method communityMuted*(self: AccessInterface, communityId: string, muted: bool) 
 method communityAccessRequested*(self: AccessInterface, communityId: string) {.base.} =
   raise newException(ValueError, "No implementation available")
 
+method communityAccessFailed*(self: AccessInterface, communityId: string, error: string) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
 method requestExtractDiscordChannelsAndCategories*(self: AccessInterface, filesToImport: seq[string]) {.base.} =
   raise newException(ValueError, "No implementation available")
 
@@ -155,4 +158,16 @@ method onOwnedCollectiblesUpdated*(self: AccessInterface) {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method onWalletAccountTokensRebuilt*(self: AccessInterface) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method shareCommunityUrlWithChatKey*(self: AccessInterface, communityId: string): string {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method shareCommunityUrlWithData*(self: AccessInterface, communityId: string): string {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method shareCommunityChannelUrlWithChatKey*(self: AccessInterface, communityId: string, chatId: string): string {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method shareCommunityChannelUrlWithData*(self: AccessInterface, communityId: string, chatId: string): string {.base.} =
   raise newException(ValueError, "No implementation available")
