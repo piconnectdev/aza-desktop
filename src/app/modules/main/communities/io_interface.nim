@@ -64,6 +64,9 @@ method cancelRequestToJoinCommunity*(self: AccessInterface, communityId: string)
 method requestCommunityInfo*(self: AccessInterface, communityId: string, importing: bool) {.base.} =
   raise newException(ValueError, "No implementation available")
 
+method removePrivateKey*(self: AccessInterface, communityId: string) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
 method importCommunity*(self: AccessInterface, communityKey: string) {.base.} =
   raise newException(ValueError, "No implementation available")
 
@@ -86,6 +89,9 @@ method communityCategoryEdited*(self: AccessInterface) {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method communityCategoryDeleted*(self: AccessInterface) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method communityPrivateKeyRemoved*(self: AccessInterface, communityId: string) {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method communityEdited*(self: AccessInterface, community: CommunityDto) {.base.} =
@@ -119,6 +125,12 @@ method communityAccessRequested*(self: AccessInterface, communityId: string) {.b
   raise newException(ValueError, "No implementation available")
 
 method communityAccessFailed*(self: AccessInterface, communityId: string, error: string) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method communityEditSharedAddressesSucceeded*(self: AccessInterface, communityId: string) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method communityEditSharedAddressesFailed*(self: AccessInterface, communityId: string, error: string) {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method requestExtractDiscordChannelsAndCategories*(self: AccessInterface, filesToImport: seq[string]) {.base.} =

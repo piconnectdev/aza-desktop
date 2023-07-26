@@ -43,7 +43,21 @@ proc requestToJoinCommunity*(
     "communityId": communityId,
     "ensName": ensName,
     "password": if passwordToSend != "": utils.hashPassword(password) else: "",
-    "addressesToShare": addressesToShare,
+    "addressesToReveal": addressesToShare,
+    "airdropAddress": airdropAddress,
+  }])
+
+proc editSharedAddresses*(
+    communityId: string,
+    password: string,
+    addressesToShare: seq[string],
+    airdropAddress: string,
+  ): RpcResponse[JsonNode] {.raises: [Exception].} =
+  var passwordToSend = password
+  result = callPrivateRPC("editSharedAddressesForCommunity".prefix, %*[{
+    "communityId": communityId,
+    "password": if passwordToSend != "": utils.hashPassword(password) else: "",
+    "addressesToReveal": addressesToShare,
     "airdropAddress": airdropAddress,
   }])
 
@@ -340,6 +354,9 @@ proc deleteCommunityCategory*(
 
 proc requestCommunityInfo*(communityId: string): RpcResponse[JsonNode] {.raises: [Exception].} =
   result = callPrivateRPC("requestCommunityInfoFromMailserver".prefix, %*[communityId])
+
+proc removePrivateKey*(communityId: string): RpcResponse[JsonNode] {.raises: [Exception].} =
+  result = callPrivateRPC("removePrivateKey".prefix, %*[communityId])
 
 proc importCommunity*(communityKey: string): RpcResponse[JsonNode] {.raises: [Exception].} =
   result = callPrivateRPC("importCommunity".prefix, %*[communityKey])

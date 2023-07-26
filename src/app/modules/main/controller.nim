@@ -254,6 +254,10 @@ proc init*(self: Controller) =
     let args = CommunityArgs(e)
     self.delegate.communityEdited(args.community)
 
+  self.events.on(SIGNAL_COMMUNITY_PRIVATE_KEY_REMOVED) do(e:Args):
+    let args = CommunityArgs(e)
+    self.delegate.communityEdited(args.community)
+
   self.events.on(SIGNAL_COMMUNITIES_UPDATE) do(e:Args):
     let args = CommunitiesArgs(e)
     for community in args.communities:
@@ -349,6 +353,7 @@ proc init*(self: Controller) =
     let communityToken = args.communityToken
     self.delegate.onCommunityTokenSupplyChanged(communityToken.communityId, communityToken.chainId,
       communityToken.address, communityToken.supply, self.getRemainingSupply(communityToken.chainId, communityToken.address))
+    self.delegate.onBurnStateChanged(communityToken.communityId, communityToken.chainId, communityToken.address, args.status)
 
   self.events.on(SIGNAL_AIRDROP_STATUS) do(e: Args):
     let args = AirdropArgs(e)
@@ -490,6 +495,9 @@ proc getCommunityTokenOwners*(self: Controller, communityId: string, chainId: in
 
 proc getCommunityTokenOwnerName*(self: Controller, chainId: int, contractAddress: string): string =
   return self.communityTokensService.contractOwnerName(chainId, contractAddress)
+
+proc getCommunityTokenBurnState*(self: Controller, chainId: int, contractAddress: string): ContractTransactionStatus =
+  return self.communityTokensService.getCommunityTokenBurnState(chainId, contractAddress)
 
 proc getRemainingSupply*(self: Controller, chainId: int, contractAddress: string): Uint256 =
   return self.communityTokensService.getRemainingSupply(chainId, contractAddress)

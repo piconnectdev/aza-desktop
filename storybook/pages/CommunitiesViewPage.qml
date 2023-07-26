@@ -31,13 +31,14 @@ SplitView {
         Component.onCompleted:
             append([{
                         id: "0x0001",
-                        name: "Test community",
+                        name: "I am 0wner!1!!",
                         description: "Lorem ipsum dolor sit amet",
                         introMessage: "Welcome to ze club",
                         outroMessage: "Sad to see you go",
                         joined: true,
                         spectated: false,
                         memberRole: Constants.memberRole.owner,
+                        isControlNode: true,
                         image: ModelsData.icons.dribble,
                         color: "yellow",
                         muted: false,
@@ -52,6 +53,7 @@ SplitView {
                         joined: true,
                         spectated: false,
                         memberRole: Constants.memberRole.none,
+                        isControlNode: false,
                         image: ModelsData.icons.status,
                         color: "peach",
                         muted: false,
@@ -66,7 +68,8 @@ SplitView {
                         joined: false,
                         spectated: true,
                         memberRole: Constants.memberRole.none,
-                        image: "",
+                        isControlNode: false,
+                        image: ModelsData.icons.coinbase,
                         color: "red",
                         muted: false,
                         members: [ { pubKey: "0xdeadbeef" } ]
@@ -80,6 +83,7 @@ SplitView {
                         joined: true,
                         spectated: false,
                         memberRole: Constants.memberRole.none,
+                        isControlNode: false,
                         image: "",
                         color: "whitesmoke",
                         muted: true,
@@ -87,14 +91,15 @@ SplitView {
                     },
                     {
                         id: "0x0005",
-                        name: "Test community 4",
+                        name: "Admin test community",
                         description: "Lorem ipsum dolor sit amet",
                         introMessage: "Welcome to ze club",
                         outroMessage: "Sad to see you go",
                         joined: true,
                         spectated: false,
                         memberRole: Constants.memberRole.admin,
-                        image: ModelsData.icons.spotify,
+                        isControlNode: false,
+                        image: ModelsData.icons.socks,
                         color: "green",
                         muted: false,
                         members: [{ pubKey: "0xdeadbeef" }, { pubKey: "0xdeadbeef" }, { pubKey: "0xdeadbeef" }, { pubKey: "0xdeadbeef" }]
@@ -108,10 +113,25 @@ SplitView {
                         joined: false,
                         spectated: true,
                         memberRole: Constants.memberRole.none,
+                        isControlNode: false,
                         image: ModelsData.icons.spotify,
                         color: "pink",
                         muted: false,
                         members: [{ pubKey: "0xdeadbeef" }]
+                    },
+                    {
+                        id: "0x0007",
+                        name: "Token Master Club",
+                        description: "Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi",
+                        introMessage: "Welcome to ze club",
+                        outroMessage: "Sad to see you go",
+                        joined: true,
+                        spectated: false,
+                        memberRole: Constants.memberRole.tokenMaster,
+                        image: ModelsData.icons.cryptPunks,
+                        color: "lightslategrey",
+                        muted: false,
+                        members: [{ pubKey: "0xdeadbeef" }, { pubKey: "0xdeadbeef" }]
                     }
                    ])
     }

@@ -181,12 +181,12 @@ method load*(self: Module) =
     let args = AccountArgs(e)
     self.setTotalCurrencyBalance()
     self.filter.setAddress(args.account.address)
-    self.view.showToastAccountAdded(args.account.name)
     self.notifyFilterChanged()
   self.events.on(SIGNAL_WALLET_ACCOUNT_DELETED) do(e:Args):
     let args = AccountArgs(e)
     self.setTotalCurrencyBalance()
     self.filter.removeAddress(args.account.address)
+    self.view.emitWalletAccountRemoved(args.account.address)
     self.notifyFilterChanged()
   self.events.on(SIGNAL_WALLET_ACCOUNT_NETWORK_ENABLED_UPDATED) do(e:Args):
     self.filter.updateNetworks()
@@ -326,3 +326,6 @@ method getAddAccountModule*(self: Module): QVariant =
 
 method onAddAccountModuleLoaded*(self: Module) =
   self.view.emitDisplayAddAccountPopup()
+
+method getNetworkLayer*(self: Module, chainId: int): string =
+  return self.networksModule.getNetworkLayer(chainId)

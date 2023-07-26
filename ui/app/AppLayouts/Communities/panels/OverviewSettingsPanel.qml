@@ -33,9 +33,12 @@ StackLayout {
     property bool pinMessagesEnabled
     property string previousPageName: (currentIndex === 1) ? qsTr("Overview") : ""
 
+    property bool archiveSupporVisible: true
     property bool editable: false
     property bool owned: false
+    property bool isControlNode: false
     property int loginType: Constants.LoginType.Password
+    property bool communitySettingsDisabled
 
     function navigateBack() {
         if (editSettingsPanelLoader.item.dirty)
@@ -48,17 +51,14 @@ StackLayout {
 
     signal inviteNewPeopleClicked
     signal airdropTokensClicked
-    signal backUpClicked
+    signal exportControlNodeClicked
+    signal importControlNodeClicked
 
     clip: true
 
-    SettingsPage {
-
-        rightPadding: 64
-        bottomPadding: 64
-        topPadding: 0
-        header: null
-        contentItem: ColumnLayout {
+    Component {
+        id: mainSettingsPageComp
+        ColumnLayout {
             spacing: 16
             RowLayout {
                 Layout.fillWidth: true
@@ -109,45 +109,68 @@ StackLayout {
                 Layout.fillWidth: true
 
                 implicitHeight: 1
-                visible: root.editable
                 color: Theme.palette.statusMenu.separatorColor
             }
 
-            RowLayout {
+            OverviewSettingsChart {
+                Layout.topMargin: 16
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.bottomMargin: 16
+            }
+            Rectangle {
                 Layout.fillWidth: true
 
-                visible: root.owned
-
-                StatusIcon {
-                    icon: "info"
-                    color: Theme.palette.directColor1
-                }
-
-                StatusBaseText {
-                    Layout.fillWidth: true
-                    text: qsTr("This node is the Community Owner Node. For your Community to function correctly try to keep this computer with Status running and online as much as possible.")
-                    font.pixelSize: 15
-                    color: Theme.palette.directColor1
-                    wrapMode: Text.WordWrap
-                }
-            }
-
-            Item {
-                Layout.fillHeight: true
+                implicitHeight: 1
+                color: Theme.palette.statusMenu.separatorColor
             }
         }
+    }
 
-        footer: OverviewSettingsFooter {
+    Component {
+        id: overviewSettingsFooterComp
+        OverviewSettingsFooter {
             rightPadding: 64
             leftPadding: 64
-            bottomPadding: 50
+            bottomPadding: 64
+            topPadding: 0
             loginType: root.loginType
             communityName: root.name
-            //TODO connect to backend
-            isControlNode: root.owned
-            onPrimaryButtonClicked: isControlNode = !isControlNode
+            isControlNode: root.isControlNode
+            onExportControlNodeClicked: root.exportControlNodeClicked()
+            onImportControlNodeClicked: root.importControlNodeClicked()
             //TODO update once the domain changes
-            onSecondaryButtonClicked: Global.openLink(Constants.statusHelpLinkPrefix + "en/status-communities/about-the-control-node-in-status-communities")
+            onLearnMoreClicked: Global.openLink(Constants.statusHelpLinkPrefix + "status-communities/about-the-control-node-in-status-communities")
+        }
+    }
+
+    Component {
+        id: disabledSettingsBannerComp
+        StatusInfoBoxPanel {
+            title: qsTr("Community administration is disabled when in testnet mode")
+            text: qsTr("To access your %1 community admin area, you need to turn off testnet mode.").arg(root.name)
+            icon: "settings"
+            iconType: StatusInfoBoxPanel.Type.Warning
+            buttonText: qsTr("Turn off testnet mode")
+            onClicked: Global.openTestnetPopup()
+        }
+    }
+
+    SettingsPage {
+        Layout.fillWidth: !root.communitySettingsDisabled
+        Layout.preferredWidth: root.communitySettingsDisabled ? 560 + leftPadding + rightPadding : -1
+        Layout.fillHeight: !root.communitySettingsDisabled
+        rightPadding: 64
+        bottomPadding: 50
+        topPadding: 0
+        header: null
+        contentItem: Loader {
+            sourceComponent: root.communitySettingsDisabled ? disabledSettingsBannerComp : mainSettingsPageComp
+        }
+
+        footer: Loader {
+            sourceComponent: overviewSettingsFooterComp
+            active: !root.communitySettingsDisabled
         }
     }
 
@@ -200,6 +223,7 @@ StackLayout {
 
                 options {
                     archiveSupportEnabled: root.archiveSupportEnabled
+                    archiveSupporVisible: root.archiveSupporVisible
                     requestToJoinEnabled: root.requestToJoinEnabled
                     pinMessagesEnabled: root.pinMessagesEnabled
                 }

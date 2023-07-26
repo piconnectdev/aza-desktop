@@ -13,7 +13,7 @@ ColumnLayout {
 
     property var network
     property var networksModule
-    signal evaluateEndPoint(string url)
+    signal evaluateRpcEndPoint(string url)
     signal updateNetworkValues(int chainId, string newMainRpcInput, string newFailoverRpcUrl)
 
     enum EvaluationState {
@@ -29,7 +29,16 @@ ColumnLayout {
         property int evaluationStatus: EditNetworkForm.UnTouched
         property int evaluationStatusFallBackRpc: EditNetworkForm.UnTouched
         property var evaluateRpcEndPoint: Backpressure.debounce(root, 400, function (value) {
-            root.evaluateEndPoint(value)
+            if(!Utils.isURL(value)) {
+                if(value === mainRpcInput.text) {
+                    d.evaluationStatus = EditNetworkForm.InvalidURL
+                }
+                else if(value === failoverRpcUrlInput.text) {
+                    d.evaluationStatusFallBackRpc = EditNetworkForm.InvalidURL
+                }
+                return
+            }
+            root.evaluateRpcEndPoint(value)
         })
 
         function revertValues() {
@@ -61,7 +70,11 @@ ColumnLayout {
 
     Connections {
         target: networksModule
-        function onUrlVerified(url, status) {
+        function onChainIdFetchedForUrl(url, chainId, success) {
+            let status = EditNetworkForm.PingUnsuccessful
+            if(success) {
+                status = EditNetworkForm.Verified
+            }
             if(url === mainRpcInput.text) {
                 d.evaluationStatus = status
             }

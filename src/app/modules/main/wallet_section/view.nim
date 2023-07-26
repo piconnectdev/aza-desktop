@@ -30,8 +30,6 @@ QtObject:
   proc load*(self: View) =
     self.delegate.viewDidLoad()
 
-  proc showToastAccountAdded*(self: View, name: string) {.signal.}
-
   proc updateCurrency*(self: View, currency: string) {.slot.} =
     self.delegate.updateCurrency(currency)
   proc getCurrentCurrency(self: View): string {.slot.} =
@@ -112,6 +110,10 @@ QtObject:
   proc destroyAddAccountPopup*(self: View) {.signal.}
   proc emitDestroyAddAccountPopup*(self: View) =
     self.destroyAddAccountPopup()
+
+  proc walletAccountRemoved*(self: View, address: string) {.signal.}
+  proc emitWalletAccountRemoved*(self: View, address: string) =
+    self.walletAccountRemoved(address)
 
   proc getActivityController(self: View): QVariant {.slot.} =
     return newQVariant(self.activityController)

@@ -402,6 +402,7 @@ QtObject {
         readonly property int manageUsers: 2
         readonly property int moderateContent: 3
         readonly property int admin: 4
+        readonly property int tokenMaster: 5 // TODO no real backend for this yet
     }
 
     readonly property QtObject permissionType: QtObject{
@@ -466,7 +467,34 @@ QtObject {
         readonly property int blockedContacts: 6
     }
 
+    readonly property QtObject keypair: QtObject {
+        readonly property int nameLengthMax: 20
+        readonly property int nameLengthMin: 5
+
+        readonly property QtObject operability: QtObject {
+            readonly property string nonOperable: "no"        // an account is non operable it is not a keycard account and there is no keystore file for it and no keystore file for the address it is derived from
+            readonly property string partiallyOperable: "partially" // an account is partially operable if it is not a keycard account and there is created keystore file for the address it is derived from
+            readonly property string fullyOperable: "fully" // an account is fully operable if it is not a keycard account and there is a keystore file for it
+        }
+    }
+
     readonly property QtObject validators: QtObject {
+        readonly property list<StatusValidator> keypairName: [
+            StatusValidator {
+                name: "startsWithSpaceValidator"
+                validate: function (t) { return !t.startsWith(" ") }
+                errorMessage: qsTr("Keypair starting with whitespace are not allowed")
+            },
+            StatusRegularExpressionValidator {
+                regularExpression: /^[a-zA-Z0-9\-_ ]+$/
+                errorMessage: errorMessages.alphanumericalExpandedRegExp
+            },
+            StatusMinLengthValidator {
+                minLength: keypair.nameLengthMin
+                errorMessage: qsTr("Keypair must be at least %n character(s)", "", keypair.nameLengthMin)
+            }
+        ]
+
         readonly property list<StatusValidator> displayName: [
             StatusValidator {
                 name: "startsWithSpaceValidator"
@@ -475,11 +503,11 @@ QtObject {
             },
             StatusRegularExpressionValidator {
                 regularExpression: /^[a-zA-Z0-9\-_ ]+$/
-                errorMessage: qsTr("Only letters, numbers, underscores, whitespaces and hyphens allowed")
+                errorMessage: errorMessages.alphanumericalExpandedRegExp
             },
             StatusMinLengthValidator {
-                minLength: 5
-                errorMessage: qsTr("Username must be at least 5 characters")
+                minLength: keypair.nameLengthMin
+                errorMessage: qsTr("Username must be at least %1 characters").arg(keypair.nameLengthMin)
             },
             StatusValidator {
                 name: "endsWithSpaceValidator"
@@ -489,8 +517,8 @@ QtObject {
             // TODO: Create `StatusMaxLengthValidator` in StatusQ
             StatusValidator {
                 name: "maxLengthValidator"
-                validate: function (t) { return t.length <= 24 }
-                errorMessage: qsTr("24 character username limit")
+                validate: function (t) { return t.length <= keypair.nameLengthMax }
+                errorMessage: qsTr("%n character(s) username limit", "", keypair.nameLengthMax)
             },
             StatusValidator {
                 name: "endsWith-ethValidator"
@@ -575,7 +603,7 @@ QtObject {
             readonly property int enterSeedPhraseWordsHeight: 60
             readonly property int keycardPinLength: 6
             readonly property int keycardPukLength: 12
-            readonly property int keycardNameLength: 20
+            readonly property int keycardNameLength: keypair.nameLengthMax
             readonly property int keycardNameInputWidth: 448
             readonly property int keycardPairingCodeInputWidth: 512
             readonly property int keycardPukAdditionalSpacingOnEvery4Items: 4
@@ -795,13 +823,12 @@ QtObject {
     readonly property string networkMainnet: "Mainnet"
     readonly property string networkRopsten: "Ropsten"
 
+    readonly property string ethToken: "ETH"
+
     readonly property QtObject networkShortChainNames: QtObject {
         readonly property string mainnet: "eth"
         readonly property string arbiscan: "arb"
         readonly property string optimism: "opt"
-        readonly property string goerliMainnet: "goEth"
-        readonly property string goerliArbiscan: "goArb"
-        readonly property string goerliOptimism: "goOpt"
     }
 
     readonly property QtObject networkExplorerLinks: QtObject {
@@ -811,6 +838,9 @@ QtObject {
         readonly property string goerliEtherscan: "https://goerli.etherscan.io"
         readonly property string goerliArbiscan: "https://goerli.arbiscan.io"
         readonly property string goerliOptimistic: "https://goerli-optimism.etherscan.io"
+
+        readonly property string addressPath: "address"
+        readonly property string txPath: "tx"
     }
 
     readonly property string api_request: "api-request"
@@ -850,7 +880,7 @@ QtObject {
     readonly property string communityLinkPrefix: externalStatusLinkWithHttps + '/c/'
     readonly property string userLinkPrefix: externalStatusLinkWithHttps + '/u/'
     readonly property string statusLinkPrefix: 'https://status.im/'
-    readonly property string statusHelpLinkPrefix: `https://help.status.im/`
+    readonly property string statusHelpLinkPrefix: `https://status.app/help/`
 
     readonly property int maxUploadFiles: 5
     readonly property double maxUploadFilesizeMB: 10
@@ -958,7 +988,8 @@ QtObject {
     enum TokenType {
         Unknown = 0,
         ERC20 = 1, // Asset
-        ERC721 = 2 // Collectible
+        ERC721 = 2, // Collectible
+        ENS = 3
     }
 
     // Mirrors src/backend/activity.nim ActivityStatus
@@ -976,7 +1007,8 @@ QtObject {
         Buy,
         Swap,
         Bridge,
-        Sell, // TODO update value when added to backend
+        ContractDeployment,
+        Sell,
         Destroy // TODO update value when added to backend
     }
 

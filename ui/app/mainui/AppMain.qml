@@ -94,6 +94,28 @@ Item {
         function onOpenActivityCenter() {
             d.openActivityCenterPopup()
         }
+
+        function onShowToastAccountAdded(name: string) {
+            Global.displayToastMessage(
+                qsTr("\"%1\" successfuly added").arg(name),
+                "",
+                "check-circle",
+                false,
+                Constants.ephemeralNotificationType.success,
+                ""
+            )
+        }
+
+        function onShowToastKeypairRenamed(oldName: string, newName: string) {
+            Global.displayToastMessage(
+                qsTr("You successfully renamed your keypair\nfrom \"%1\" to \"%2\"").arg(oldName).arg(newName),
+                "",
+                "check-circle",
+                false,
+                Constants.ephemeralNotificationType.success,
+                ""
+            )
+        }
     }
 
     QtObject {
@@ -148,8 +170,11 @@ Item {
         }
 
         function onOpenLink(link: string) {
+            console.warn("opening external url without asking user")
+
             // Qt sometimes inserts random HTML tags; and this will break on invalid URL inside QDesktopServices::openUrl(link)
             link = appMain.rootStore.plainText(link)
+
             if (appMain.rootStore.showBrowserSelector) {
                 popups.openChooseBrowserPopup(link)
             } else {
@@ -1078,6 +1103,7 @@ Item {
                                 emojiPopup: statusEmojiPopup.item
                                 stickersPopup: statusStickersPopupLoader.item
                                 sectionItemModel: model
+                                communitySettingsDisabled: production && appMain.rootStore.profileSectionStore.walletStore.areTestNetworksEnabled
 
                                 rootStore: ChatStores.RootStore {
                                     contactsStore: appMain.rootStore.contactStore

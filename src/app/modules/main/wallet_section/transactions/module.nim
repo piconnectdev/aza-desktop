@@ -56,6 +56,8 @@ proc getResolvedSymbol*(self: Module, transaction: TransactionDto): string =
     let contractSymbol = self.controller.findTokenSymbolByAddress(transaction.contract)
     if contractSymbol != "":
       result = contractSymbol
+    elif transaction.typeValue == "erc20":
+      result = ""
     else:
       result = "ETH"
 
@@ -143,3 +145,6 @@ method fetchDecodedTxData*(self: Module, txHash: string, data: string) =
 
 method txDecoded*(self: Module, txHash: string, dataDecoded: string) =
   self.view.txDecoded(txHash, dataDecoded)
+
+method getNetworkLayer*(self: Module, chainId: int): string =
+  return self.delegate.getNetworkLayer(chainId)

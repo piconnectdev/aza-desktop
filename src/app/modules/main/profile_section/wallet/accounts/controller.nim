@@ -1,7 +1,7 @@
 import io_interface
-import ../../../../../../app_service/service/wallet_account/service as wallet_account_service
-
-import ../../../../shared_modules/keycard_popup/io_interface as keycard_shared_module
+import app_service/service/wallet_account/service as wallet_account_service
+import app_service/service/currency/dto
+import app/modules/shared_modules/keycard_popup/io_interface as keycard_shared_module
 
 type
   Controller* = ref object of RootObj
@@ -28,8 +28,11 @@ proc getWalletAccounts*(self: Controller): seq[wallet_account_service.WalletAcco
 proc updateAccount*(self: Controller, address: string, accountName: string, colorId: string, emoji: string) =
   discard self.walletAccountService.updateWalletAccount(address, accountName, colorId, emoji)
 
-proc updateAccountPosition*(self: Controller, address: string, position: int) =
-  self.walletAccountService.updateWalletAccountPosition(address, position)
+proc moveAccountFinally*(self: Controller, fromPosition: int, toPosition: int) =
+  self.walletAccountService.moveAccountFinally(fromPosition, toPosition)
+
+proc renameKeypair*(self: Controller, keyUid: string, name: string) =
+  self.walletAccountService.updateKeypairName(keyUid, name)
 
 proc deleteAccount*(self: Controller, address: string) =
   self.walletAccountService.deleteAccount(address)
@@ -51,3 +54,12 @@ proc toggleIncludeWatchOnlyAccount*(self: Controller) =
 
 proc isIncludeWatchOnlyAccount*(self: Controller): bool =
   return self.walletAccountService.isIncludeWatchOnlyAccount()
+
+proc getEnabledChainIds*(self: Controller): seq[int] =
+  return self.walletAccountService.getEnabledChainIds()
+
+proc getCurrentCurrency*(self: Controller): string =
+  return self.walletAccountService.getCurrency()
+
+proc getCurrencyFormat*(self: Controller, symbol: string): CurrencyFormatDto =
+  return self.walletAccountService.getCurrencyFormat(symbol)

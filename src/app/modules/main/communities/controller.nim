@@ -3,8 +3,10 @@ import ./io_interface
 
 import ../../../core/signals/types
 import ../../../core/eventemitter
+import ../../../../app_service/service/chat/dto/chat
 import ../../../../app_service/service/community/service as community_service
 import ../../../../app_service/service/contacts/service as contacts_service
+import ../../../../app_service/service/chat/service as chat_service
 import ../../../../app_service/service/network/service as networks_service
 import ../../../../app_service/service/community_tokens/service as community_tokens_service
 import ../../../../app_service/service/token/service as token_service
@@ -20,6 +22,7 @@ type
     communityTokensService: community_tokens_service.Service
     networksService: networks_service.Service
     tokenService: token_service.Service
+    chatService: chat_service.Service
 
 proc newController*(
     delegate: io_interface.AccessInterface,
@@ -29,6 +32,7 @@ proc newController*(
     communityTokensService: community_tokens_service.Service,
     networksService: networks_service.Service,
     tokenService: token_service.Service,
+    chatService: chat_service.Service,
     ): Controller =
   result = Controller()
   result.delegate = delegate
@@ -38,6 +42,7 @@ proc newController*(
   result.communityTokensService = communityTokensService
   result.networksService = networksService
   result.tokenService = tokenService
+  result.chatService = chatService
 
 proc delete*(self: Controller) =
   discard
@@ -69,6 +74,11 @@ proc init*(self: Controller) =
     let args = CommunityArgs(e)
     self.delegate.communityAdded(args.community)
 
+  self.events.on(SIGNAL_COMMUNITY_PRIVATE_KEY_REMOVED) do(e:Args):
+    let args = CommunityArgs(e)
+    self.delegate.communityEdited(args.community)
+    self.delegate.communityPrivateKeyRemoved(args.community.id)
+
   self.events.on(SIGNAL_COMMUNITY_IMPORTED) do(e:Args):
     let args = CommunityArgs(e)
     if(args.error.len > 0):
@@ -93,6 +103,14 @@ proc init*(self: Controller) =
   self.events.on(SIGNAL_COMMUNITY_MY_REQUEST_FAILED) do(e:Args):
     let args = CommunityRequestFailedArgs(e)
     self.delegate.communityAccessFailed(args.communityId, args.error)
+
+  self.events.on(SIGNAL_COMMUNITY_EDIT_SHARED_ADDRESSES_SUCCEEDED) do(e:Args):
+    let args = CommunityIdArgs(e)
+    self.delegate.communityEditSharedAddressesSucceeded(args.communityId)
+
+  self.events.on(SIGNAL_COMMUNITY_EDIT_SHARED_ADDRESSES_FAILED) do(e:Args):
+    let args = CommunityRequestFailedArgs(e)
+    self.delegate.communityEditSharedAddressesFailed(args.communityId, args.error)
 
   self.events.on(SIGNAL_DISCORD_CATEGORIES_AND_CHANNELS_EXTRACTED) do(e:Args):
     let args = DiscordCategoriesAndChannelsArgs(e)
@@ -215,8 +233,14 @@ proc reorderCommunityChat*(
     chatId,
     position)
 
+proc getChatDetailsByIds*(self: Controller, chatIds: seq[string]): seq[ChatDto] =
+  return self.chatService.getChatsByIds(chatIds)
+
 proc requestCommunityInfo*(self: Controller, communityId: string, importing: bool) =
   self.communityService.requestCommunityInfo(communityId, importing)
+
+proc removePrivateKey*(self: Controller, communityId: string) =
+  self.communityService.removePrivateKey(communityId)
 
 proc importCommunity*(self: Controller, communityKey: string) =
   self.communityService.importCommunity(communityKey)

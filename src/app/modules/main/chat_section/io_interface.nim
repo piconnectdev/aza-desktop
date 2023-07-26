@@ -386,6 +386,11 @@ method requestToJoinCommunityWithAuthentication*(self: AccessInterface, ensName:
     airdropAddress: string) {.base.} =
   raise newException(ValueError, "No implementation available")
 
+method editSharedAddressesWithAuthentication*(self: AccessInterface, addressesToShare: seq[string], airdropAddress: string)
+    {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+
 method onCommunityCheckPermissionsToJoinResponse*(self: AccessInterface, checkPermissionsToJoinResponse: CheckPermissionsToJoinResponseDto) {.base.} =
  
   raise newException(ValueError, "No implementation available")
@@ -394,4 +399,10 @@ method onCommunityCheckChannelPermissionsResponse*(self: AccessInterface, chatId
   raise newException(ValueError, "No implementation available")
 
 method onCommunityCheckAllChannelsPermissionsResponse*(self: AccessInterface, checkAllChannelsPermissionsResponse: CheckAllChannelsPermissionsResponseDto) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method authenticateWithCallback*(self: AccessInterface) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method callbackFromAuthentication*(self: AccessInterface, authenticated: bool) {.base.} =
   raise newException(ValueError, "No implementation available")

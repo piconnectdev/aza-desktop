@@ -5,6 +5,8 @@ ChannelsAndCategoriesBannerPanel 1.0 ChannelsAndCategoriesBannerPanel.qml
 ChatPermissionQualificationPanel 1.0 ChatPermissionQualificationPanel.qml
 ColorPanel 1.0 ColorPanel.qml
 ColumnHeaderPanel 1.0 ColumnHeaderPanel.qml
+EditSettingsPanel 1.0 EditSettingsPanel.qml
+FeesBox 1.0 FeesBox.qml
 FeesPanel 1.0 FeesPanel.qml
 HidePermissionPanel 1.0 HidePermissionPanel.qml
 IntroPanel 1.0 IntroPanel.qml
@@ -14,6 +16,7 @@ JoinPermissionsOverlayPanel 1.0 JoinPermissionsOverlayPanel.qml
 MembersSettingsPanel 1.0 MembersSettingsPanel.qml
 MintTokensFooterPanel 1.0 MintTokensFooterPanel.qml
 MintTokensSettingsPanel 1.0 MintTokensSettingsPanel.qml
+OverviewSettingsChart 1.0 OverviewSettingsChart.qml
 OverviewSettingsFooter 1.0 OverviewSettingsFooter.qml
 OverviewSettingsPanel 1.0 OverviewSettingsPanel.qml
 PermissionConflictWarningPanel 1.0 PermissionConflictWarningPanel.qml
@@ -23,11 +26,12 @@ PrivilegedTokenArtworkPanel 1.0 PrivilegedTokenArtworkPanel.qml
 ProfilePopupInviteFriendsPanel 1.0 ProfilePopupInviteFriendsPanel.qml
 ProfilePopupInviteMessagePanel 1.0 ProfilePopupInviteMessagePanel.qml
 ProfilePopupOverviewPanel 1.0 ProfilePopupOverviewPanel.qml
+SharedAddressesPanel 1.0 SharedAddressesPanel.qml
 SortableTokenHoldersList 1.0 SortableTokenHoldersList.qml
 SortableTokenHoldersPanel 1.0 SortableTokenHoldersPanel.qml
 TagsPanel 1.0 TagsPanel.qml
 TokenHoldersPanel 1.0 TokenHoldersPanel.qml
 TokenHoldersProxyModel 1.0 TokenHoldersProxyModel.qml
+TokenInfoPanel 1.0 TokenInfoPanel.qml
 WarningPanel 1.0 WarningPanel.qml
 WelcomeBannerPanel 1.0 WelcomeBannerPanel.qml
-EditSettingsPanel 1.0 EditSettingsPanel.qml

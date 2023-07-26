@@ -56,6 +56,8 @@ QtObject {
         Global.openDownloadImageDialog.connect(openDownloadImageDialog)
         Global.leaveCommunityRequested.connect(openLeaveCommunityPopup)
         Global.openTestnetPopup.connect(openTestnetPopup)
+        Global.openExportControlNodePopup.connect(openExportControlNodePopup)
+        Global.openImportControlNodePopup.connect(openImportControlNodePopup)
     }
 
     property var currentPopup
@@ -246,6 +248,17 @@ QtObject {
 
     function openTestnetPopup() {
         openPopup(testnetModal)
+    }
+
+    function openExportControlNodePopup(communityName, privateKey, cb) {
+        openPopup(exportControlNodePopup, {
+            communityName: communityName,
+            privateKey: privateKey
+        }, cb)
+    }
+
+    function openImportControlNodePopup(community, cb) {
+        openPopup(importControlNodePopup, {community: community}, cb)
     }
 
     readonly property list<Component> _components: [
@@ -588,6 +601,21 @@ QtObject {
                 }
                 onCancelClicked: close()
             }
+        },
+
+        Component {
+            id: exportControlNodePopup
+            ExportControlNodePopup {
+                onClosed: destroy()
+            }
+        },
+
+        Component {
+            id: importControlNodePopup
+            ImportControlNodePopup {
+                onClosed: destroy()
+            }
         }
+
     ]
 }

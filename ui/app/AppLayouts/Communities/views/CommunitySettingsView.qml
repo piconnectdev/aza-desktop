@@ -20,6 +20,7 @@ import utils 1.0
 import AppLayouts.Communities.controls 1.0
 import AppLayouts.Communities.panels 1.0
 import AppLayouts.Communities.popups 1.0
+import AppLayouts.Communities.helpers 1.0
 
 StatusSectionLayout {
     id: root
@@ -31,11 +32,12 @@ StatusSectionLayout {
     property var rootStore
     property var chatCommunitySectionModule
     property var community
-    property bool hasAddedContacts: false
     property var transactionStore: TransactionStore {}
+    property bool communitySettingsDisabled
 
     readonly property bool isOwner: community.memberRole === Constants.memberRole.owner
     readonly property bool isAdmin: isOwner || community.memberRole === Constants.memberRole.admin
+    readonly property bool isControlNode: community.isControlNode
 
     readonly property string filteredSelectedTags: {
         let tagsArray = []
@@ -103,6 +105,7 @@ StatusSectionLayout {
                 Layout.rightMargin: Style.current.padding
                 model: stackLayout.children
                 spacing: 8
+                enabled: !root.communitySettingsDisabled
 
                 delegate: StatusNavigationListItem {
                     objectName: "CommunitySettingsView_NavigationListItem_" + model.sectionName
@@ -111,7 +114,7 @@ StatusSectionLayout {
                     asset.name: model.sectionIcon
                     asset.height: 24
                     asset.width: 24
-                    selected: d.currentIndex === index
+                    selected: d.currentIndex === index && !root.communitySettingsDisabled
                     onClicked: d.currentIndex = index
                     visible: model.sectionEnabled
                     height: visible ? implicitHeight : 0
@@ -165,11 +168,14 @@ StatusSectionLayout {
             tags: root.rootStore.communityTags
             selectedTags: root.filteredSelectedTags
             archiveSupportEnabled: root.community.historyArchiveSupportEnabled
+            archiveSupporVisible: root.community.isControlNode
             requestToJoinEnabled: root.community.access === Constants.communityChatOnRequestAccess
             pinMessagesEnabled: root.community.pinMessageAllMembersEnabled
             editable: true
             owned: root.community.memberRole === Constants.memberRole.owner
             loginType: root.rootStore.loginType
+            isControlNode: root.isControlNode
+            communitySettingsDisabled: root.communitySettingsDisabled
 
             onEdited: {
                 const error = root.chatCommunitySectionModule.editCommunity(
@@ -199,10 +205,27 @@ StatusSectionLayout {
             }
 
             onAirdropTokensClicked: root.goTo(Constants.CommunitySettingsSections.Airdrops)
-            onBackUpClicked: {
-                Global.openPopup(transferOwnershipPopup, {
-                                     privateKey: root.chatCommunitySectionModule.exportCommunity(root.community.id),
-                                 })
+            onExportControlNodeClicked: {
+                if(!root.isControlNode)
+                    return
+
+                root.rootStore.authenticateWithCallback((authenticated) => {
+                    if(!authenticated)
+                        return
+
+                    Global.openExportControlNodePopup(root.community.name, root.chatCommunitySectionModule.exportCommunity(root.community.id), (popup) => {
+                        popup.onDeletePrivateKey.connect(() => {
+                            root.rootStore.removePrivateKey(root.community.id)
+                        })  
+                    })
+                })
+            }
+
+            onImportControlNodeClicked: {
+                if(root.isControlNode)
+                    return
+
+                Global.openImportControlNodePopup(root.community, d.importControlNodePopupOpened)
             }
         }
 
@@ -300,12 +323,21 @@ StatusSectionLayout {
                 mintPanel.isFeeLoading = true
             }
 
+            // General community props
             communityName: root.community.name
             communityLogo: root.community.image
             communityColor: root.community.color
+
+            // User profile props
             isOwner: root.isOwner
             isAdmin: root.isAdmin
             isTokenMasterOwner: false // TODO: Backend
+
+            // Owner and TMaster properties
+            isOwnerTokenDeployed: tokensModelChangesTracker.isOwnerTokenDeployed
+            isTMasterTokenDeployed: tokensModelChangesTracker.isTMasterTokenDeployed
+
+            // Models
             tokensModel: root.community.communityTokens
             tokensModelWallet: root.rootStore.tokensModelWallet
             layer1Networks: communityTokensStore.layer1Networks
@@ -325,6 +357,10 @@ StatusSectionLayout {
 
             onMintAsset:
                 communityTokensStore.deployAsset(root.community.id, assetItem)
+
+            onMintOwnerToken:
+                communityTokensStore.deployOwnerToken(
+                    root.community.id, ownerToken, tMasterToken)
 
             onSignRemoteDestructTransactionOpened:
                 communityTokensStore.computeSelfDestructFee(
@@ -363,10 +399,15 @@ StatusSectionLayout {
             readonly property bool sectionEnabled: root.isOwner
 
             communityDetails: d.communityDetails
+
+            // Profile type
             isOwner: root.isOwner
             isTokenMasterOwner: false // TODO: Backend
             isAdmin: root.isAdmin
-            tokensModel: root.community.communityTokens
+
+            // Owner and TMaster properties
+            isOwnerTokenDeployed: tokensModelChangesTracker.isOwnerTokenDeployed
+            isTMasterTokenDeployed: tokensModelChangesTracker.isTMasterTokenDeployed
 
             readonly property CommunityTokensStore communityTokensStore:
                 rootStore.communityTokensStore
@@ -497,6 +538,102 @@ StatusSectionLayout {
                     break
                 }
             }
+        }
+
+        function requestCommunityInfoWithCallback(privateKey, callback) {
+            if(!callback) return
+
+            //success
+            root.rootStore.communityAdded.connect(function communityAddedHandler(communityId) {
+                root.rootStore.communityAdded.disconnect(communityAddedHandler)
+                let community = null
+                try {
+                    const communityJson = root.rootStore.getSectionByIdJson(communityId)
+                    community = JSON.parse(communityJson)
+                } catch (e) {
+                    console.warn("Error parsing community json: ", communityJson, " error: ", e.message)
+                }
+
+                callback(community)
+            })
+
+            //error
+            root.rootStore.importingCommunityStateChanged.connect(function communityImportingStateChangedHandler(communityId, status) {
+                root.rootStore.importingCommunityStateChanged.disconnect(communityImportingStateChangedHandler)
+                if(status === Constants.communityImportingError) {
+                    callback(null)
+                }
+            })
+
+            root.rootStore.requestCommunityInfo(privateKey, false)
+        }
+
+        function importControlNodePopupOpened(popup) {
+            popup.requestCommunityInfo.connect((privateKey) => {
+                requestCommunityInfoWithCallback(privateKey, popup.setCommunityInfo)
+            })
+
+            popup.importControlNode.connect((privateKey) => {
+                root.rootStore.importCommunity(privateKey)
+            })
+        }
+    }
+
+    StatusQUtils.ModelChangeTracker {
+        id: tokensModelChangesTracker
+
+        // Owner and TMaster token deployment states
+        property bool isOwnerTokenDeployed: false
+        property bool isTMasterTokenDeployed: false
+
+        // It will monitorize if Owner and/or TMaster token items are included in the `model` despite the deployment state
+        property bool ownerOrTMasterTokenItemsExist: false
+
+        function checkIfPrivilegedTokenItemsExist() {
+           return SQUtils.ModelUtils.contains(model, "name", PermissionsHelpers.ownerTokenNameTag + root.communityName) ||
+                  SQUtils.ModelUtils.contains(model, "name", PermissionsHelpers.tMasterTokenNameTag + root.communityName)
+        }
+
+        function reviewTokenDeployState(tagType, isOwner) {
+            const index = SQUtils.ModelUtils.indexOf(model, "name", tagType + root.communityName)
+            if(index === -1)
+                return false
+
+            const token = SQUtils.ModelUtils.get(model, index)
+
+            // Some assertions:
+            if(!token.isPrivilegedToken)
+                return false
+
+            if(token.isOwner !== isOwner)
+                return false
+
+            // Deploy state check:
+            if(token.deployState !== Constants.ContractTransactionStatus.Completed)
+                return false
+
+            // Token deployed!!
+            return true
+        }
+
+        model: root.community.communityTokens
+
+        onRevisionChanged: {
+            // It will update property to know if Owner and TMaster token items have been added into the tokens list.
+            ownerOrTMasterTokenItemsExist = checkIfPrivilegedTokenItemsExist()
+            if(!ownerOrTMasterTokenItemsExist)
+                return
+
+            // It monitors the deployment:
+            if(!isOwnerTokenDeployed)
+                isOwnerTokenDeployed = reviewTokenDeployState(PermissionsHelpers.ownerTokenNameTag, true)
+
+            if(!isTMasterTokenDeployed)
+                isTMasterTokenDeployed = reviewTokenDeployState(PermissionsHelpers.tMasterTokenNameTag, false)
+
+            // Not necessary to track more changes since privileged tokens have been correctly deployed.
+            if(isOwnerTokenDeployed && isTMasterTokenDeployed)
+                tokensModelChangesTracker.enabled = false
         }
     }
 
@@ -663,7 +800,7 @@ StatusSectionLayout {
                 return
             }
 
-            Global.displayToastMessage(title, qsTr("View on etherscan"), "",
+            Global.displayToastMessage(title, url === "" ? qsTr("Something went wrong") : qsTr("View on etherscan"), "",
                                        loading, type, url)
         }
     }

@@ -77,6 +77,8 @@ QtObject {
 
     signal importingCommunityStateChanged(string communityId, int state, string errorMsg)
 
+    signal communityAdded(string communityId)
+
     signal communityInfoAlreadyRequested()
 
     signal communityAccessRequested(string communityId)
@@ -378,8 +380,8 @@ QtObject {
         return communitiesModuleInst.spectateCommunity(id, ensName)
     }
 
-    function requestToJoinCommunityWithAuthentication(ensName) {
-        chatCommunitySectionModule.requestToJoinCommunityWithAuthentication(ensName)
+    function requestToJoinCommunityWithAuthentication(ensName, addressesToShare = [], airdropAddress = "") {
+        chatCommunitySectionModule.requestToJoinCommunityWithAuthenticationWithSharedAddresses(ensName, JSON.stringify(addressesToShare), airdropAddress)
     }
 
     function userCanJoin(id) {
@@ -475,7 +477,7 @@ QtObject {
             const userCanJoin = userCanJoin(result.communityId)
             // TODO find what to do when you can't join
             if (userCanJoin) {
-                requestToJoinCommunityWithAuthentication(userProfileInst.preferredName)
+                requestToJoinCommunityWithAuthentication(userProfileInst.preferredName) // FIXME what addresses to share?
             }
         }
         return result
@@ -608,9 +610,18 @@ QtObject {
 
         if(userProfileInst.usingBiometricLogin)
             return Constants.LoginType.Biometrics
-        else if(userProfileInst.isKeycardUser)
+        if(userProfileInst.isKeycardUser)
             return Constants.LoginType.Keycard
-        else return Constants.LoginType.Password
+        return Constants.LoginType.Password
+    }
+
+    function authenticateWithCallback(callback) {
+        _d.authenticationCallbacks.push(callback)
+        chatCommunitySectionModule.authenticateWithCallback()
+    }
+
+    function removePrivateKey(communityId) {
+        root.communitiesModuleInst.removePrivateKey(communityId)
     }
 
     readonly property Connections communitiesModuleConnections: Connections {
@@ -626,6 +637,10 @@ QtObject {
       function onCommunityAccessRequested(communityId) {
           root.communityAccessRequested(communityId)
       }
+
+      function onCommunityAdded(communityId) {
+          root.communityAdded(communityId)
+      }
     }
 
     readonly property Connections mainModuleInstConnections: Connections {
@@ -640,6 +655,19 @@ QtObject {
     }
 
     readonly property QtObject _d: QtObject {
+        property var authenticationCallbacks: []
+
+        readonly property Connections chatCommunitySectionModuleConnections: Connections {
+            target: chatCommunitySectionModule
+            function onCallbackFromAuthentication(authenticated: bool) {
+                _d.authenticationCallbacks.forEach((callback) => {
+                    if(!!callback)
+                        callback(authenticated)
+                })
+                _d.authenticationCallbacks = []
+            }
+        }
+
         readonly property var sectionDetailsInstantiator: Instantiator {
             model: SortFilterProxyModel {
                 sourceModel: mainModuleInst.sectionsModel

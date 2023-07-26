@@ -9,6 +9,7 @@ import ../shared_modules/keycard_popup/module as keycard_shared_module
 import ../../global/app_sections_config as conf
 import ../../global/app_signals
 import ../../global/global_singleton
+import ../../global/utils as utils
 import ../../../constants as main_constants
 
 import chat_section/model as chat_model
@@ -108,6 +109,7 @@ type
 
 # Forward declaration
 method calculateProfileSectionHasNotification*[T](self: Module[T]): bool
+proc switchToContactOrDisplayUserProfile[T](self: Module[T], publicKey: string)
 
 proc newModule*[T](
   delegate: T,
@@ -207,7 +209,7 @@ proc newModule*[T](
   result.stickersModule = stickers_module.newModule(result, events, stickersService, settingsService, walletAccountService, networkService, tokenService)
   result.activityCenterModule = activity_center_module.newModule(result, events, activityCenterService, contactsService,
   messageService, chatService, communityService)
-  result.communitiesModule = communities_module.newModule(result, events, communityService, contactsService, communityTokensService, networkService, transactionService, tokenService)
+  result.communitiesModule = communities_module.newModule(result, events, communityService, contactsService, communityTokensService, networkService, transactionService, tokenService, chatService)
   result.appSearchModule = app_search_module.newModule(result, events, contactsService, chatService, communityService,
   messageService)
   result.nodeSectionModule = node_section_module.newModule(result, events, settingsService, nodeService, nodeConfigurationService)
@@ -239,7 +241,8 @@ proc createTokenItem[T](self: Module[T], tokenDto: CommunityTokenDto) : TokenIte
   let tokenOwners = self.controller.getCommunityTokenOwners(tokenDto.communityId, tokenDto.chainId, tokenDto.address)
   let ownerAddressName = self.controller.getCommunityTokenOwnerName(tokenDto.chainId, tokenDto.address)
   let remainingSupply = if tokenDto.infiniteSupply: stint.parse("0", Uint256) else: self.controller.getRemainingSupply(tokenDto.chainId, tokenDto.address)
-  result = initTokenItem(tokenDto, network, tokenOwners, ownerAddressName, remainingSupply)
+  let burnState = self.controller.getCommunityTokenBurnState(tokenDto.chainId, tokenDto.address)
+  result = initTokenItem(tokenDto, network, tokenOwners, ownerAddressName, burnState, remainingSupply)
 
 proc createChannelGroupItem[T](self: Module[T], channelGroup: ChannelGroupDto): SectionItem =
   let isCommunity = channelGroup.channelGroupType == ChannelGroupType.Community
@@ -262,6 +265,7 @@ proc createChannelGroupItem[T](self: Module[T], channelGroup: ChannelGroupDto): 
     if isCommunity: SectionType.Community else: SectionType.Chat,
     if isCommunity: channelGroup.name else: conf.CHAT_SECTION_NAME,
     channelGroup.memberRole,
+    if isCommunity: communityDetails.isControlNode else: false,
     channelGroup.description,
     channelGroup.introMessage,
     channelGroup.outroMessage,
@@ -299,7 +303,8 @@ proc createChannelGroupItem[T](self: Module[T], channelGroup: ChannelGroupDto): 
         onlineStatus = toOnlineStatus(self.controller.getStatusForContactWithId(member.id).statusType),
         isContact = contactDetails.dto.isContact,
         isVerified = contactDetails.dto.isContactVerified(),
-        memberRole = member.role
+        memberRole = member.role,
+        airdropAddress = member.airdropAccount.address,
         )),
     # pendingRequestsToJoin
     if (isCommunity): communityDetails.pendingRequestsToJoin.map(x => pending_request_item.initItem(
@@ -327,7 +332,7 @@ proc createChannelGroupItem[T](self: Module[T], channelGroup: ChannelGroupDto): 
         colorHash = contactDetails.colorHash,
         onlineStatus = toOnlineStatus(self.controller.getStatusForContactWithId(bannedMemberId).statusType),
         isContact = contactDetails.dto.isContact,
-        isVerified = contactDetails.dto.isContactVerified()
+        isVerified = contactDetails.dto.isContactVerified(),
       )
     ),
     # pendingMemberRequests
@@ -346,7 +351,7 @@ proc createChannelGroupItem[T](self: Module[T], channelGroup: ChannelGroupDto): 
         onlineStatus = toOnlineStatus(self.controller.getStatusForContactWithId(requestDto.publicKey).statusType),
         isContact = contactDetails.dto.isContact,
         isVerified = contactDetails.dto.isContactVerified(),
-        requestToJoinId = requestDto.id
+        requestToJoinId = requestDto.id,
       )
     ) else: @[],
     # declinedMemberRequests
@@ -365,12 +370,21 @@ proc createChannelGroupItem[T](self: Module[T], channelGroup: ChannelGroupDto): 
         onlineStatus = toOnlineStatus(self.controller.getStatusForContactWithId(requestDto.publicKey).statusType),
         isContact = contactDetails.dto.isContact,
         isVerified = contactDetails.dto.isContactVerified(),
-        requestToJoinId = requestDto.id
+        requestToJoinId = requestDto.id,
       )
     ) else: @[],
     channelGroup.encrypted,
     communityTokensItems,
   )
+
+proc connectForNotificationsOnly[T](self: Module[T]) =
+  self.events.on(SIGNAL_WALLET_ACCOUNT_SAVED) do(e:Args):
+    let args = AccountArgs(e)
+    self.view.showToastAccountAdded(args.account.name)
+
+  self.events.on(SIGNAL_KEYPAIR_NAME_CHANGED) do(e: Args):
+    let args = KeypairArgs(e)
+    self.view.showToastKeypairRenamed(args.oldKeypairName, args.keypair.name)
 
 method load*[T](
   self: Module[T],
@@ -387,6 +401,7 @@ method load*[T](
   singletonInstance.engine.setRootContextProperty("mainModule", self.viewVariant)
   self.controller.init()
   self.view.load()
+  self.connectForNotificationsOnly()
 
   var activeSection: SectionItem
   var activeSectionId = singletonInstance.localAccountSensitiveSettings.getActiveSection()
@@ -985,7 +1000,7 @@ method resolvedENS*[T](self: Module[T], publicKey: string, address: string, uuid
     return
 
   if(reason == STATUS_URL_ENS_RESOLVE_REASON & $StatusUrlAction.DisplayUserProfile):
-    self.view.emitDisplayUserProfileSignal(publicKey)
+    self.switchToContactOrDisplayUserProfile(publicKey)
   else:
     self.view.emitResolvedENSSignal(publicKey, address, uuid)
 
@@ -1014,6 +1029,11 @@ method onCommunityTokenSupplyChanged*[T](self: Module[T], communityId: string, c
   if item.id != "":
     item.updateCommunityTokenSupply(chainId, contractAddress, supply)
     item.updateCommunityRemainingSupply(chainId, contractAddress, remainingSupply)
+
+method onBurnStateChanged*[T](self: Module[T], communityId: string, chainId: int, contractAddress: string, burnState: ContractTransactionStatus) =
+  let item = self.view.model().getItemById(communityId)
+  if item.id != "":
+    item.updateBurnState(chainId, contractAddress, burnState)
 
 method onAcceptRequestToJoinLoading*[T](self: Module[T], communityId: string, memberKey: string) =
   let item = self.view.model().getItemById(communityId)
@@ -1135,11 +1155,22 @@ proc getCommunityIdFromFullChatId(fullChatId: string): string =
   const communityIdLength = 68
   return fullChatId.substr(0, communityIdLength-1)
 
+proc switchToContactOrDisplayUserProfile[T](self: Module[T], publicKey: string) =
+  let contact = self.controller.getContact(publicKey)
+  if contact.isContact:
+    self.getChatSectionModule().switchToOrCreateOneToOneChat(publicKey)
+  else:
+    self.view.emitDisplayUserProfileSignal(publicKey)
+
 method onStatusUrlRequested*[T](self: Module[T], action: StatusUrlAction, communityId: string, chatId: string,
   url: string, userId: string) =
 
   if(action == StatusUrlAction.DisplayUserProfile):
-    self.resolveENS(userId, "", STATUS_URL_ENS_RESOLVE_REASON & $StatusUrlAction.DisplayUserProfile)
+    if singletonInstance.utils().isCompressedPubKey(userId):
+      let contactPk = singletonInstance.utils().getDecompressedPk(userId)
+      self.switchToContactOrDisplayUserProfile(contactPk)
+    else:    
+      self.resolveENS(userId, "", STATUS_URL_ENS_RESOLVE_REASON & $StatusUrlAction.DisplayUserProfile)
 
   elif(action == StatusUrlAction.OpenCommunity):
     let item = self.view.model().getItemById(communityId)

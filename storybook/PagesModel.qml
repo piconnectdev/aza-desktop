@@ -86,6 +86,14 @@ ListModel {
          section: "Views"
     }
     ListElement {
+        title: "EditOwnerTokenView"
+        section: "Views"
+    }
+    ListElement {
+        title: "AccountView"
+        section: "Views"
+    }
+    ListElement {
          title: "StatusCommunityCard"
          section: "Panels"
     }
@@ -178,6 +186,14 @@ ListModel {
         section: "Panels"
     }
     ListElement {
+        title: "FeeRow"
+        section: "Panels"
+    }
+    ListElement {
+        title: "FeesBox"
+        section: "Panels"
+    }
+    ListElement {
         title: "ChatPermissionQualificationPanel"
         section: "Panels"
     }
@@ -199,6 +215,10 @@ ListModel {
     }
     ListElement {
         title: "StatusInfoBoxPanel"
+        section: "Panels"
+    }
+    ListElement {
+        title: "OverviewSettingsChart"
         section: "Panels"
     }
     ListElement {
@@ -246,6 +266,10 @@ ListModel {
          section: "Popups"
     }
     ListElement {
+         title: "SharedAddressesPopup"
+         section: "Popups"
+    }
+    ListElement {
          title: "AlertPopup"
          section: "Popups"
     }
@@ -259,6 +283,14 @@ ListModel {
     }
     ListElement {
         title: "UserAgreementPopup"
+        section: "Popups"
+    }
+    ListElement {
+        title: "ExportControlNodePopup"
+        section: "Popups"
+    }
+    ListElement {
+        title: "ImportControlNodePopup"
         section: "Popups"
     }
     ListElement {

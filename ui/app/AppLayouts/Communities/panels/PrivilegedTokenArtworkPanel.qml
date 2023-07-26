@@ -11,7 +11,8 @@ import utils 1.0
 Control {
     id: root
 
-    required property bool isOwner
+    // https://bugreports.qt.io/browse/QTBUG-84269
+    /*required*/ property bool isOwner
 
     property bool showTag: false
     property int size: PrivilegedTokenArtworkPanel.Size.Small
@@ -22,14 +23,34 @@ Control {
     QtObject {
         id: d
 
-        readonly property int imageSize: size === PrivilegedTokenArtworkPanel.Size.Small ? 80 : 186
-        readonly property int bgSize: size === PrivilegedTokenArtworkPanel.Size.Small ? 120 : 280
-        readonly property int iconSize: size === PrivilegedTokenArtworkPanel.Size.Small ? 16 : 38
-        readonly property int iconMargins: size === PrivilegedTokenArtworkPanel.Size.Small ? 8 : 16
+        readonly property int imageSize: ({
+                                              [PrivilegedTokenArtworkPanel.Size.Small]: 80,
+                                              [PrivilegedTokenArtworkPanel.Size.Medium]: 109,
+                                              [PrivilegedTokenArtworkPanel.Size.Large]: 186
+                                          }[size])
+
+        readonly property int bgSize: ({
+                                           [PrivilegedTokenArtworkPanel.Size.Small]: 120,
+                                           [PrivilegedTokenArtworkPanel.Size.Medium]: 164,
+                                           [PrivilegedTokenArtworkPanel.Size.Large]: 280
+                                       }[size])
+
+        readonly property int iconSize: ({
+                                             [PrivilegedTokenArtworkPanel.Size.Small]: 14,
+                                             [PrivilegedTokenArtworkPanel.Size.Medium]: 16,
+                                             [PrivilegedTokenArtworkPanel.Size.Large]: 38
+                                         }[size])
+
+        readonly property int iconMargins: ({
+                                                [PrivilegedTokenArtworkPanel.Size.Small]: 8,
+                                                [PrivilegedTokenArtworkPanel.Size.Medium]: 12,
+                                                [PrivilegedTokenArtworkPanel.Size.Large]: 16
+                                            }[size])
     }
 
     enum Size {
         Small,
+        Medium,
         Large
     }
 
@@ -37,7 +58,7 @@ Control {
     implicitHeight: implicitWidth
 
     background: Rectangle {
-        color: "transparent"
+        color: Theme.palette.statusAppLayout.rightPanelBackgroundColor
         radius: 8
         border.color: Theme.palette.baseColor2
     }

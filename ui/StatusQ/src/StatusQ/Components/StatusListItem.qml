@@ -46,8 +46,16 @@ Rectangle {
         isLetterIdenticon: false
         letterSize: 21
         charactersLen: 1
-        color: isLetterIdenticon ? bgColor : type === StatusListItem.Type.Danger ?
-            Theme.palette.dangerColor1 : Theme.palette.primaryColor1
+        color: {
+            if (!root.enabled)
+                return Theme.palette.baseColor1
+            if (isLetterIdenticon)
+                return bgColor
+            if (type === StatusListItem.Type.Danger)
+                return Theme.palette.dangerColor1
+
+            return Theme.palette.primaryColor1
+        }
         bgWidth: 40
         bgHeight: 40
         bgRadius: bgWidth / 2
@@ -359,8 +367,8 @@ Rectangle {
                 id: tagsScrollView
                 visible: tagsRepeater.count > 0
                 anchors.top: statusListItemTertiaryTitle.bottom
-                anchors.topMargin: visible ? 8 : 0
-                width: Math.min(statusListItemTagsSlotInline.width, statusListItemTagsSlotInline.availableWidth)
+                anchors.topMargin: visible ? 2 : 0
+                width: Math.min(statusListItemTagsSlotInline.width, statusListItemTagsSlotInline.availableWidth, parent.width)
                 height: visible ? contentHeight : 0
                 padding: 0
 
@@ -378,7 +386,7 @@ Rectangle {
 
             RowLayout {
                 anchors.top: tagsScrollView.bottom
-                anchors.topMargin: visible ? 8 : 0
+                anchors.topMargin: visible ? 4 : 0
                 width: parent.width
                 visible: !!root.beneathTagsIcon || !!root.beneathTagsTitle
                 spacing: 4

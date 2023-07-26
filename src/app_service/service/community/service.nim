@@ -127,6 +127,8 @@ const SIGNAL_COMMUNITY_JOINED* = "communityJoined"
 const SIGNAL_COMMUNITY_SPECTATED* = "communitySpectated"
 const SIGNAL_COMMUNITY_MY_REQUEST_ADDED* = "communityMyRequestAdded"
 const SIGNAL_COMMUNITY_MY_REQUEST_FAILED* = "communityMyRequestFailed"
+const SIGNAL_COMMUNITY_EDIT_SHARED_ADDRESSES_SUCCEEDED* = "communityEditSharedAddressesSucceded"
+const SIGNAL_COMMUNITY_EDIT_SHARED_ADDRESSES_FAILED* = "communityEditSharedAddressesFailed"
 const SIGNAL_COMMUNITY_LEFT* = "communityLeft"
 const SIGNAL_COMMUNITY_CREATED* = "communityCreated"
 const SIGNAL_COMMUNITY_ADDED* = "communityAdded"
@@ -184,6 +186,8 @@ const TOKEN_PERMISSIONS_ADDED = "tokenPermissionsAdded"
 const TOKEN_PERMISSIONS_MODIFIED = "tokenPermissionsModified"
 
 const SIGNAL_CHECK_PERMISSIONS_TO_JOIN_RESPONSE* = "checkPermissionsToJoinResponse"
+
+const SIGNAL_COMMUNITY_PRIVATE_KEY_REMOVED* = "communityPrivateKeyRemoved"
 
 QtObject:
   type
@@ -1438,6 +1442,36 @@ QtObject:
         error: e.msg
       ))
 
+  proc asyncEditSharedAddresses*(self: Service, communityId: string, password: string, addressesToShare: seq[string],
+      airdropAddress: string) =
+    let arg = AsyncEditSharedAddressesTaskArg(
+      tptr: cast[ByteAddress](asyncEditSharedAddressesTask),
+      vptr: cast[ByteAddress](self.vptr),
+      slot: "onAsyncEditSharedAddressesDone",
+      communityId: communityId,
+      password: password,
+      addressesToShare: addressesToShare,
+      airdropAddress: airdropAddress,
+    )
+    self.threadpool.start(arg)
+    
+  proc onAsyncEditSharedAddressesDone*(self: Service, communityIdAndRpcResponse: string) {.slot.} =
+    let rpcResponseObj = communityIdAndRpcResponse.parseJson
+    try:
+      if (rpcResponseObj{"error"}.kind != JNull and rpcResponseObj{"error"}.getStr != ""):
+        raise newException(CatchableError, rpcResponseObj{"error"}.getStr)
+
+      # If we need the returned shared addresses, use the value in members.revealed_accounts of the response
+      self.events.emit(SIGNAL_COMMUNITY_EDIT_SHARED_ADDRESSES_SUCCEEDED, CommunityIdArgs(
+        communityId: rpcResponseObj["communityId"].getStr,
+      ))
+    except Exception as e:
+      error "Error editing shared addresses", msg = e.msg
+      self.events.emit(SIGNAL_COMMUNITY_EDIT_SHARED_ADDRESSES_FAILED, CommunityRequestFailedArgs(
+        communityId: rpcResponseObj["communityId"].getStr,
+        error: e.msg
+      ))
+
   proc asyncAcceptRequestToJoinCommunity*(self: Service, communityId: string, requestId: string) =
     try:
       let userKey = self.getUserPubKeyFromPendingRequest(communityId, requestId)
@@ -1534,6 +1568,20 @@ QtObject:
       importing: importing
     )
     self.threadpool.start(arg)
+
+  proc removePrivateKey*(self: Service, communityId: string) =
+    try:
+      let response = status_go.removePrivateKey(communityId)
+      if (response.error != nil):
+        let error = Json.decode($response.error, RpcError)
+        raise newException(RpcException, fmt"err: {error.message}")
+
+      var community = self.communities[communityId]
+      community.isControlNode = false
+      self.communities[communityId] = community
+      self.events.emit(SIGNAL_COMMUNITY_PRIVATE_KEY_REMOVED, CommunityArgs(community: community))
+    except Exception as e:
+      error "Error removing community private key: ", msg = e.msg
 
   proc importCommunity*(self: Service, communityKey: string) =
     try:

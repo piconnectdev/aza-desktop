@@ -66,13 +66,12 @@ Rectangle {
     }
 
     Loader {
-        id: walletBckgAccountContextMenu
+        id: walletAccountContextMenu
+        active: false
         sourceComponent: AccountContextMenu {
 
-            uniqueIdentifier: "wallet-background"
-
             onClosed: {
-                walletBckgAccountContextMenu.active = false
+                walletAccountContextMenu.active = false
             }
 
             onAddNewAccountClicked: {
@@ -81,6 +80,22 @@ Rectangle {
 
             onAddWatchOnlyAccountClicked: {
                 RootStore.runAddWatchOnlyAccountPopup()
+            }
+
+            onEditAccountClicked: {
+                if (!account)
+                    return
+                RootStore.runEditAccountPopup(account.address)
+            }
+
+            onDeleteAccountClicked: {
+                if (!account)
+                    return
+                removeAccountConfirmation.simple = account.walletType === Constants.watchWalletType || account.walletType === Constants.keyWalletType
+                removeAccountConfirmation.accountName = account.name
+                removeAccountConfirmation.accountAddress = account.address
+                removeAccountConfirmation.accountDerivationPath = account.path
+                removeAccountConfirmation.active = true
             }
         }
     }
@@ -137,8 +152,8 @@ Rectangle {
 
         onClicked: {
             if (mouse.button === Qt.RightButton) {
-                walletBckgAccountContextMenu.active = true
-                walletBckgAccountContextMenu.item.popup(mouse.x, mouse.y)
+                walletAccountContextMenu.active = true
+                walletAccountContextMenu.item.popup(mouse.x, mouse.y)
             }
         }
     }
@@ -192,8 +207,10 @@ Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
             Layout.topMargin: Style.current.halfPadding
-
-            // ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+            currentIndex: -1
+            highlightRangeMode: ListView.ApplyRange
+            preferredHighlightBegin: 0
+            preferredHighlightEnd: height - (footerOverlayed ? footerItem.height : 0)
 
             readonly property Item firstItem: count > 0 ? itemAtIndex(0) : null
 
@@ -202,6 +219,10 @@ Rectangle {
                 readonly property bool itemLoaded: !model.assetsLoading // needed for e2e tests
                 width: ListView.view.width - Style.current.padding * 2
                 highlighted: root.currentAddress.toLowerCase() === model.address.toLowerCase()
+                onHighlightedChanged: {
+                    if (highlighted)
+                        ListView.view.currentIndex = index
+                }
                 anchors.horizontalCenter: !!parent ? parent.horizontalCenter : undefined
                 title: model.name
                 subTitle: LocaleUtils.currencyAmountToLocaleString(model.currencyBalance)
@@ -221,8 +242,9 @@ Rectangle {
                 errorIcon.tooltip.text: networkConnectionStore.accountBalanceNotAvailableText
                 onClicked: {
                     if (mouse.button === Qt.RightButton) {
-                        accountContextMenu.active = true
-                        accountContextMenu.item.popup(mouse.x, mouse.y)
+                        walletAccountContextMenu.active = true
+                        walletAccountContextMenu.item.account = model
+                        walletAccountContextMenu.item.popup(this, mouse.x, mouse.y)
                         return
                     }
                     root.showSavedAddresses = false
@@ -243,39 +265,6 @@ Rectangle {
                         icon: model.keycardAccount ? "keycard" : ""
                     }
                 ]
-
-                Loader {
-                    id: accountContextMenu
-                    sourceComponent: AccountContextMenu {
-
-                        uniqueIdentifier: model.name
-                        account: model
-
-                        onClosed: {
-                            accountContextMenu.active = false
-                        }
-
-                        onEditAccountClicked: {
-                            RootStore.runEditAccountPopup(model.address)
-                        }
-
-                        onDeleteAccountClicked: {
-                            removeAccountConfirmation.simple = model.walletType === Constants.watchWalletType || model.walletType === Constants.keyWalletType
-                            removeAccountConfirmation.accountName = model.name
-                            removeAccountConfirmation.accountAddress = model.address
-                            removeAccountConfirmation.accountDerivationPath = model.path
-                            removeAccountConfirmation.active = true
-                        }
-
-                        onAddNewAccountClicked: {
-                            RootStore.runAddAccountPopup()
-                        }
-
-                        onAddWatchOnlyAccountClicked: {
-                            RootStore.runAddWatchOnlyAccountPopup()
-                        }
-                    }
-                }
             }
 
             readonly property bool footerOverlayed: contentHeight > availableHeight
@@ -298,6 +287,7 @@ Rectangle {
                         cursorShape: Qt.PointingHandCursor
                         onClicked: {
                             root.showSavedAddresses = false
+                            walletAccountsListView.currentIndex = -1
                             root.selectAllAccounts()
                         }
                         hoverEnabled: true
@@ -331,9 +321,7 @@ Rectangle {
                         id: walletAmountValue
                         objectName: "walletLeftListAmountValue"
                         customColor: Style.current.textColor
-                        text: {
-                            LocaleUtils.currencyAmountToLocaleString(RootStore.totalCurrencyBalance)
-                        }
+                        text: LocaleUtils.currencyAmountToLocaleString(RootStore.totalCurrencyBalance)
                         font.pixelSize: 22
                         loading: RootStore.assetsLoading
                         visible: !networkConnectionStore.accountBalanceNotAvailable
@@ -425,10 +413,8 @@ Rectangle {
 
             model: SortFilterProxyModel {
                 sourceModel: RootStore.accounts
-
                 sorters: RoleSorter { roleName: "position"; sortOrder: Qt.AscendingOrder }
             }
-            
         }
     }
 }

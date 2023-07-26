@@ -1,4 +1,8 @@
 import NimQml, strformat
+import app_service/service/wallet_account/dto as wa_dto
+import ./currency_amount
+
+export wa_dto
 
 QtObject:
   type KeyPairAccountItem* = ref object of QObject
@@ -6,17 +10,19 @@ QtObject:
     path: string
     address: string
     pubKey: string
+    operability: string
     emoji: string
     colorId: string
     icon: string
-    balance: float
+    balance: CurrencyAmount
     balanceFetched: bool
+    isDefaultAccount: bool
 
   proc delete*(self: KeyPairAccountItem) =
     self.QObject.delete
 
   proc newKeyPairAccountItem*(name = "", path = "", address = "", pubKey = "", emoji = "", colorId = "", icon = "",
-    balance = 0.0, balanceFetched = true): KeyPairAccountItem =
+    balance = newCurrencyAmount(), balanceFetched = true, operability = wa_dto.AccountFullyOperable, isDefaultAccount = false): KeyPairAccountItem =
     new(result, delete)
     result.QObject.setup
     result.name = name
@@ -28,6 +34,8 @@ QtObject:
     result.icon = icon
     result.balance = balance
     result.balanceFetched = balanceFetched
+    result.operability = operability
+    result.isDefaultAccount = isDefaultAccount
 
   proc `$`*(self: KeyPairAccountItem): string =
     result = fmt"""KeyPairAccountItem[
@@ -40,6 +48,7 @@ QtObject:
       icon: {self.icon},
       balance: {self.balance},
       balanceFetched: {self.balanceFetched}
+      isDefaultAccount = {self.isDefaultAccount}
       ]"""
 
   proc nameChanged*(self: KeyPairAccountItem) {.signal.}
@@ -86,6 +95,17 @@ QtObject:
     write = setPubKey
     notify = pubKeyChanged
 
+  proc operabilityChanged*(self: KeyPairAccountItem) {.signal.}
+  proc getOperability*(self: KeyPairAccountItem): string {.slot.} =
+    return self.operability
+  proc setOperability*(self: KeyPairAccountItem, value: string) {.slot.} =
+    self.operability = value
+    self.operabilityChanged()
+  QtProperty[string] operability:
+    read = getOperability
+    write = setOperability
+    notify = operabilityChanged
+
   proc emojiChanged*(self: KeyPairAccountItem) {.signal.}
   proc getEmoji*(self: KeyPairAccountItem): string {.slot.} =
     return self.emoji
@@ -120,19 +140,27 @@ QtObject:
     notify = iconChanged
 
   proc balanceChanged*(self: KeyPairAccountItem) {.signal.}
-  proc getBalance*(self: KeyPairAccountItem): float {.slot.} =
-    return self.balance
-  proc setBalance*(self: KeyPairAccountItem, value: float) {.slot.} =
+  proc getBalance*(self: KeyPairAccountItem): QVariant {.slot.} =
+    return newQVariant(self.balance)
+  proc setBalance*(self: KeyPairAccountItem, value: CurrencyAmount) =
     self.balance = value
     self.balanceFetched = true
     self.balanceChanged()
-  QtProperty[float] balance:
+  QtProperty[QVariant] balance:
     read = getBalance
     write = setBalance
     notify = balanceChanged
 
+  proc balanceFetchedChanged*(self: KeyPairAccountItem) {.signal.}
   proc getBalanceFetched*(self: KeyPairAccountItem): bool {.slot.} =
     return self.balanceFetched
   QtProperty[bool] balanceFetched:
     read = getBalanceFetched
-    notify = balanceChanged
+    notify = balanceFetchedChanged
+
+  proc isDefaultAccountChanged*(self: KeyPairAccountItem) {.signal.}
+  proc getIsDefaultAccount*(self: KeyPairAccountItem): bool {.slot.} =
+    return self.isDefaultAccount
+  QtProperty[bool] isDefaultAccount:
+    read = getIsDefaultAccount
+    notify = isDefaultAccountChanged

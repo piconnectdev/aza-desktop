@@ -19,6 +19,7 @@ import ../../../core/eventemitter
 import ../../../../app_service/common/types
 import ../../../../app_service/service/community/service as community_service
 import ../../../../app_service/service/contacts/service as contacts_service
+import ../../../../app_service/service/chat/service as chat_service
 import ../../../../app_service/service/network/service as networks_service
 import ../../../../app_service/service/transaction/service as transaction_service
 import ../../../../app_service/service/community_tokens/service as community_tokens_service
@@ -59,6 +60,7 @@ proc newModule*(
     networksService: networks_service.Service,
     transactionService: transaction_service.Service,
     tokensService: token_service.Service,
+    chatService: chat_service.Service,
     ): Module =
   result = Module()
   result.delegate = delegate
@@ -72,6 +74,7 @@ proc newModule*(
     communityTokensService,
     networksService,
     tokensService,
+    chatService,
   )
   result.communityTokensModule = community_tokens_module.newCommunityTokensModule(result, events, communityTokensService, transactionService, networksService)
   result.moduleLoaded = false
@@ -133,7 +136,8 @@ proc createMemberItem(self: Module, memberId, requestId: string): MemberItem =
     onlineStatus = toOnlineStatus(self.controller.getStatusForContactWithId(memberId).statusType),
     isContact = contactDetails.dto.isContact,
     isVerified = contactDetails.dto.isContactVerified(),
-    requestToJoinId = requestId)
+    requestToJoinId = requestId,
+  )
 
 method getCommunityItem(self: Module, c: CommunityDto): SectionItem =
   return initItem(
@@ -141,6 +145,7 @@ method getCommunityItem(self: Module, c: CommunityDto): SectionItem =
       SectionType.Community,
       c.name,
       c.memberRole,
+      c.isControlNode,
       c.description,
       c.introMessage,
       c.outroMessage,
@@ -179,7 +184,8 @@ proc getCuratedCommunityItem(self: Module, community: CommunityDto): CuratedComm
   var tokenPermissionsItems: seq[TokenPermissionItem] = @[]
 
   for id, tokenPermission in community.tokenPermissions:
-    let tokenPermissionItem = buildTokenPermissionItem(tokenPermission)
+    let chats = self.controller.getChatDetailsByIds(tokenPermission.chatIDs)
+    let tokenPermissionItem = buildTokenPermissionItem(tokenPermission, chats)
     tokenPermissionsItems.add(tokenPermissionItem)
 
   return initCuratedCommunityItem(
@@ -232,6 +238,9 @@ method navigateToCommunity*(self: Module, communityId: string) =
   else:
     self.delegate.setActiveSectionById(communityId)
 
+method communityPrivateKeyRemoved*(self: Module, communityId: string) =
+  self.view.communityPrivateKeyRemoved(communityId)
+
 method communityEdited*(self: Module, community: CommunityDto) =
   self.view.model().editItem(self.getCommunityItem(community))
   self.view.communityChanged(community.id)
@@ -272,6 +281,12 @@ method communityAccessRequested*(self: Module, communityId: string) =
 
 method communityAccessFailed*(self: Module, communityId, error: string) =
   self.view.communityAccessFailed(communityId, error)
+
+method communityEditSharedAddressesSucceeded*(self: Module, communityId: string) =
+  self.view.communityEditSharedAddressesSucceeded(communityId)
+
+method communityEditSharedAddressesFailed*(self: Module, communityId, error: string) =
+  self.view.communityEditSharedAddressesFailed(communityId, error)
 
 method communityHistoryArchivesDownloadStarted*(self: Module, communityId: string) =
   self.view.setDownloadingCommunityHistoryArchives(true)
@@ -320,6 +335,9 @@ method communityImported*(self: Module, community: CommunityDto) =
 
 method communityDataImported*(self: Module, community: CommunityDto) = 
   self.view.addItem(self.getCommunityItem(community))
+
+method removePrivateKey*(self: Module, communityId: string) =
+  self.controller.removePrivateKey(communityId)
 
 method importCommunity*(self: Module, communityId: string) =
   self.view.emitImportingCommunityStateChangedSignal(communityId, ImportCommunityState.ImportingInProgress.int, errorMsg = "")

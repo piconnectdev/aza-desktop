@@ -11,6 +11,7 @@ import "stores"
 import AppLayouts.Communities.popups 1.0
 
 import AppLayouts.Chat.stores 1.0
+import AppLayouts.Wallet.stores 1.0 as WalletStore
 
 StackLayout {
     id: root
@@ -21,6 +22,8 @@ StackLayout {
     readonly property var permissionsStore: rootStore.permissionsStore
 
     property var sectionItemModel
+
+    property bool communitySettingsDisabled
 
     property var emojiPopup
     property var stickersPopup
@@ -153,9 +156,10 @@ StackLayout {
             id: communitySettingsView
             rootStore: root.rootStore
 
-            hasAddedContacts: root.contactsStore.myContactsModel.count > 0
             chatCommunitySectionModule: root.rootStore.chatCommunitySectionModule
             community: sectionItemModel
+            communitySettingsDisabled: root.communitySettingsDisabled
+            onCommunitySettingsDisabledChanged: if (communitySettingsDisabled) goTo(Constants.CommunitySettingsSections.Overview)
 
             onBackToCommunityClicked: root.currentIndex = 0
 
@@ -176,8 +180,14 @@ StackLayout {
 
             property string communityId
 
+            loginType: root.rootStore.loginType
+            walletAccountsModel: WalletStore.RootStore.receiveAccounts
+            permissionsModel: root.permissionsStore.permissionsModel
+            assetsModel: root.rootStore.assetsModel
+            collectiblesModel: root.rootStore.collectiblesModel
+
             onJoined: {
-                root.rootStore.requestToJoinCommunityWithAuthentication(root.rootStore.userProfileInst.name)
+                root.rootStore.requestToJoinCommunityWithAuthentication(root.rootStore.userProfileInst.name, sharedAddresses, airdropAddress)
             }
 
             onCancelMembershipRequest: {

@@ -73,6 +73,9 @@ rpc(addEthereumChain, "wallet"):
 rpc(deleteEthereumChain, "wallet"):
   chainId: int
 
+rpc(fetchChainIDForURL, "wallet"):
+  url: string
+
 rpc(upsertSavedAddress, "wakuext"):
   savedAddress: SavedAddress
 
@@ -259,9 +262,13 @@ rpc(deleteKeycard, "accounts"):
 rpc(deleteAllKeycardsWithKeyUID, "accounts"):
   keyUid: string
 
-rpc(updateAccountPosition, "accounts"):
-  address: string
-  position: int
+rpc(moveWalletAccount, "accounts"):
+  fromPosition: int
+  toPosition: int
+
+rpc(updateKeypairName, "accounts"):
+  keyUid: string
+  name: string
 
 rpc(getHourlyMarketValues, "wallet"):
   symbol: string

@@ -68,7 +68,10 @@ StatusListItem {
             return qsTr("N/A")
         } else if (root.isNFT) {
             return modelData.nftName ? modelData.nftName : "#" + modelData.tokenID
+        } else if (!modelData.symbol) {
+            return "%1 (%2)".arg(root.rootStore.formatCurrencyAmount(cryptoValue, "")).arg(Utils.compactAddress(modelData.contract, 4))
         }
+
         return root.rootStore.formatCurrencyAmount(cryptoValue, modelData.symbol)
     }
 
@@ -76,7 +79,7 @@ StatusListItem {
     readonly property string outTransactionValue: isModelDataValid && isMultiTransaction ? rootStore.formatCurrencyAmount(outCryptoValue, modelData.outSymbol) : qsTr("N/A")
 
     readonly property string tokenImage: {
-        if (!isModelDataValid)
+        if (!isModelDataValid || modelData.txType === Constants.TransactionType.ContractDeployment)
             return ""
         if (root.isNFT) {
             return modelData.nftImageUrl ? modelData.nftImageUrl : ""
@@ -174,6 +177,9 @@ StatusListItem {
         case Constants.TransactionType.Bridge:
             details += qsTr("Bridge transaction details") + endl2
             break
+        case Constants.TransactionType.ContractDeployment:
+            details += qsTr("Contract deployment details") + endl2
+            break
         default:
             break
         }
@@ -185,6 +191,7 @@ StatusListItem {
         case Constants.TransactionType.Destroy:
         case Constants.TransactionType.Swap:
         case Constants.TransactionType.Bridge:
+        case Constants.TransactionType.ContractDeployment:
             details += subTitle + endl2
             break
         default:
@@ -251,6 +258,18 @@ StatusListItem {
             details += qsTr("To") + endl + toNetworkName + endl2
             details += qsTr("In") + endl + modelData.from + endl2
             break
+        case Constants.TransactionType.ContractDeployment:
+            details += qsTr("From") + endl + modelData.sender + endl2
+            const failed = root.transactionStatus === Constants.TransactionStatus.Failed
+            const isPending = root.transactionStatus === Constants.TransactionStatus.Pending || !modelData.contract
+            if (failed) {
+                details += qsTr("To\nContract address not created")
+            } else if (isPending) {
+                details += qsTr("To\nAwaiting contract address...")
+            } else {
+                details += qsTr("To\nContract created") + endl + modelData.contract + endl2
+            }
+            break
         default:
             details += qsTr("From") + endl + modelData.sender + endl2
             details += qsTr("To") + endl + modelData.recipient + endl2
@@ -272,8 +291,9 @@ StatusListItem {
             details += qsTr("%1 %2 contract address").arg(root.networkName).arg(protocolName) + endl
             details += protocolFromContractAddress + endl2
         }
-        if (!!modelData.contract) {
-            details += qsTr("%1 %2 contract address").arg(root.networkName).arg(modelData.symbol) + endl
+        if (!!modelData.contract && type !== Constants.TransactionType.ContractDeployment) {
+            let symbol = !!modelData.symbol || !modelData.contract ? modelData.symbol : "(%1)".arg(Utils.compactAddress(modelData.contract, 4))
+            details += qsTr("%1 %2 contract address").arg(root.networkName).arg(symbol) + endl
             details += modelData.contract + endl2
         }
         const protocolToContractAddress = "" // TODO fill protocol contract address for 'to' network for Bridge
@@ -363,6 +383,18 @@ StatusListItem {
                 valuesString += qsTr("Fees %1 (%2)").arg(feeCrypto).arg(feeFiat) + endl2
             } else if (type === Constants.TransactionType.Receive || (type === Constants.TransactionType.Buy && isLayer1)) {
                 valuesString += qsTr("Total %1 (%2)").arg(root.transactionValue).arg(fiatTransactionValue) + endl2
+            } else if (type === Constants.TransactionType.ContractDeployment) {
+                const isPending = root.transactionStatus === Constants.TransactionStatus.Pending
+                if (isPending) {
+                    const maxFeeEthValue = rootStore.getGasEthValue(modelData.maxTotalFees.amount, 1)
+                    const maxFeeCrypto = rootStore.formatCurrencyAmount(maxFeeEthValue, "ETH")
+                    const maxFeeFiat = rootStore.formatCurrencyAmount(maxFeeCrypto, root.currentCurrency)
+                    valuesString += qsTr("Estimated max fee %1 (%2)").arg(maxFeeCrypto).arg(maxFeeFiat) + endl2
+                } else {
+                    const feeCrypto = rootStore.formatCurrencyAmount(feeEthValue, "ETH")
+                    const feeFiat = rootStore.formatCurrencyAmount(feeFiatValue, root.currentCurrency)
+                    valuesString += qsTr("Fees %1 (%2)").arg(feeCrypto).arg(feeFiat) + endl2
+                }
             } else {
                 const feeEth = rootStore.formatCurrencyAmount(feeEthValue, "ETH")
                 const txValue = isMultiTransaction ? root.inTransactionValue : root.transactionValue
@@ -376,8 +408,8 @@ StatusListItem {
             details += valuesString + endl2
         }
 
-        // Remove locale specific number separator
-        details = details.replace(/\ /, ' ')
+        // Remove unicode characters
+        details = details.replace(/[^\x00-\x7F]/g, " ");
         // Remove empty new lines at the end
         return details.replace(/[\r\n\s]*$/, '')
     }
@@ -412,6 +444,8 @@ StatusListItem {
                 return "swap"
             case Constants.TransactionType.Bridge:
                 return "bridge"
+            case Constants.TransactionType.ContractDeployment:
+                return "contract_deploy"
             default:
                 return ""
             }
@@ -459,6 +493,8 @@ StatusListItem {
             return failed ? qsTr("Swap failed") : (isPending ? qsTr("Swapping") : qsTr("Swapped"))
         case Constants.TransactionType.Bridge:
             return failed ? qsTr("Bridge failed") : (isPending ? qsTr("Bridging") : qsTr("Bridged"))
+        case Constants.TransactionType.ContractDeployment:
+            return failed ? qsTr("Contract deployment failed") : (isPending ? qsTr("Deploying contract") : qsTr("Contract deployed"))
         default:
             return ""
         }
@@ -471,7 +507,8 @@ StatusListItem {
     statusListItemTitleIcons.sourceComponent: Row {
         spacing: 8
         Row {
-            visible: !root.loading
+            id: tokenImagesRow
+            visible: !root.loading && !!root.tokenIconAsset.name
             spacing: secondTokenImage.visible ? -tokenImage.width * 0.2 : 0
             StatusRoundIcon {
                 id: tokenImage
@@ -504,6 +541,7 @@ StatusListItem {
             visible: !!text
             loading: root.loading
             customColor: Theme.palette.baseColor1
+            leftPadding: tokenImagesRow.visible ? 0 : parent.spacing
         }
     }
 
@@ -529,6 +567,10 @@ StatusListItem {
         case Constants.TransactionType.Bridge:
             let toNetworkName = "" // TODO fill when Bridge data is implemented
             return qsTr("%1 from %2 to %3").arg(inTransactionValue).arg(networkName).arg(toNetworkName)
+        case Constants.TransactionType.ContractDeployment:
+            const name = addressNameTo || addressNameFrom
+            return !!modelData.contract ? qsTr("Contract %1 via %2 on %3").arg(Utils.compactAddress(modelData.contract, 4)).arg(name).arg(networkName)
+                                        : qsTr("Via %1 on %2").arg(name).arg(networkName)
         default:
             return qsTr("%1 to %2 via %3").arg(transactionValue).arg(toAddress).arg(networkName)
         }
@@ -602,7 +644,7 @@ StatusListItem {
                     text: {
                         if (root.loading) {
                             return "dummy text"
-                        } else if (!root.isModelDataValid || root.isNFT) {
+                        } else if (!root.isModelDataValid || root.isNFT || !modelData.symbol) {
                             return ""
                         }
 

@@ -11,9 +11,6 @@ import ../../shared_models/token_permissions_model
 import ../../shared_models/token_permission_item
 import ../../shared_models/token_criteria_item
 import ../../shared_models/token_criteria_model
-import ../../shared_models/token_list_item
-import ../../shared_models/token_list_model
-import ../../shared_models/token_permission_chat_list_item
 import ../../shared_models/token_permission_chat_list_model
 
 import chat_content/module as chat_content_module
@@ -281,7 +278,8 @@ proc rebuildCommunityTokenPermissionsModel(self: Module) =
   var tokenPermissionsItems: seq[TokenPermissionItem] = @[]
 
   for id, tokenPermission in community.tokenPermissions:
-    let tokenPermissionItem = buildTokenPermissionItem(tokenPermission)
+    let chats = self.controller.getChatDetailsByIds(tokenPermission.chatIDs)
+    let tokenPermissionItem = buildTokenPermissionItem(tokenPermission, chats)
     tokenPermissionsItems.add(tokenPermissionItem)
 
   let memberPermissions = filter(tokenPermissionsItems, tokenPermissionsItem => 
@@ -460,7 +458,7 @@ method getModuleAsVariant*(self: Module): QVariant =
 
 method getChatContentModule*(self: Module, chatId: string): QVariant =
   if(not self.chatContentModules.contains(chatId)):
-    error "unexisting chat key: ", chatId, methodName="getChatContentModule"
+    error "unexisting chat key", chatId, methodName="getChatContentModule"
     return
 
   return self.chatContentModules[chatId].getModuleAsVariant()
@@ -783,7 +781,8 @@ method onCommunityTokenPermissionDeleted*(self: Module, communityId: string, per
   singletonInstance.globalEvents.showCommunityTokenPermissionDeletedNotification(communityId, "Community permission deleted", "A token permission has been removed")
 
 method onCommunityTokenPermissionCreated*(self: Module, communityId: string, tokenPermission: CommunityTokenPermissionDto) =
-  let tokenPermissionItem = buildTokenPermissionItem(tokenPermission)
+  let chats = self.controller.getChatDetailsByIds(tokenPermission.chatIDs)
+  let tokenPermissionItem = buildTokenPermissionItem(tokenPermission, chats)
 
   self.view.tokenPermissionsModel.addItem(tokenPermissionItem)
   self.reevaluateRequiresTokenPermissionToJoin()
@@ -863,7 +862,8 @@ method onCommunityCheckPermissionsToJoinResponse*(self: Module, checkPermissions
   self.updateTokenPermissionModel(checkPermissionsToJoinResponse.permissions, community)
 
 method onCommunityTokenPermissionUpdated*(self: Module, communityId: string, tokenPermission: CommunityTokenPermissionDto) =
-  let tokenPermissionItem = buildTokenPermissionItem(tokenPermission)
+  let chats = self.controller.getChatDetailsByIds(tokenPermission.chatIDs)
+  let tokenPermissionItem = buildTokenPermissionItem(tokenPermission, chats)
   self.view.tokenPermissionsModel.updateItem(tokenPermission.id, tokenPermissionItem)
   self.reevaluateRequiresTokenPermissionToJoin()
 
@@ -903,7 +903,7 @@ method onUserAuthenticated*(self: Module, pin: string, password: string, keyUid:
     self.controller.userAuthenticationCanceled()
     return
 
-  self.controller.requestToJoinCommunityAuthenticated(password)
+  self.controller.userAuthenticated(password)
 
 method onMarkAllMessagesRead*(self: Module, chat: ChatDto) =
   self.updateBadgeNotifications(chat, hasUnreadMessages=false, unviewedMentionsCount=0)
@@ -1058,6 +1058,7 @@ method joinGroupChatFromInvitation*(self: Module, groupName: string, chatId: str
 
 method onChatRenamed*(self: Module, chatId: string, newName: string) =
   self.view.chatsModel().renameItemById(chatId, newName)
+  self.view.tokenPermissionsModel().renameChatById(chatId, newName)
 
 method onGroupChatDetailsUpdated*(self: Module, chatId, newName, newColor, newImage: string) =
   self.view.chatsModel().updateNameColorIconOnItemById(chatId, newName, newColor, newImage)
@@ -1333,6 +1334,14 @@ method requestToJoinCommunityWithAuthentication*(self: Module, ensName: string, 
     airdropAddress: string) =
   self.controller.authenticateToRequestToJoinCommunity(ensName, addressesToShare, airdropAddress)
 
+method editSharedAddressesWithAuthentication*(self: Module, addressesToShare: seq[string], airdropAddress: string) =
+  self.controller.authenticateToEditSharedAddresses(addressesToShare, airdropAddress)
+
 method onDeactivateChatLoader*(self: Module, chatId: string) =
   self.view.chatsModel().disableChatLoader(chatId)
 
+method authenticateWithCallback*(self: Module) =
+  self.controller.authenticateWithCallback()
+
+method callbackFromAuthentication*(self: Module, authenticated: bool) =
+  self.view.callbackFromAuthentication(authenticated)

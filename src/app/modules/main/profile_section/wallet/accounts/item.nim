@@ -6,7 +6,6 @@ export wallet_account_item
 
 type
   Item* = ref object of WalletAccountItem
-    position: int
     relatedAccounts: related_accounts_model.Model
 
 proc initItem*(
@@ -20,6 +19,7 @@ proc initItem*(
   keyUid: string = "",
   keycardAccount: bool = false,
   position: int = 0,
+  operability: string = ""
 ): Item =
   result = Item()
   result.WalletAccountItem.setup(name,
@@ -29,8 +29,10 @@ proc initItem*(
     walletType,
     path,
     keyUid,
-    keycardAccount)
-  result.position = position
+    keycardAccount,
+    position,
+    operability)
+
   result.relatedAccounts = relatedAccounts
 
 proc `$`*(self: Item): string =
@@ -41,6 +43,3 @@ proc `$`*(self: Item): string =
 
 proc relatedAccounts*(self: Item): related_accounts_model.Model =
   return self.relatedAccounts
-
-proc position*(self: Item): int =
-  return self.position

@@ -249,7 +249,14 @@ QtObject:
       let addressesArray = map(parseJson(addressesToShare).getElems(), proc(x:JsonNode):string = x.getStr())
       self.delegate.requestToJoinCommunityWithAuthentication(ensName, addressesArray, airdropAddress)
     except Exception as e:
-      echo "Error requesting to join community with authetication and shared addresses: ", e.msg
+      echo "Error requesting to join community with authentication and shared addresses: ", e.msg
+
+  proc editSharedAddressesWithAuthentication*(self: View, addressesToShare: string, airdropAddress: string) {.slot.} =
+    try:
+      let addressesArray = map(parseJson(addressesToShare).getElems(), proc(x:JsonNode):string = x.getStr())
+      self.delegate.editSharedAddressesWithAuthentication(addressesArray, airdropAddress)
+    except Exception as e:
+      echo "Error editing shared addresses with authentication: ", e.msg
 
   proc joinGroupChatFromInvitation*(self: View, groupName: string, chatId: string, adminPK: string) {.slot.} =
     self.delegate.joinGroupChatFromInvitation(groupName, chatId, adminPK)
@@ -422,3 +429,8 @@ QtObject:
     notify = allTokenRequirementsMetChanged
 
   proc userAuthenticationCanceled*(self: View) {.signal.}
+
+  proc authenticateWithCallback*(self: View) {.slot.} =
+    self.delegate.authenticateWithCallback()
+  
+  proc callbackFromAuthentication*(self: View, authenticated: bool) {.signal.}
