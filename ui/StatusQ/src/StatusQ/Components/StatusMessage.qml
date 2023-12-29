@@ -39,6 +39,8 @@ Control {
 
     property string messageAttachments: ""
     property var reactionIcons: []
+    property var linkPreviewModel
+    property var gifLinks
 
     property string messageId: ""
     property bool editMode: false
@@ -63,6 +65,8 @@ Control {
     property bool profileClickable: true
     property bool hideMessage: false
     property bool isInPinnedPopup
+    property string highlightedLink: ""
+    property string hoveredLink: ""
 
     property StatusMessageDetails messageDetails: StatusMessageDetails {}
     property StatusMessageDetails replyDetails: StatusMessageDetails {}
@@ -88,7 +92,7 @@ Control {
     signal activeChanged(string messageId, bool active)
 
     function startMessageFoundAnimation() {
-        messageFoundAnimation.start();
+        messageFoundAnimation.restart();
     }
 
     onMessageAttachmentsChanged: {
@@ -132,14 +136,11 @@ Control {
         SequentialAnimation {
             id: messageFoundAnimation
 
-            PauseAnimation {
-                duration: 600
-            }
             NumberAnimation {
                 target: highlightRect
                 property: "opacity"
                 to: 1.0
-                duration: 1500
+                duration: 250
             }
             PauseAnimation {
                 duration: 1000
@@ -274,8 +275,12 @@ Control {
                             isEdited: root.isEdited
                             allowShowMore: !root.isInPinnedPopup
                             textField.anchors.rightMargin: root.isInPinnedPopup ? /*Style.current.xlPadding*/ 32 : 0 // margin for the "Unpin" floating button
+                            highlightedLink: root.highlightedLink
                             onLinkActivated: {
                                 root.linkActivated(link);
+                            }
+                            textField.onHoveredLinkChanged: {
+                                root.hoveredLink = hoveredLink;
                             }
                         }
                     }
@@ -296,6 +301,7 @@ Control {
                                     messageDetails: root.messageDetails
                                     allowShowMore: !root.isInPinnedPopup
                                     textField.anchors.rightMargin: root.isInPinnedPopup ? /*Style.current.xlPadding*/ 32 : 0 // margin for the "Unpin" floating button
+                                    highlightedLink: root.highlightedLink
                                     onLinkActivated: {
                                         root.linkActivated(link);
                                     }
@@ -309,7 +315,7 @@ Control {
                                     album: root.messageDetails.albumCount > 0 ? root.messageDetails.album : [root.messageDetails.messageContent]
                                     albumCount: root.messageDetails.albumCount > 0 ? root.messageDetails.albumCount : 1
                                     imageWidth: Math.min(messageLayout.width / root.messageDetails.albumCount - 9 * (root.messageDetails.albumCount - 1), 144)
-                                    shapeType: root.messageDetails.amISender ? StatusImageMessage.ShapeType.RIGHT_ROUNDED : StatusImageMessage.ShapeType.LEFT_ROUNDED
+                                    shapeType: StatusImageMessage.ShapeType.LEFT_ROUNDED
                                     onImageClicked: root.imageClicked(image, mouse, imageSource)
                                 }
                             }
@@ -327,7 +333,7 @@ Control {
                                 delegate: StatusImageMessage {
                                     source: model.source
                                     onClicked: root.imageClicked(image, mouse, imageSource)
-                                    shapeType: root.messageDetails.amISender ? StatusImageMessage.ShapeType.RIGHT_ROUNDED : StatusImageMessage.ShapeType.LEFT_ROUNDED
+                                    shapeType: StatusImageMessage.ShapeType.LEFT_ROUNDED
                                 }
                             }
                         }
@@ -351,8 +357,11 @@ Control {
                     Loader {
                         id: linksLoader
                         Layout.fillWidth: true
-                        active: !root.editMode && root.linkPreviewModel.count > 0
-                        visible: active
+                        Layout.preferredHeight: implicitHeight
+                        active: !root.editMode &&
+                                ((!!root.linkPreviewModel && root.linkPreviewModel.count > 0)
+                                || (!!root.gifLinks && root.gifLinks.length > 0))
+                        visible: active 
                     }
                     Loader {
                         id: transactionBubbleLoader
@@ -361,6 +370,7 @@ Control {
                     }
                     Loader {
                         id: invitationBubbleLoader
+                        // TODO remove this component in #12570
                         active: root.messageDetails.contentType === StatusMessage.ContentType.Invitation && !editMode
                         visible: active
                     }

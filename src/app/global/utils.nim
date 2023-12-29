@@ -11,6 +11,9 @@ include ../../app_service/service/accounts/utils
 QtObject:
   type Utils* = ref object of QObject
 
+  proc isCompressedPubKey*(self: Utils, publicKey: string): bool
+  proc getDecompressedPk*(self: Utils, compressedKey: string): string
+
   proc setup(self: Utils) =
     self.QObject.setup
 
@@ -32,10 +35,6 @@ QtObject:
 
   proc urlFromUserInput*(self: Utils, input: string): string {.slot.} =
     result = url_fromUserInput(input)
-
-  proc eth2Wei*(self: Utils, eth: string, decimals: int): string {.slot.} =
-    let uintValue = conversion.eth2Wei(parseFloat(eth), decimals)
-    return uintValue.toString()
 
   proc eth2Hex*(self: Utils, eth: float): string {.slot.} =
     return "0x" & conversion.eth2Wei(eth, 18).toHex()
@@ -133,13 +132,22 @@ QtObject:
     result = escape_html(text)
 
   proc getEmojiHashAsJson*(self: Utils, publicKey: string): string {.slot.} =
-    procs_from_visual_identity_service.getEmojiHashAsJson(publicKey)
+    var pk = publicKey
+    if self.isCompressedPubKey(publicKey):
+      pk = self.getDecompressedPk(publicKey)
+    procs_from_visual_identity_service.getEmojiHashAsJson(pk)
 
   proc getColorHashAsJson*(self: Utils, publicKey: string): string {.slot.} =
-    procs_from_visual_identity_service.getColorHashAsJson(publicKey)
+    var pk = publicKey
+    if self.isCompressedPubKey(publicKey):
+      pk = self.getDecompressedPk(publicKey)
+    procs_from_visual_identity_service.getColorHashAsJson(pk)
 
   proc getColorId*(self: Utils, publicKey: string): int {.slot.} =
-    int(procs_from_visual_identity_service.colorIdOf(publicKey))
+    var pk = publicKey
+    if self.isCompressedPubKey(publicKey):
+      pk = self.getDecompressedPk(publicKey)
+    int(procs_from_visual_identity_service.colorIdOf(pk))
 
   proc getCompressedPk*(self: Utils, publicKey: string): string {.slot.} =
     compressPk(publicKey)
@@ -159,3 +167,8 @@ QtObject:
   # Changes publicKey compression between 33-bytes and multiformat zQ..
   proc changeCommunityKeyCompression*(self: Utils, publicKey: string): string {.slot.} =
     changeCommunityKeyCompression(publicKey)
+
+  proc removeHexPrefix*(self: Utils, value: string): string =
+    if value.startsWith("0x"):
+      return value[2..^1]
+    return value

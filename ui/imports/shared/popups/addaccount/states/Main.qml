@@ -12,6 +12,7 @@ import utils 1.0
 
 import "../stores"
 import "../panels"
+import "../../common"
 
 Item {
     id: root
@@ -34,12 +35,18 @@ Item {
         }
 
         accountName.text = root.store.addAccountModule.accountName
+        if (d.isEdit) {
+            accountName.input.asset.emoji = root.store.addAccountModule.selectedEmoji;
+        } else {
+            accountName.input.asset.isLetterIdenticon = true;
+        }
         accountName.input.edit.forceActiveFocus()
         accountName.validate(true)
     }
 
     QtObject {
         id: d
+        readonly property bool isEdit: root.store.editMode
 
         function evaluateColorIndex(color) {
             for (let i = 0; i < Theme.palette.customisationColorsArray.length; i++) {
@@ -69,7 +76,10 @@ Item {
         target: root.store.emojiPopup
 
         function onEmojiSelected (emojiText, atCursor) {
-            root.store.addAccountModule.selectedEmoji = emojiText
+            let emoji = StatusQUtils.Emoji.deparse(emojiText)
+            root.store.addAccountModule.selectedEmoji = emoji
+            accountName.input.asset.isLetterIdenticon = false
+            accountName.input.asset.emoji = emojiText
         }
     }
 
@@ -108,7 +118,6 @@ Item {
                 input.isIconSelectable: true
                 input.leftPadding: Style.current.padding
                 input.asset.color: Utils.getColorForId(root.store.addAccountModule.selectedColorId)
-                input.asset.emoji: root.store.addAccountModule.selectedEmoji
                 onIconClicked: {
                     d.openEmojiPopup(true)
                 }
@@ -137,10 +146,13 @@ Item {
 
                 onTextChanged: {
                     root.store.addAccountModule.accountName = text
+                    if (input.asset.emoji === "") {
+                        input.letterIconName = text;
+                    }
                 }
 
                 onKeyPressed: {
-                    root.store.submitAddAccount(event)
+                    root.store.submitPopup(event)
                 }
 
                 onValidChanged: {

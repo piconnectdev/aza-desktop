@@ -1,6 +1,5 @@
-import chronicles
+import chronicles, uuids, times
 import io_interface
-import json
 
 import ../../../../../../app/global/global_singleton
 import ../../../../../../app_service/service/contacts/service as contact_service
@@ -9,8 +8,9 @@ import ../../../../../../app_service/service/chat/service as chat_service
 import ../../../../../../app_service/service/message/service as message_service
 import ../../../../../../app_service/service/mailservers/service as mailservers_service
 import ../../../../../../app_service/service/wallet_account/service as wallet_account_service
+import ../../../../../../app_service/service/shared_urls/service as shared_urls_service
+import ../../../../../../app_service/common/types
 import ../../../../../global/app_signals
-import ../../../../../core/signals/types
 import ../../../../../core/eventemitter
 import ../../../../../core/unique_event_emitter
 
@@ -31,11 +31,12 @@ type
     chatService: chat_service.Service
     messageService: message_service.Service
     mailserversService: mailservers_service.Service
+    sharedUrlsService: shared_urls_service.Service
 
 proc newController*(delegate: io_interface.AccessInterface, events: EventEmitter, sectionId: string, chatId: string,
-  belongsToCommunity: bool, contactService: contact_service.Service, communityService: community_service.Service,
-  chatService: chat_service.Service, messageService: message_service.Service, mailserversService: mailservers_service.Service):
-  Controller =
+    belongsToCommunity: bool, contactService: contact_service.Service, communityService: community_service.Service,
+    chatService: chat_service.Service, messageService: message_service.Service,
+    mailserversService: mailservers_service.Service, sharedUrlsService: shared_urls_service.Service): Controller =
   result = Controller()
   result.delegate = delegate
   result.events = initUniqueUUIDEventEmitter(events)
@@ -48,6 +49,7 @@ proc newController*(delegate: io_interface.AccessInterface, events: EventEmitter
   result.chatService = chatService
   result.messageService = messageService
   result.mailserversService = mailserversService
+  result.sharedUrlsService = sharedUrlsService
 
 proc delete*(self: Controller) =
   self.events.disconnect()
@@ -108,6 +110,12 @@ proc init*(self: Controller) =
     if(self.chatId != args.chatId):
       return
     self.delegate.onUnpinMessage(args.messageId)
+
+  self.events.on(SIGNAL_MESSAGE_MARKED_AS_UNREAD) do(e:Args):
+    let args = MessageMarkMessageAsUnreadArgs(e)
+    if (self.chatId != args.chatId):
+      return
+    self.delegate.onMarkMessageAsUnread(args.messageId)
 
   self.events.on(SIGNAL_MESSAGE_REACTION_ADDED) do(e:Args):
     let args = MessageAddRemoveReactionArgs(e)
@@ -178,7 +186,7 @@ proc init*(self: Controller) =
     let args = MessageDeletedArgs(e)
     if(self.chatId != args.chatId):
       return
-    self.delegate.onMessageDeleted(args.messageId)
+    self.delegate.onMessageDeleted(args.messageId, args.deletedBy)
 
   self.events.on(SIGNAL_MESSAGE_EDITED) do(e: Args):
     let args = MessageEditedArgs(e)
@@ -191,10 +199,6 @@ proc init*(self: Controller) =
     if(self.chatId != args.chatId):
       return
     self.delegate.onHistoryCleared()
-
-  self.events.on(SIGNAL_MESSAGE_LINK_PREVIEW_DATA_LOADED) do(e: Args):
-    let args = LinkPreviewDataArgs(e)
-    self.delegate.onPreviewDataLoaded($(args.response), args.uuid)
 
   self.events.on(SIGNAL_MAKE_SECTION_CHAT_ACTIVE) do(e: Args):
     let args = ActiveSectionChatArgs(e)
@@ -217,14 +221,17 @@ proc init*(self: Controller) =
   self.events.on(SIGNAL_COMMUNITIES_UPDATE) do(e: Args):
     let args = CommunitiesArgs(e)
     for community in args.communities:
-      if (community.id == self.sectionId):
-        self.delegate.updateCommunityDetails(community)
+      self.delegate.updateCommunityDetails(community)
 
   self.events.on(SIGNAL_FIRST_UNSEEN_MESSAGE_LOADED) do(e: Args):
     let args = FirstUnseenMessageLoadedArgs(e)
     if (args.chatId != self.chatId):
       return
     self.delegate.onFirstUnseenMessageLoaded(args.messageId)
+
+  self.events.on(SIGNAL_GET_MESSAGE_FINISHED) do(e: Args):
+    let args = GetMessageResult(e)
+    self.delegate.onGetMessageById(args.requestId, args.messageId, args.message, args.error)
 
 proc getMySectionId*(self: Controller): string =
   return self.sectionId
@@ -240,6 +247,11 @@ proc getCommunityDetails*(self: Controller): CommunityDto =
 
 proc getCommunityById*(self: Controller, communityId: string): CommunityDto =
   return self.communityService.getCommunityById(communityId)
+
+proc requestCommunityInfo*(self: Controller, communityId: string, shard: Shard, useDatabase: bool,
+    requiredTimeSinceLastRequest: Duration) =
+  self.communityService.requestCommunityInfo(communityId, shard, importing = false,
+    useDatabase, requiredTimeSinceLastRequest)
 
 proc getOneToOneChatNameAndImage*(self: Controller):
     tuple[name: string, image: string, largeImage: string] =
@@ -261,11 +273,17 @@ proc removeReaction*(self: Controller, messageId: string, emojiId: int, reaction
 proc pinUnpinMessage*(self: Controller, messageId: string, pin: bool) =
   self.messageService.pinUnpinMessage(self.chatId, messageId, pin)
 
+proc markMessageAsUnread*(self: Controller, messageId: string) =
+  self.messageService.asyncMarkMessageAsUnread(self.chatId, messageId)
+
 proc getContactById*(self: Controller, contactId: string): ContactsDto =
   return self.contactService.getContactById(contactId)
 
 proc getContactDetails*(self: Controller, contactId: string): ContactDetails =
   return self.contactService.getContactDetails(contactId)
+
+proc requestContactInfo*(self: Controller, contactId: string) =
+  self.contactService.requestContactInfo(contactId)
 
 proc getNumOfPinnedMessages*(self: Controller): int =
   return self.messageService.getNumOfPinnedMessages(self.chatId)
@@ -278,9 +296,6 @@ proc deleteMessage*(self: Controller, messageId: string) =
 
 proc editMessage*(self: Controller, messageId: string, contentType: int, updatedMsg: string) =
   self.messageService.editMessage(messageId, contentType, updatedMsg)
-
-proc getLinkPreviewData*(self: Controller, link: string, uuid: string, whiteListedSites: string, whiteListedImgExtensions: string, unfurlImages: bool): string =
-  self.messageService.asyncGetLinkPreviewData(link, uuid, whiteListedSites, whiteListedImgExtensions, unfurlImages)
   
 proc getSearchedMessageId*(self: Controller): string =
   return self.searchedMessageId
@@ -320,3 +335,9 @@ proc leaveChat*(self: Controller) =
 
 proc resendChatMessage*(self: Controller, messageId: string): string =
   return self.messageService.resendChatMessage(messageId)
+
+proc asyncGetMessageById*(self: Controller, messageId: string): UUID =
+  return self.messageService.asyncGetMessageById(messageId)
+
+proc parseSharedUrl*(self: Controller, url: string): UrlDataDto =
+  return self.sharedUrlsService.parseSharedUrl(url)

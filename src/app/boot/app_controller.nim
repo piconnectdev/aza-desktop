@@ -1,4 +1,4 @@
-import NimQml, sequtils, sugar, chronicles, os, uuids
+import NimQml, sequtils, sugar, chronicles, uuids
 
 import ../../app_service/service/general/service as general_service
 import ../../app_service/service/keychain/service as keychain_service
@@ -12,7 +12,6 @@ import ../../app_service/service/message/service as message_service
 import ../../app_service/service/token/service as token_service
 import ../../app_service/service/currency/service as currency_service
 import ../../app_service/service/transaction/service as transaction_service
-import ../../app_service/service/collectible/service as collectible_service
 import ../../app_service/service/wallet_account/service as wallet_account_service
 import ../../app_service/service/bookmarks/service as bookmark_service
 import ../../app_service/service/dapp_permissions/service as dapp_permissions_service
@@ -33,13 +32,15 @@ import ../../app_service/service/gif/service as gif_service
 import ../../app_service/service/ens/service as ens_service
 import ../../app_service/service/community_tokens/service as tokens_service
 import ../../app_service/service/network_connection/service as network_connection_service
+import ../../app_service/service/shared_urls/service as shared_urls_service
 
 import ../modules/shared_modules/keycard_popup/module as keycard_shared_module
 import ../modules/startup/module as startup_module
 import ../modules/main/module as main_module
 import ../core/notifications/notifications_manager
 import ../../constants as main_constants
-import ../global/global_singleton
+import app/global/global_singleton
+import app/global/app_signals
 
 import ../core/[main]
 
@@ -76,7 +77,6 @@ type
     tokenService: token_service.Service
     currencyService: currency_service.Service
     transactionService: transaction_service.Service
-    collectibleService: collectible_service.Service
     walletAccountService: wallet_account_service.Service
     bookmarkService: bookmark_service.Service
     dappPermissionsService: dapp_permissions_service.Service
@@ -99,6 +99,7 @@ type
     ensService: ens_service.Service
     tokensService: tokens_service.Service
     networkConnectionService: network_connection_service.Service
+    sharedUrlsService: shared_urls_service.Service
 
     # Modules
     startupModule: startup_module.AccessInterface
@@ -113,7 +114,8 @@ proc applyNecessaryActionsAfterLoggingIn(self: AppController)
 
 # Startup Module Delegate Interface
 proc startupDidLoad*(self: AppController)
-proc userLoggedIn*(self: AppController, recoverAccount: bool): string
+proc userLoggedIn*(self: AppController): string
+proc appReady*(self: AppController)
 proc logout*(self: AppController)
 proc finishAppLoading*(self: AppController)
 proc storeDefaultKeyPairForNewKeycardUser*(self: AppController)
@@ -132,13 +134,13 @@ proc connect(self: AppController) =
     discard
 
   # Handle runtime log level settings changes
-  if not existsEnv("LOG_LEVEL"):
+  if not main_constants.runtimeLogLevelSet():
     self.statusFoundation.events.on(node_configuration_service.SIGNAL_NODE_LOG_LEVEL_UPDATE) do(a: Args):
       let args = NodeLogLevelUpdatedArgs(a)
-      if args.logLevel == LogLevel.DEBUG:
-        setLogLevel(LogLevel.DEBUG)
+      if args.logLevel == chronicles.LogLevel.DEBUG:
+        setLogLevel(chronicles.LogLevel.DEBUG)
       elif defined(production):
-        setLogLevel(LogLevel.INFO)
+        setLogLevel(chronicles.LogLevel.INFO)
 
 proc newAppController*(statusFoundation: StatusFoundation): AppController =
   result = AppController()
@@ -170,17 +172,15 @@ proc newAppController*(statusFoundation: StatusFoundation): AppController =
     statusFoundation.fleetConfiguration)
   result.networkService = network_service.newService(statusFoundation.events, result.settingsService)
   result.contactsService = contacts_service.newService(
-    statusFoundation.events, statusFoundation.threadpool, result.networkService, result.settingsService,
-    result.activityCenterService
+    statusFoundation.events, statusFoundation.threadpool, result.networkService, result.settingsService
   )
   result.chatService = chat_service.newService(statusFoundation.events, statusFoundation.threadpool, result.contactsService)
   result.tokenService = token_service.newService(
-    statusFoundation.events, statusFoundation.threadpool, result.networkService
+    statusFoundation.events, statusFoundation.threadpool, result.networkService, result.settingsService
   )
   result.currencyService = currency_service.newService(
     statusFoundation.events, statusFoundation.threadpool, result.tokenService, result.settingsService
   )
-  result.collectibleService = collectible_service.newService(statusFoundation.events, statusFoundation.threadpool, result.networkService)
   result.walletAccountService = wallet_account_service.newService(
     statusFoundation.events, statusFoundation.threadpool, result.settingsService, result.accountsService,
     result.tokenService, result.networkService, result.currencyService
@@ -198,7 +198,7 @@ proc newAppController*(statusFoundation: StatusFoundation): AppController =
     statusFoundation.threadpool, result.chatService, result.activityCenterService, result.messageService)
   result.transactionService = transaction_service.newService(statusFoundation.events, statusFoundation.threadpool, result.networkService, result.settingsService, result.tokenService)
   result.bookmarkService = bookmark_service.newService(statusFoundation.events)
-  result.profileService = profile_service.newService(statusFoundation.events, result.settingsService)
+  result.profileService = profile_service.newService(statusFoundation.events, statusFoundation.threadpool, result.settingsService)
   result.stickersService = stickers_service.newService(
     statusFoundation.events,
     statusFoundation.threadpool,
@@ -216,7 +216,8 @@ proc newAppController*(statusFoundation: StatusFoundation): AppController =
   result.privacyService = privacy_service.newService(statusFoundation.events, result.settingsService,
   result.accountsService)
   result.savedAddressService = saved_address_service.newService(statusFoundation.events, result.networkService, result.settingsService)
-  result.devicesService = devices_service.newService(statusFoundation.events, statusFoundation.threadpool, result.settingsService, result.accountsService)
+  result.devicesService = devices_service.newService(statusFoundation.events, statusFoundation.threadpool,
+    result.settingsService, result.accountsService, result.walletAccountService)
   result.mailserversService = mailservers_service.newService(statusFoundation.events, statusFoundation.threadpool,
     result.settingsService, result.nodeConfigurationService, statusFoundation.fleetConfiguration)
   result.nodeService = node_service.newService(statusFoundation.events, result.settingsService, result.nodeConfigurationService)
@@ -225,10 +226,11 @@ proc newAppController*(statusFoundation: StatusFoundation): AppController =
     result.settingsService, result.walletAccountService, result.transactionService,
     result.networkService, result.tokenService)
   result.tokensService = tokens_service.newService(statusFoundation.events, statusFoundation.threadpool,
-    result.transactionService, result.tokenService, result.settingsService, result.walletAccountService)
+    result.transactionService, result.tokenService, result.settingsService, result.walletAccountService, result.activityCenterService, result.communityService)
   result.providerService = provider_service.newService(statusFoundation.events, statusFoundation.threadpool, result.ensService)
-  result.networkConnectionService = network_connection_service.newService(statusFoundation.events, result.walletAccountService, result.networkService, result.nodeService)
-
+  result.networkConnectionService = network_connection_service.newService(statusFoundation.events,
+    result.walletAccountService, result.networkService, result.nodeService, result.tokenService)
+  result.sharedUrlsService = shared_urls_service.newService(statusFoundation.events, statusFoundation.threadpool)
   # Modules
   result.startupModule = startup_module.newModule[AppController](
     result,
@@ -238,7 +240,7 @@ proc newAppController*(statusFoundation: StatusFoundation): AppController =
     result.generalService,
     result.profileService,
     result.keycardService,
-    result.devicesService,
+    result.devicesService
   )
   result.mainModule = main_module.newModule[AppController](
     result,
@@ -252,7 +254,6 @@ proc newAppController*(statusFoundation: StatusFoundation): AppController =
     result.tokenService,
     result.currencyService,
     result.transactionService,
-    result.collectibleService,
     result.walletAccountService,
     result.bookmarkService,
     result.profileService,
@@ -277,7 +278,8 @@ proc newAppController*(statusFoundation: StatusFoundation): AppController =
     result.networkService,
     result.generalService,
     result.keycardService,
-    result.networkConnectionService
+    result.networkConnectionService,
+    result.sharedUrlsService
   )
 
   # Do connections
@@ -312,7 +314,6 @@ proc delete*(self: AppController) =
   self.currencyService.delete
   self.tokenService.delete
   self.transactionService.delete
-  self.collectibleService.delete
   self.walletAccountService.delete
   self.aboutService.delete
   self.networkService.delete
@@ -377,6 +378,9 @@ proc checkForStoringPasswordToKeychain(self: AppController) =
   else:
     self.keychainService.storeData(account.keyUid, self.startupModule.getPin())
 
+proc chekForWalletConnectPairings(self: AppController) =
+  self.statusFoundation.events.emit(WALLET_CONNECT_CHECK_PAIRINGS, Args())
+
 proc startupDidLoad*(self: AppController) =
   singletonInstance.engine.setRootContextProperty("localAppSettings", self.localAppSettingsVariant)
   singletonInstance.engine.setRootContextProperty("localAccountSettings", self.localAccountSettingsVariant)
@@ -392,6 +396,7 @@ proc mainDidLoad*(self: AppController) =
   self.applyNecessaryActionsAfterLoggingIn()
   self.startupModule.moveToAppState()
   self.checkForStoringPasswordToKeychain()
+  self.chekForWalletConnectPairings()
 
 proc start*(self: AppController) =
   self.keycardService.init()
@@ -403,9 +408,12 @@ proc start*(self: AppController) =
   self.startupModule.load()
 
 proc load(self: AppController) =
-  self.notificationsManager.init()
-
   self.settingsService.init()
+
+  self.buildAndRegisterLocalAccountSensitiveSettings()
+  self.buildAndRegisterUserProfile()
+
+  self.notificationsManager.init()
   self.profileService.init()
   self.nodeConfigurationService.init()
   self.mailserversService.init()
@@ -430,19 +438,15 @@ proc load(self: AppController) =
   singletonInstance.engine.setRootContextProperty("appSettings", self.appSettingsVariant)
   singletonInstance.engine.setRootContextProperty("globalUtils", self.globalUtilsVariant)
 
-  self.buildAndRegisterLocalAccountSensitiveSettings()
-  self.buildAndRegisterUserProfile()
-
   self.networkService.init()
   self.tokenService.init()
   self.currencyService.init()
   self.walletAccountService.init()
-  self.collectibleService.init()
 
   # Apply runtime log level settings
-  if not existsEnv("LOG_LEVEL"):
+  if not main_constants.runtimeLogLevelSet():
     if self.nodeConfigurationService.isDebugEnabled():
-      setLogLevel(LogLevel.DEBUG)
+      setLogLevel(chronicles.LogLevel.DEBUG)
 
   # load main module
   self.mainModule.load(
@@ -457,15 +461,17 @@ proc load(self: AppController) =
     self.mailserversService,
   )
 
-proc userLoggedIn*(self: AppController, recoverAccount: bool): string =
+proc userLoggedIn*(self: AppController): string =
   try:
     self.generalService.startMessenger()
-    self.statusFoundation.userLoggedIn(recoverAccount)
     return ""
   except Exception as e:
     let errDescription = e.msg
     error "error: ", errDescription
     return errDescription
+
+proc appReady*(self: AppController) =
+  self.statusFoundation.appReady()
 
 proc finishAppLoading*(self: AppController) =
   self.load()
@@ -477,8 +483,10 @@ proc finishAppLoading*(self: AppController) =
     self.privacyService.removeMnemonic()
 
   if not self.startupModule.isNil:
-    self.startupModule.delete
+    self.startupModule.onAppLoaded()
     self.startupModule = nil
+
+  self.mainModule.checkAndPerformProfileMigrationIfNeeded()
 
 proc logout*(self: AppController) =
   self.generalService.logout()

@@ -1,4 +1,5 @@
-library 'status-jenkins-lib@v1.7.1'
+#!/usr/bin/env groovy
+library 'status-jenkins-lib@v1.8.3'
 
 /* Options section can't access functions in objects. */
 def isPRBuild = utils.isPRBuild()
@@ -24,6 +25,16 @@ pipeline {
       name: 'NIMFLAGS',
       description: 'Extra Nim flags. Examples: --verbosity:2 --passL:"-v" --passC:"-v"',
       defaultValue: '--colors:off'
+    )
+    booleanParam(
+      name: 'USE_MOCKED_KEYCARD_LIB',
+      description: 'Decides whether the mocked status-keycard-go library is built.',
+      defaultValue: false
+    )
+    choice(
+      name: 'ENTITLEMENTS',
+      description: 'Select app entitlements. Squish requires extra entitlements.',
+      choices: ['resources/Entitlements.plist', 'resources/Entitlements_squish.plist']
     )
   }
 

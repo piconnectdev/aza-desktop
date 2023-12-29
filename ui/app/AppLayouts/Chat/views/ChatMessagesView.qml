@@ -52,17 +52,22 @@ Item {
         readonly property real scrollY: chatLogView.visibleArea.yPosition * chatLogView.contentHeight
         readonly property bool isMostRecentMessageInViewport: chatLogView.visibleArea.yPosition >= 0.999 - chatLogView.visibleArea.heightRatio
         readonly property var chatDetails: chatContentModule && chatContentModule.chatDetails || null
+        readonly property bool keepUnread: messageStore.keepUnread
 
         readonly property var loadMoreMessagesIfScrollBelowThreshold: Backpressure.oneInTimeQueued(root, 100, function() {
             if(scrollY < 1000) messageStore.loadMoreMessages()
         })
 
+        function setKeepUnread(flag: bool) {
+            root.messageStore.setKeepUnread(flag)
+        }
+
         function markAllMessagesReadIfMostRecentMessageIsInViewport() {
-            if (!isMostRecentMessageInViewport || !chatLogView.visible) {
+            if (!isMostRecentMessageInViewport || !chatLogView.visible || keepUnread) {
                 return
             }
 
-            if (chatDetails && chatDetails.active && chatDetails.hasUnreadMessages && !messageStore.loading) {
+            if (chatDetails && chatDetails.active && (chatDetails.hasUnreadMessages || chatDetails.highlight) && !messageStore.loading) {
                 chatContentModule.markAllMessagesRead()
             }
         }
@@ -107,6 +112,7 @@ Item {
         target: !!d.chatDetails ? d.chatDetails : null
 
         function onActiveChanged() {
+            d.setKeepUnread(false)
             d.markAllMessagesReadIfMostRecentMessageIsInViewport()
             d.loadMoreMessagesIfScrollBelowThreshold()
         }
@@ -291,13 +297,19 @@ Item {
             pinnedMessage: model.pinned
             messagePinnedBy: model.pinnedBy
             reactionsModel: model.reactions
+            emojiReactionsModel: model.emojiReactionsModel
             sticker: model.sticker
             stickerPack: model.stickerPack
             editModeOn: model.editMode
             onEditModeOnChanged: root.editModeChanged(editModeOn)
             isEdited: model.isEdited
-            linkUrls: model.links
+            deleted: model.deleted
+            deletedBy: model.deletedBy
+            deletedByContactDisplayName: model.deletedByContactDisplayName
+            deletedByContactIcon: model.deletedByContactIcon
+            deletedByContactColorHash: model.deletedByContactColorHash
             linkPreviewModel: model.linkPreviewModel
+            links: model.links
             messageAttachments: model.messageAttachments
             transactionParams: model.transactionParameters
             hasMention: model.mentioned
@@ -311,6 +323,8 @@ Item {
             quotedMessageAuthorDetailsEnsVerified: model.quotedMessageAuthorEnsVerified
             quotedMessageAuthorDetailsIsContact: model.quotedMessageAuthorIsContact
             quotedMessageAuthorDetailsColorHash: model.quotedMessageAuthorColorHash
+            quotedMessageAlbumMessageImages: model.quotedMessageAlbumMessageImages.split(" ")
+            quotedMessageAlbumImagesCount: model.quotedMessageAlbumImagesCount
 
             gapFrom: model.gapFrom
             gapTo: model.gapTo
@@ -320,12 +334,13 @@ Item {
              // Also one important thing here is that messages are set in descending order
              // in terms of `timestamp` of a message, that means a message with the most
              // recent time is added at index 0.
-            prevMessageIndex: prevMsgIndex
-            prevMessageTimestamp: prevMsgTimestamp
-            prevMessageSenderId: prevMsgSenderId
-            prevMessageContentType: prevMsgContentType
-            nextMessageIndex: nextMsgIndex
-            nextMessageTimestamp: nextMsgTimestamp
+            prevMessageIndex: model.prevMsgIndex
+            prevMessageTimestamp: model.prevMsgTimestamp
+            prevMessageSenderId: model.prevMsgSenderId
+            prevMessageContentType: model.prevMsgContentType
+            prevMessageDeleted: model.prevMsgDeleted
+            nextMessageIndex: model.nextMsgIndex
+            nextMessageTimestamp: model.nextMsgTimestamp
 
             onOpenStickerPackPopup: {
                 root.openStickerPackPopup(stickerPackId);

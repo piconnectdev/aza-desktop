@@ -51,13 +51,13 @@ proc prepareLogging() =
       proc (logLevel: LogLevel, msg: LogOutputStr) {.gcsafe, raises: [Defect].} =
         try:
           if signalsManagerQObjPointer != nil:
-            signal_handler(signalsManagerQObjPointer, ($(%* {"type": "chronicles-log", "event": msg})).cstring, "receiveSignal")
+            signal_handler(signalsManagerQObjPointer, ($(%* {"type": "chronicles-log", "event": msg})).cstring, "receiveChroniclesLogEvent")
         except:
           logLoggingFailure(cstring(msg), getCurrentException())
 
-  let defaultLogLvl = if defined(production): LogLevel.INFO else: LogLevel.DEBUG
+  let defaultLogLvl = if defined(production): chronicles.LogLevel.INFO else: chronicles.LogLevel.DEBUG
   # default log level can be overriden by LOG_LEVEL env parameter
-  let logLvl = try: parseEnum[LogLevel](getEnv("LOG_LEVEL"))
+  let logLvl = try: parseEnum[chronicles.LogLevel](main_constants.LOG_LEVEL)
                except: defaultLogLvl
 
   setLogLevel(logLvl)
@@ -80,6 +80,11 @@ proc setupRemoteSignalsHandling() =
       signal_handler(keycardServiceQObjPointer, p0, "receiveKeycardSignal")
   keycard_go.setSignalEventCallback(callbackKeycardGo)
 
+proc ensureDirectories*(dataDir, tmpDir, logDir: string) =
+  createDir(dataDir)
+  createDir(tmpDir)
+  createDir(logDir)
+
 proc mainProc() =
 
   when defined(macosx) and defined(arm64):
@@ -92,6 +97,16 @@ proc mainProc() =
     ss.ss_size = SIGSTKSZ
     if sigaltstack(ss[], ss2[]) < 0:
         echo("sigaltstack error!")
+        quit()
+
+    var sa: ptr Sigaction = cast[ptr Sigaction](allocShared0(sizeof(Sigaction)))
+    var sa2: Sigaction
+
+    sa.sa_handler = SIG_DFL
+    sa.sa_flags = SA_ONSTACK
+
+    if sigaction(SIGURG, sa[], addr sa2) < 0:
+        echo("sigaction error!")
         quit()
 
   if main_constants.IS_MACOS and defined(production):
@@ -117,6 +132,9 @@ proc mainProc() =
 
   let app = newQGuiApplication()
 
+  # Required by the WalletConnectSDK view right after creating the QGuiApplication instance
+  initializeWebView()
+
   let singleInstance = newSingleInstance($toMD5(DATADIR), openUri)
   let urlSchemeEvent = newStatusUrlSchemeEventObject()
   # init url manager before app controller
@@ -131,7 +149,6 @@ proc mainProc() =
 
   QResource.registerResource(app.applicationDirPath & resourcesPath)
   # Register events objects
-  let dockShowAppEvent = newStatusDockShowAppEventObject(singletonInstance.engine)
   let osThemeEvent = newStatusOSThemeEventObject(singletonInstance.engine)
 
   if not main_constants.IS_MACOS:
@@ -149,7 +166,6 @@ proc mainProc() =
   singletonInstance.engine.setRootContextProperty("signals", signalsManagerQVariant)
   singletonInstance.engine.setRootContextProperty("production", isProductionQVariant)
 
-  app.installEventFilter(dockShowAppEvent)
   app.installEventFilter(osThemeEvent)
   app.installEventFilter(urlSchemeEvent)
 
@@ -161,7 +177,6 @@ proc mainProc() =
     isExperimentalQVariant.delete()
     signalsManagerQVariant.delete()
     networkAccessFactory.delete()
-    dockShowAppEvent.delete()
     osThemeEvent.delete()
     appController.delete()
     statusFoundation.delete()

@@ -18,8 +18,11 @@ StatusGroupBox {
     // feeText (string)
     // error (bool), optional
     property alias model: feesBox.model
+    readonly property alias count: feesBox.count
 
-    property alias accountsModel: footer.accountsModel
+    readonly property alias accountsSelector: footer.accountsSelector
+    property alias showAccountsSelector: footer.showAccountsSelector
+
     property alias placeholderText: feesBox.placeholderText
 
     property alias totalFeeText: footer.totalFeeText
@@ -27,12 +30,15 @@ StatusGroupBox {
     property alias generalErrorText: footer.generalErrorText
     property alias accountErrorText: footer.accountErrorText
 
+    property string accountSelectorText: qsTr("Select account to pay gas fees from")
+
     FeesPanel {
         id: feesBox
 
         width: root.availableWidth
         padding: Style.current.padding
-        verticalPadding: 18
+
+        verticalPadding: 20
 
         background: Rectangle {
             radius: Style.current.radius
@@ -42,10 +48,11 @@ StatusGroupBox {
         footer: FeesBoxFooter {
             id: footer
 
-            visible: !!accountsModel || showTotal
-                     || root.generalErrorText || root.accountErrorText
+            visible: feesBox.count && (root.showAccountsSelector || showTotal
+                     || root.generalErrorText)
 
             showTotal: feesBox.count > 1
+            accountSelectorText: root.accountSelectorText
         }
     }
 }

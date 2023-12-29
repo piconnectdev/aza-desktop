@@ -3,11 +3,11 @@ import ./member_model, ./member_item
 import ../main/communities/models/[pending_request_item, pending_request_model]
 import ../main/communities/tokens/models/token_model as community_tokens_model
 import ../main/communities/tokens/models/token_item
-import ../../../app_service/service/collectible/dto
 
 import ../../global/global_singleton
 
 import ../../../app_service/common/types
+import ../../../app_service/service/community_tokens/community_collectible_owner
 
 type
   SectionType* {.pure.} = enum
@@ -57,6 +57,10 @@ type
     declinedMemberRequestsModel: member_model.Model
     encrypted: bool
     communityTokensModel: community_tokens_model.TokenModel
+    pubsubTopic: string
+    pubsubTopicKey: string
+    shardIndex: int
+    isPendingOwnershipRequest: bool
 
 proc initItem*(
     id: string,
@@ -94,6 +98,10 @@ proc initItem*(
     declinedMemberRequests: seq[MemberItem] = @[],
     encrypted: bool = false,
     communityTokens: seq[TokenItem] = @[],
+    pubsubTopic = "",
+    pubsubTopicKey = "",
+    shardIndex = -1,
+    isPendingOwnershipRequest: bool = false
     ): SectionItem =
   result.id = id
   result.sectionType = sectionType
@@ -136,6 +144,10 @@ proc initItem*(
   result.encrypted = encrypted
   result.communityTokensModel = newTokenModel()
   result.communityTokensModel.setItems(communityTokens)
+  result.pubsubTopic = pubsubTopic
+  result.pubsubTopicKey = pubsubTopicKey
+  result.shardIndex = shardIndex
+  result.isPendingOwnershipRequest = isPendingOwnershipRequest
 
 proc isEmpty*(self: SectionItem): bool =
   return self.id.len == 0
@@ -176,6 +188,7 @@ proc `$`*(self: SectionItem): string =
     declinedMemberRequests:{self.declinedMemberRequestsModel},
     encrypted:{self.encrypted},
     communityTokensModel:{self.communityTokensModel},
+    isPendingOwnershipRequest:{self.isPendingOwnershipRequest}
     ]"""
 
 proc id*(self: SectionItem): string {.inline.} =
@@ -286,8 +299,7 @@ proc members*(self: SectionItem): member_model.Model {.inline.} =
 proc hasMember*(self: SectionItem, pubkey: string): bool =
   self.membersModel.isContactWithIdAdded(pubkey)
 
-proc setOnlineStatusForMember*(self: SectionItem, pubKey: string,
-    onlineStatus: OnlineStatus) =
+proc setOnlineStatusForMember*(self: SectionItem, pubKey: string, onlineStatus: OnlineStatus) =
   self.membersModel.setOnlineStatus(pubkey, onlineStatus)
 
 proc updateMember*(
@@ -317,6 +329,12 @@ proc pendingMemberRequests*(self: SectionItem): member_model.Model {.inline.} =
 proc declinedMemberRequests*(self: SectionItem): member_model.Model {.inline.} =
   self.declinedMemberRequestsModel
 
+proc isPendingOwnershipRequest*(self: SectionItem): bool {.inline.} =
+  self.isPendingOwnershipRequest
+
+proc setIsPendingOwnershipRequest*(self: var SectionItem, isPending: bool) {.inline.} =
+  self.isPendingOwnershipRequest = isPending
+
 proc pendingRequestsToJoin*(self: SectionItem): PendingRequestModel {.inline.} =
   self.pendingRequestsToJoinModel
 
@@ -332,11 +350,17 @@ proc encrypted*(self: SectionItem): bool {.inline.} =
 proc appendCommunityToken*(self: SectionItem, item: TokenItem) {.inline.} =
   self.communityTokensModel.appendItem(item)
 
+proc removeCommunityToken*(self: SectionItem, chainId: int, contractAddress: string) {.inline.} =
+  self.communityTokensModel.removeItemByChainIdAndAddress(chainId, contractAddress)
+
 proc updateCommunityTokenDeployState*(self: SectionItem, chainId: int, contractAddress: string, deployState: DeployState) {.inline.} =
   self.communityTokensModel.updateDeployState(chainId, contractAddress, deployState)
 
-proc updateCommunityTokenSupply*(self: SectionItem, chainId: int, contractAddress: string, supply: Uint256) {.inline.} =
-  self.communityTokensModel.updateSupply(chainId, contractAddress, supply)
+proc updateCommunityTokenAddress*(self: SectionItem, chainId: int, oldContractAddress: string, newContractAddress: string) {.inline.} =
+  self.communityTokensModel.updateAddress(chainId, oldContractAddress, newContractAddress)
+
+proc updateCommunityTokenSupply*(self: SectionItem, chainId: int, contractAddress: string, supply: Uint256, destructedAmount: Uint256) {.inline.} =
+  self.communityTokensModel.updateSupply(chainId, contractAddress, supply, destructedAmount)
 
 proc updateCommunityRemainingSupply*(self: SectionItem, chainId: int, contractAddress: string, remainingSupply: Uint256) {.inline.} =
   self.communityTokensModel.updateRemainingSupply(chainId, contractAddress, remainingSupply)
@@ -344,7 +368,10 @@ proc updateCommunityRemainingSupply*(self: SectionItem, chainId: int, contractAd
 proc updateBurnState*(self: SectionItem, chainId: int, contractAddress: string, burnState: ContractTransactionStatus) {.inline.} =
   self.communityTokensModel.updateBurnState(chainId, contractAddress, burnState)
 
-proc setCommunityTokenOwners*(self: SectionItem, chainId: int, contractAddress: string, owners: seq[CollectibleOwner]) {.inline.} =
+proc updateRemoteDestructedAddresses*(self: SectionItem, chainId: int, contractAddress: string, addresess: seq[string]) {.inline.} =
+  self.communityTokensModel.updateRemoteDestructedAddresses(chainId, contractAddress, addresess)
+
+proc setCommunityTokenOwners*(self: SectionItem, chainId: int, contractAddress: string, owners: seq[CommunityCollectibleOwner]) {.inline.} =
   self.communityTokensModel.setCommunityTokenOwners(chainId, contractAddress, owners)
 
 proc communityTokens*(self: SectionItem): community_tokens_model.TokenModel {.inline.} =
@@ -352,3 +379,27 @@ proc communityTokens*(self: SectionItem): community_tokens_model.TokenModel {.in
 
 proc updatePendingRequestLoadingState*(self: SectionItem, memberKey: string, loading: bool) {.inline.} =
   self.pendingMemberRequestsModel.updateLoadingState(memberKey, loading)
+
+proc updateMembershipStatus*(self: SectionItem, memberKey: string, status: MembershipRequestState) {.inline.} =
+  if status == MembershipRequestState.UnbannedPending or status == MembershipRequestState.Banned:
+    self.bannedMembersModel.updateMembershipStatus(memberKey, status)
+  else:
+    self.membersModel.updateMembershipStatus(memberKey, status)
+
+proc pubsubTopic*(self: SectionItem): string {.inline.} =
+  self.pubsubTopic
+
+proc `pubsubTopic=`*(self: var SectionItem, value: string) {.inline.} =
+  self.pubsubTopic = value
+
+proc pubsubTopicKey*(self: SectionItem): string {.inline.} =
+  self.pubsubTopicKey
+
+proc `pubsubTopicKey=`*(self: var SectionItem, value: string) {.inline.} =
+  self.pubsubTopicKey = value
+
+proc shardIndex*(self: SectionItem): int {.inline.} =
+  self.shardIndex
+
+proc `shardIndex=`*(self: var SectionItem, value: int) {.inline.} =
+  self.shardIndex = value

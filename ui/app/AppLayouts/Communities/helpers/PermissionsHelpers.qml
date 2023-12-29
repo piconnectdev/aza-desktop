@@ -8,6 +8,8 @@ import StatusQ.Internal 0.1 as Internal
 
 import AppLayouts.Communities.controls 1.0
 
+import utils 1.0
+
 QtObject {
     function getTokenByKey(model, key) {
         if (!model)
@@ -53,15 +55,19 @@ QtObject {
         return ""
     }
 
-    function getTokenAmountByKey(model, key) {
+    function getTokenRemainingSupplyByKey(model, key) {
         const item = getTokenByKey(model, key)
-        if (item) {
-            if (item.infiniteSupply === true)
-                return "∞"
 
-            return item.supply ?? ""
-        }
-        return ""
+        if (!item || item.remainingSupply === undefined
+                || item.multiplierIndex === undefined)
+            return ""
+
+        if (item.infiniteSupply)
+            return "∞"
+
+        return LocaleUtils.numberToLocaleString(
+                    AmountsArithmetic.toNumber(item.remainingSupply,
+                                               item.multiplierIndex))
     }
 
     function getUniquePermissionTokenKeys(model) {
@@ -69,19 +75,21 @@ QtObject {
     }
 
     function getUniquePermissionChannels(model, permissionsTypesArray = []) {
-        // TODO return a QVariantMap (https://github.com/status-im/status-desktop/issues/11481)
         return Internal.PermissionUtils.getUniquePermissionChannels(model, permissionsTypesArray)
     }
 
     function setHoldingsTextFormat(type, name, amount) {
+        if (typeof amount === "string")
+            amount = AmountsArithmetic.toNumber(AmountsArithmetic.fromString(amount))
+
         switch (type) {
-            case HoldingTypes.Type.Asset:
+            case Constants.TokenType.ERC20:
                 return `${LocaleUtils.numberToLocaleString(amount)} ${name}`
-            case HoldingTypes.Type.Collectible:
+            case Constants.TokenType.ERC721:
                 if (amount === 1)
                     return name
                 return `${LocaleUtils.numberToLocaleString(amount)} ${name}`
-            case HoldingTypes.Type.Ens:
+            case Constants.TokenType.ENS:
                 if (name === "*.eth")
                     return qsTr("Any ENS username")
                 if (name.startsWith("*."))

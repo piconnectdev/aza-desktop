@@ -4,7 +4,6 @@ import QtQuick.Controls 2.14
 ListView {
     id: root
 
-    spacing: 5
     clip: true
 
     property string currentPage
@@ -21,6 +20,20 @@ ListView {
         id: delegate
 
         width: ListView.view.width
+
+        Drag.dragType: Drag.Automatic
+        Drag.active: dragArea.drag.active
+        Drag.mimeData: {
+            "text/uri-list": `file:${pagesFolder}/${model.title}Page.qml`
+        }
+
+        MouseArea {
+            id: dragArea
+            anchors.fill: parent
+
+            drag.target: this
+            acceptedButtons: Qt.RightButton
+        }
 
         TextMetrics {
             id: textMetrics

@@ -24,7 +24,7 @@ QtObject:
       ephemeralNotificationModelVariant: QVariant
       tmpCommunityId: string # shouldn't be used anywhere except in prepareCommunitySectionModuleForCommunityId/getCommunitySectionModule procs
 
-  proc activeSectionChanged*(self:View) {.signal.}
+  proc activeSectionSet*(self: View, item: SectionItem)
 
   proc delete*(self: View) =
     self.model.delete
@@ -61,7 +61,7 @@ QtObject:
   proc editItem*(self: View, item: SectionItem) =
     self.model.editItem(item)
     if (self.activeSection.getId() == item.id):
-      self.activeSection.setActiveSectionData(item)
+      self.activeSectionSet(item)
 
   proc model*(self: View): SectionModel =
     return self.model
@@ -105,6 +105,12 @@ QtObject:
     ephNotifType: int, url: string) {.slot.} =
     self.delegate.displayEphemeralNotification(title, subTitle, icon, loading, ephNotifType, url)
 
+  # TO UNIFY with the one above. Now creating a specific method for not introuducing regression.
+  # Further refactor will be done in a next step
+  proc displayEphemeralWithActionNotification*(self: View, title: string, subTitle: string, icon: string, iconColor: string, loading: bool,
+    ephNotifType: int, actionType: int, actionData: string) {.slot.} =
+    self.delegate.displayEphemeralWithActionNotification(title, subTitle, icon, iconColor, loading, ephNotifType, actionType, actionData)
+
   proc removeEphemeralNotification*(self: View, id: string) {.slot.} =
     self.delegate.removeEphemeralNotification(id.parseInt)
 
@@ -127,6 +133,8 @@ QtObject:
 
   proc activeSection*(self: View): SectionDetails =
     return self.activeSection
+
+  proc activeSectionChanged*(self:View) {.signal.}
 
   proc getActiveSection(self: View): QVariant {.slot.} =
     return self.activeSectionVariant
@@ -206,8 +214,11 @@ QtObject:
   QtProperty[QVariant] appSearchModule:
     read = getAppSearchModule
 
-  proc getContactDetailsAsJson(self: View, publicKey: string, getVerificationRequest: bool): string {.slot.} =
-    return self.delegate.getContactDetailsAsJson(publicKey, getVerificationRequest)
+  proc getContactDetailsAsJson(self: View, publicKey: string, getVerificationRequest: bool, getOnlineStatus: bool): string {.slot.} =
+    return self.delegate.getContactDetailsAsJson(publicKey, getVerificationRequest, getOnlineStatus)
+
+  proc getOwnerTokenAsJson(self: View, communityId: string): string {.slot.} =
+    return self.delegate.getOwnerTokenAsJson(communityId)
 
   proc isEnsVerified(self:View, publicKey: string): bool {.slot.} =
     return self.delegate.isEnsVerified(publicKey)
@@ -243,6 +254,17 @@ QtObject:
   proc emitDisplayUserProfileSignal*(self: View, publicKey: string) =
     self.displayUserProfile(publicKey)
 
+  proc getKeycardSharedModuleForAuthenticationOrSigning(self: View): QVariant {.slot.} =
+    let module = self.delegate.getKeycardSharedModuleForAuthenticationOrSigning()
+    if not module.isNil:
+      return module
+    return newQVariant()
+  QtProperty[QVariant] keycardSharedModuleForAuthenticationOrSigning:
+    read = getKeycardSharedModuleForAuthenticationOrSigning
+
+  proc activateStatusDeepLink*(self: View, statusDeepLink: string) {.slot.} =
+    self.delegate.activateStatusDeepLink(statusDeepLink)
+
   proc getKeycardSharedModule(self: View): QVariant {.slot.} =
     let module = self.delegate.getKeycardSharedModule()
     if not module.isNil:
@@ -251,8 +273,13 @@ QtObject:
   QtProperty[QVariant] keycardSharedModule:
     read = getKeycardSharedModule
 
-  proc activateStatusDeepLink*(self: View, statusDeepLink: string) {.slot.} =
-    self.delegate.activateStatusDeepLink(statusDeepLink)
+  proc displayKeycardSharedModuleForAuthenticationOrSigning*(self: View) {.signal.}
+  proc emitDisplayKeycardSharedModuleForAuthenticationOrSigning*(self: View) =
+    self.displayKeycardSharedModuleForAuthenticationOrSigning()
+
+  proc destroyKeycardSharedModuleForAuthenticationOrSigning*(self: View) {.signal.}
+  proc emitDestroyKeycardSharedModuleForAuthenticationOrSigning*(self: View) =
+    self.destroyKeycardSharedModuleForAuthenticationOrSigning()
 
   proc displayKeycardSharedModuleFlow*(self: View) {.signal.}
   proc emitDisplayKeycardSharedModuleFlow*(self: View) =
@@ -273,4 +300,29 @@ QtObject:
 
   ## Signals for in app (ephemeral) notifications
   proc showToastAccountAdded*(self: View, name: string) {.signal.}
+  proc showToastAccountRemoved*(self: View, name: string) {.signal.}
   proc showToastKeypairRenamed*(self: View, oldName: string, newName: string) {.signal.}
+  proc showNetworkEndpointUpdated*(self: View, name: string, isTest: bool, revertedToDefault: bool) {.signal.}
+  proc showToastKeypairRemoved*(self: View, keypairName: string) {.signal.}
+  proc showToastKeypairsImported*(self: View, keypairName: string, keypairsCount: int, error: string) {.signal.}
+  proc showToastTransactionSent*(self: View, chainId: int, txHash: string, uuid: string, error: string) {.signal.}
+
+  ## Used in test env only, for testing keycard flows
+  proc registerMockedKeycard*(self: View, cardIndex: int, readerState: int, keycardState: int,
+  mockedKeycard: string, mockedKeycardHelper: string) {.slot.} =
+    self.delegate.registerMockedKeycard(cardIndex, readerState, keycardState, mockedKeycard, mockedKeycardHelper)
+
+  proc pluginMockedReaderAction*(self: View) {.slot.} =
+    self.delegate.pluginMockedReaderAction()
+
+  proc unplugMockedReaderAction*(self: View) {.slot.} =
+    self.delegate.unplugMockedReaderAction()
+
+  proc insertMockedKeycardAction*(self: View, cardIndex: int) {.slot.} =
+    self.delegate.insertMockedKeycardAction(cardIndex)
+
+  proc removeMockedKeycardAction*(self: View) {.slot.} =
+    self.delegate.removeMockedKeycardAction()
+
+  proc fakeLoadingScreenFinished*(self: View) {.slot.} =
+    self.delegate.fakeLoadingScreenFinished()

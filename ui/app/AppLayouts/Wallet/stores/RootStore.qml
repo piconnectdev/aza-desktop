@@ -3,11 +3,15 @@ pragma Singleton
 import QtQuick 2.13
 
 import utils 1.0
+
 import SortFilterProxyModel 0.2
 import StatusQ.Core.Theme 0.1
+import StatusQ.Core.Utils 0.1 as SQUtils
 
 QtObject {
     id: root
+
+    readonly property TokensStore tokensStore: TokensStore {}
 
     readonly property string defaultSelectedKeyUid: userProfile.keyUid
     readonly property bool defaultSelectedKeyUidMigratedToKeycard: userProfile.isKeycardUser
@@ -23,16 +27,19 @@ QtObject {
     property var accountSensitiveSettings: localAccountSensitiveSettings
     property bool hideSignPhraseModal: accountSensitiveSettings.hideSignPhraseModal
 
+    // "walletSection" is a context property slow to lookup, so we cache it here
     property var walletSectionInst: walletSection
-    property var totalCurrencyBalance: walletSection.totalCurrencyBalance
-    property var activityController: walletSection.activityController
-    property string signingPhrase: walletSection.signingPhrase
-    property string mnemonicBackedUp: walletSection.isMnemonicBackedUp
+    property var totalCurrencyBalance: walletSectionInst.totalCurrencyBalance
+    property var activityController: walletSectionInst.activityController
+    property var tmpActivityController: walletSectionInst.tmpActivityController
+    property string signingPhrase: walletSectionInst.signingPhrase
+    property string mnemonicBackedUp: walletSectionInst.isMnemonicBackedUp
+    property var walletConnectController: walletSectionInst.walletConnectController
 
-    property var flatCollectibles: walletSectionCollectibles.model
-    property var currentCollectible: walletSectionCurrentCollectible
+    property CollectiblesStore collectiblesStore: CollectiblesStore {}
 
-    property var areTestNetworksEnabled: networksModule.areTestNetworksEnabled
+    readonly property bool areTestNetworksEnabled: networksModule.areTestNetworksEnabled
+    readonly property bool isSepoliaEnabled: networksModule.isSepoliaEnabled
 
     property var savedAddresses: SortFilterProxyModel {
         sourceModel: walletSectionSavedAddresses.model
@@ -42,6 +49,28 @@ QtObject {
                 value: networksModule.areTestNetworksEnabled
             }
         ]
+    }
+
+    property var nonWatchAccounts: SortFilterProxyModel {
+        sourceModel: receiveAccounts
+        proxyRoles: [
+            ExpressionRole {
+                name: "color"
+
+                function getColor(colorId) {
+                    return Utils.getColorForId(colorId)
+                }
+
+                // Direct call for singleton function is not handled properly by
+                // SortFilterProxyModel that's why helper function is used instead.
+                expression: { return getColor(model.colorId) }
+            }
+        ]
+        filters: ValueFilter {
+            roleName: "walletType"
+            value: Constants.watchWalletType
+            inverted: true
+        }
     }
 
     readonly property var currentActivityFiltersStore: {
@@ -88,7 +117,6 @@ QtObject {
 
     property var layer1Networks: networksModule.layer1
     property var layer2Networks: networksModule.layer2
-    property var testNetworks: networksModule.test
     property var enabledNetworks: networksModule.enabled
     property var allNetworks: networksModule.all
     onAllNetworksChanged: {
@@ -96,6 +124,25 @@ QtObject {
     }
 
     property var cryptoRampServicesModel: walletSectionBuySellCrypto.model
+
+    function resetCurrentViewedHolding(type) {
+        currentViewedHoldingID = ""
+        currentViewedHoldingType = type
+    }
+
+    function setCurrentViewedHoldingType(type) {
+        currentViewedHoldingID = ""
+        currentViewedHoldingType = type
+    }
+
+    function setCurrentViewedHolding(id, type) {
+        currentViewedHoldingID = id
+        currentViewedHoldingType = type
+    }
+
+    property string currentViewedHoldingID: ""
+    property int currentViewedHoldingType
+    readonly property var currentViewedCollectible: collectiblesStore.detailedCollectible
 
     // This should be exposed to the UI via "walletModule", WalletModule should use
     // Accounts Service which keeps the info about that (isFirstTimeAccountLogin).
@@ -144,7 +191,13 @@ QtObject {
     }
 
     function getLatestBlockNumber(chainId) {
-        return walletSectionTransactions.getLatestBlockNumber(chainId)
+        // NOTE returns hex
+        return walletSection.getLatestBlockNumber(chainId)
+    }
+
+    function getEstimatedLatestBlockNumber(chainId) {
+        // NOTE returns decimal
+        return walletSection.getEstimatedLatestBlockNumber(chainId)
     }
 
     function setFilterAddress(address) {
@@ -175,19 +228,6 @@ QtObject {
         return globalUtils.hex2Dec(value)
     }
 
-    function getCollectionMaxValue(traitType, value, maxValue, collectionIndex) {
-        // Not Refactored Yet
-//        if(maxValue !== "")
-//            return parseInt(value) + qsTr(" of ") + maxValue;
-//        else
-//            return parseInt(value) + qsTr(" of ") +
-//            walletModelV2Inst.collectiblesView.collections.getCollectionTraitMaxValue(collectionIndex, traitType).toString();
-    }
-
-    function selectCollectible(address, tokenId) {
-        walletSectionCurrentCollectible.update(address, tokenId)
-    }
-
     function getNameForSavedWalletAddress(address) {
         return walletSectionSavedAddresses.getNameByAddress(address)
     }
@@ -202,6 +242,63 @@ QtObject {
             name = getNameForSavedWalletAddress(address)
         }
         return name
+    }
+
+    enum LookupType {
+        Account = 0,
+        SavedAddress = 1
+    }
+
+    // Returns object of type {type: null, object: null} or null if lookup didn't find anything
+    function lookupAddressObject(address) {
+        let res = null
+        let acc = SQUtils.ModelUtils.getByKey(root.accounts, "address", address)
+        if (acc) {
+            res = {type: RootStore.LookupType.Account, object: acc}
+        } else {
+            let sa = SQUtils.ModelUtils.getByKey(walletSectionSavedAddresses.model, "address", address)
+            if (sa) {
+                res = {type: RootStore.LookupType.SavedAddress, object: sa}
+            }
+        }
+
+        return res
+    }
+
+    function getAssetForSendTx(tx) {
+        if (tx.isNFT) {
+            return {
+                uid: tx.tokenID,
+                chainId: tx.chainId,
+                name: tx.nftName,
+                imageUrl: tx.nftImageUrl,
+                collectionUid: "",
+                collectionName: ""
+            }
+        } else {
+            return tx.symbol
+        }
+    }
+
+    function isTxRepeatable(tx) {
+        if (!tx || tx.txType !== Constants.TransactionType.Send)
+            return false
+
+        let res = root.lookupAddressObject(tx.sender)
+        if (!res || res.type !== RootStore.LookupType.Account || res.object.walletType == Constants.watchWalletType)
+            return false
+
+        if (tx.isNFT) {
+            // TODO #12275: check if account owns enough NFT
+        } else {
+            // TODO #12275: Check if account owns enough tokens
+        }
+
+        return true
+    }
+
+    function isOwnedAccount(address) {
+        return walletSectionAccounts.isOwnedAccount(address)
     }
 
     function getEmojiForWalletAddress(address) {
@@ -246,5 +343,49 @@ QtObject {
 
     function toggleWatchOnlyAccounts() {
         walletSection.toggleWatchOnlyAccounts()
+    }
+
+    function getAllNetworksChainIds() {
+        return networksModule.getAllNetworksChainIds()
+    }
+
+    function getNetworkShortNames(chainIds) {
+        return networksModule.getNetworkShortNames(chainIds)
+    }
+
+    function updateWalletAccountPreferredChains(address, preferredChainIds) {
+        if(areTestNetworksEnabled) {
+            walletSectionAccounts.updateWalletAccountTestPreferredChains(address, preferredChainIds)
+        }
+        else {
+            walletSectionAccounts.updateWalletAccountProdPreferredChains(address, preferredChainIds)
+        }
+    }
+
+    function processPreferredSharingNetworkToggle(preferredSharingNetworks, toggledNetwork) {
+        let prefChains = preferredSharingNetworks
+        if(prefChains.length === allNetworks.count) {
+            prefChains = [toggledNetwork.chainId.toString()]
+        }
+        else if(!prefChains.includes(toggledNetwork.chainId.toString())) {
+            prefChains.push(toggledNetwork.chainId.toString())
+        }
+        else {
+            if(prefChains.length === 1) {
+                prefChains = getAllNetworksChainIds().split(":")
+            }
+            else {
+                for(var i = 0; i < prefChains.length;i++) {
+                    if(prefChains[i] === toggledNetwork.chainId.toString()) {
+                        prefChains.splice(i, 1)
+                    }
+                }
+            }
+        }
+        return prefChains
+    }
+
+    function updateWatchAccountHiddenFromTotalBalance(address, hideFromTotalBalance) {
+        walletSectionAccounts.updateWatchAccountHiddenFromTotalBalance(address, hideFromTotalBalance)
     }
 }

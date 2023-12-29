@@ -21,9 +21,6 @@ method setFilterAddress*(self: AccessInterface, address: string) {.base.} =
 method setFillterAllAddresses*(self: AccessInterface) {.base.} =
   raise newException(ValueError, "No implementation available")
 
-method toggleWatchOnlyAccounts*(self: AccessInterface) {.base.} =
-  raise newException(ValueError, "No implementation available")
-
 method updateCurrency*(self: AccessInterface, currency: string) {.base.} =
   raise newException(ValueError, "No implementation available")
 
@@ -89,4 +86,31 @@ method destroyAddAccountPopup*(self: AccessInterface) {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method getNetworkLayer*(self: AccessInterface, chainId: int): string {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method getChainIdForChat*(self: AccessInterface): int {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method getLatestBlockNumber*(self: AccessInterface, chainId: int): string {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method getEstimatedLatestBlockNumber*(self: AccessInterface, chainId: int): string {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method fetchDecodedTxData*(self: AccessInterface, txHash: string, data: string) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method runKeypairImportPopup*(self: AccessInterface) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method getKeypairImportModule*(self: AccessInterface): QVariant {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method onKeypairImportModuleLoaded*(self: AccessInterface) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method destroyKeypairImportPopup*(self: AccessInterface) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method hasPairedDevices*(self: AccessInterface): bool {.base.} =
   raise newException(ValueError, "No implementation available")

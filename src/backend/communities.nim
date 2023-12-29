@@ -8,7 +8,7 @@ export response_type
 
 proc getCommunityTags*(): RpcResponse[JsonNode] {.raises: [Exception].} =
   result = callPrivateRPC("communityTags".prefix)
-  
+
 proc muteCategory*(communityId: string, categoryId: string, interval: int): RpcResponse[JsonNode] {.raises: [Exception].} =
   result = callPrivateRPC("muteCommunityCategory".prefix, %* [
     {
@@ -31,38 +31,78 @@ proc getAllCommunities*(): RpcResponse[JsonNode] {.raises: [Exception].} =
 proc spectateCommunity*(communityId: string): RpcResponse[JsonNode] {.raises: [Exception].} =
   result = callPrivateRPC("spectateCommunity".prefix, %*[communityId])
 
+proc generateJoiningCommunityRequestsForSigning*(
+    memberPubKey: string,
+    communityId: string,
+    addressesToReveal: seq[string]
+  ): RpcResponse[JsonNode] {.raises: [Exception].} =
+  let payload = %*[memberPubKey, communityId, addressesToReveal]
+  result = callPrivateRPC("generateJoiningCommunityRequestsForSigning".prefix, payload)
+
+proc generateEditCommunityRequestsForSigning*(
+    memberPubKey: string,
+    communityId: string,
+    addressesToReveal: seq[string]
+  ): RpcResponse[JsonNode] {.raises: [Exception].} =
+  let payload = %*[memberPubKey, communityId, addressesToReveal]
+  result = callPrivateRPC("generateEditCommunityRequestsForSigning".prefix, payload)
+
+## `signParams` represents a json array of SignParamsDto.
+proc signData*(signParams: JsonNode): RpcResponse[JsonNode] {.raises: [Exception].} =
+  if signParams.kind != JArray:
+    raise newException(Exception, "signParams must be an array")
+  let payload = %*[signParams]
+  result = callPrivateRPC("signData".prefix, payload)
+
 proc requestToJoinCommunity*(
     communityId: string,
     ensName: string,
-    password: string,
     addressesToShare: seq[string],
+    signatures: seq[string],
     airdropAddress: string,
   ): RpcResponse[JsonNode] {.raises: [Exception].} =
-  var passwordToSend = password
   result = callPrivateRPC("requestToJoinCommunity".prefix, %*[{
     "communityId": communityId,
     "ensName": ensName,
-    "password": if passwordToSend != "": utils.hashPassword(password) else: "",
     "addressesToReveal": addressesToShare,
+    "signatures": signatures,
     "airdropAddress": airdropAddress,
   }])
 
 proc editSharedAddresses*(
     communityId: string,
-    password: string,
     addressesToShare: seq[string],
+    signatures: seq[string],
     airdropAddress: string,
   ): RpcResponse[JsonNode] {.raises: [Exception].} =
-  var passwordToSend = password
   result = callPrivateRPC("editSharedAddressesForCommunity".prefix, %*[{
     "communityId": communityId,
-    "password": if passwordToSend != "": utils.hashPassword(password) else: "",
     "addressesToReveal": addressesToShare,
+    "signatures": signatures,
     "airdropAddress": airdropAddress,
   }])
 
-proc checkPermissionsToJoinCommunity*(communityId: string): RpcResponse[JsonNode] {.raises: [Exception].} =
+proc getRevealedAccountsForMember*(
+    communityId: string,
+    memberPubkey: string,
+  ): RpcResponse[JsonNode] {.raises: [Exception].} =
+  result = callPrivateRPC("getRevealedAccounts".prefix, %*[communityId, memberPubkey])
+
+proc getRevealedAccountsForAllMembers*(
+    communityId: string,
+  ): RpcResponse[JsonNode] {.raises: [Exception].} =
+  result = callPrivateRPC("getRevealedAccountsForAllMembers".prefix, %*[communityId])
+
+proc checkPermissionsToJoinCommunity*(communityId: string, addresses: seq[string]): RpcResponse[JsonNode] {.raises: [Exception].} =
   result = callPrivateRPC("checkPermissionsToJoinCommunity".prefix, %*[{
+    "communityId": communityId,
+    "addresses": addresses
+  }])
+
+proc reevaluateCommunityMembersPermissions*(
+    communityId: string,
+  ): RpcResponse[JsonNode] {.raises: [Exception].} =
+  result = callPrivateRPC("reevaluateCommunityMembersPermissions".prefix, %*[{
     "communityId": communityId
   }])
 
@@ -72,25 +112,14 @@ proc checkCommunityChannelPermissions*(communityId: string, chatId: string): Rpc
     "chatId": chatId
   }])
 
-proc checkAllCommunityChannelsPermissions*(communityId: string): RpcResponse[JsonNode] {.raises: [Exception].} =
+proc checkAllCommunityChannelsPermissions*(communityId: string, addresses: seq[string]): RpcResponse[JsonNode] {.raises: [Exception].} =
   result = callPrivateRPC("checkAllCommunityChannelsPermissions".prefix, %*[{
-    "communityId": communityId
+    "communityId": communityId,
+    "addresses": addresses,
   }])
 
-proc myPendingRequestsToJoin*(): RpcResponse[JsonNode] {.raises: [Exception].} =
-  result =  callPrivateRPC("myPendingRequestsToJoin".prefix)
-
-proc myCanceledRequestsToJoin*(): RpcResponse[JsonNode] {.raises: [Exception].} =
-  result =  callPrivateRPC("myCanceledRequestsToJoin".prefix)
-
-proc pendingRequestsToJoinForCommunity*(communityId: string): RpcResponse[JsonNode] {.raises: [Exception].} =
-  result = callPrivateRPC("pendingRequestsToJoinForCommunity".prefix, %*[communityId])
-
-proc declinedRequestsToJoinForCommunity*(communityId: string): RpcResponse[JsonNode] {.raises: [Exception].} =
-  result = callPrivateRPC("declinedRequestsToJoinForCommunity".prefix, %*[communityId])
-
-proc canceledRequestsToJoinForCommunity*(communityId: string): RpcResponse[JsonNode] {.raises: [Exception].} =
-  result = callPrivateRPC("canceledRequestsToJoinForCommunity".prefix, %*[communityId])
+proc allNonApprovedCommunitiesRequestsToJoin*(): RpcResponse[JsonNode] {.raises: [Exception].} =
+  result = callPrivateRPC("allNonApprovedCommunitiesRequestsToJoin".prefix)
 
 proc cancelRequestToJoinCommunity*(requestId: string): RpcResponse[JsonNode] {.raises: [Exception].} =
   result = callPrivateRPC("cancelRequestToJoinCommunity".prefix, %*[{
@@ -210,6 +239,27 @@ proc requestImportDiscordCommunity*(
       "filesToImport": filesToImport
     }])
 
+proc requestImportDiscordChannel*(
+    name: string,
+    discordChannelId: string,
+    communityId: string,
+    description: string,
+    color: string,
+    emoji: string,
+    filesToImport: seq[string],
+    fromTimestamp: int,
+  ): RpcResponse[JsonNode] {.raises: [Exception].} =
+  result = callPrivateRPC("requestImportDiscordChannel".prefix, %*[{
+      "name": name,
+      "discordChannelId": discordChannelId,
+      "communityId": communityId,
+      "description": description,
+      "color": color,
+      "emoji": emoji,
+      "filesToImport": filesToImport,
+      "from": fromTimestamp
+    }])
+
 proc createCommunityTokenPermission*(communityId: string, permissionType: int, tokenCriteria: string, chatIDs: seq[string], isPrivate: bool): RpcResponse[JsonNode] {.raises: [Exception].} =
   result = callPrivateRPC("createCommunityTokenPermission".prefix, %*[{
     "communityId": communityId,
@@ -234,9 +284,13 @@ proc deleteCommunityTokenPermission*(communityId: string, permissionId: string):
     "communityId": communityId,
     "permissionId": permissionId
   }])
-  
+
 proc requestCancelDiscordCommunityImport*(communityId: string): RpcResponse[JsonNode] {.raises: [Exception].} =
   result = callPrivateRPC("requestCancelDiscordCommunityImport".prefix, %*[communityId])
+
+proc requestCancelDiscordChannelImport*(discordChannelId: string): RpcResponse[JsonNode] {.raises: [Exception].} =
+  result = callPrivateRPC("requestCancelDiscordChannelImport".prefix, %*[discordChannelId])
+
 
 proc createCommunityChannel*(
     communityId: string,
@@ -352,11 +406,33 @@ proc deleteCommunityCategory*(
       "categoryId": categoryId
     }])
 
-proc requestCommunityInfo*(communityId: string): RpcResponse[JsonNode] {.raises: [Exception].} =
-  result = callPrivateRPC("requestCommunityInfoFromMailserver".prefix, %*[communityId])
+proc collectCommunityMetrics*(communityId: string, metricsType: int, intervals: JsonNode
+    ):RpcResponse[JsonNode] {.raises: [Exception].} =
+  result = callPrivateRPC("collectCommunityMetrics".prefix, %*[
+    {
+      "communityId": communityId,
+      "type": metricsType,
+      "intervals": intervals
+    }])
 
-proc removePrivateKey*(communityId: string): RpcResponse[JsonNode] {.raises: [Exception].} =
-  result = callPrivateRPC("removePrivateKey".prefix, %*[communityId])
+proc requestCommunityInfo*(communityId: string, tryDatabase: bool, shardCluster: int, shardIndex: int): RpcResponse[JsonNode] {.raises: [Exception].} =
+  if shardCluster != -1 and shardIndex != -1:
+    result = callPrivateRPC("fetchCommunity".prefix,%*[{
+      "communityKey": communityId,
+      "tryDatabase": tryDatabase,
+      "shard": {
+        "shardCluster": shardCluster,
+        "shardIndex": shardIndex,
+      },
+      "waitForResponse": true
+    }])
+  else:
+    result = callPrivateRPC("fetchCommunity".prefix, %*[{
+      "communityKey": communityId,
+      "tryDatabase": tryDatabase,
+      "shard": nil,
+      "waitForResponse": true
+    }])
 
 proc importCommunity*(communityKey: string): RpcResponse[JsonNode] {.raises: [Exception].} =
   result = callPrivateRPC("importCommunity".prefix, %*[communityKey])
@@ -396,15 +472,9 @@ proc unbanUserFromCommunity*(communityId: string, pubKey: string): RpcResponse[J
   }])
 
 proc setCommunityMuted*(communityId: string, mutedType: int): RpcResponse[JsonNode] {.raises: [Exception].}  =
-  return callPrivateRPC("setCommunityMuted".prefix, %*[{ 
-    "communityId": communityId, 
-    "mutedType": mutedType 
-  }])
-
-proc inviteUsersToCommunity*(communityId: string, pubKeys: seq[string]): RpcResponse[JsonNode] {.raises: [Exception].} =
-  return callPrivateRPC("inviteUsersToCommunity".prefix, %*[{
+  return callPrivateRPC("setCommunityMuted".prefix, %*[{
     "communityId": communityId,
-    "users": pubKeys
+    "mutedType": mutedType
   }])
 
 proc shareCommunityToUsers*(communityId: string, pubKeys: seq[string], inviteMessage: string): RpcResponse[JsonNode] {.raises: [Exception].} =
@@ -440,3 +510,30 @@ proc requestExtractDiscordChannelsAndCategories*(filesToImport: seq[string]): Rp
 
 proc getCheckChannelPermissionResponses*(communityId: string,): RpcResponse[JsonNode] {.raises: [Exception].} =
   return callPrivateRPC("getCheckChannelPermissionResponses".prefix, %*[communityId])
+
+proc getCommunityPublicKeyFromPrivateKey*(communityPrivateKey: string,): RpcResponse[JsonNode] {.raises: [Exception].} =
+  return callPrivateRPC("getCommunityPublicKeyFromPrivateKey".prefix, %*[communityPrivateKey])
+
+proc getCommunityMembersForWalletAddresses*(communityId: string, chainId: int): RpcResponse[JsonNode] {.raises: [Exception].} =
+  return callPrivateRPC("getCommunityMembersForWalletAddresses".prefix, %* [communityId, chainId])
+
+proc promoteSelfToControlNode*(communityId: string): RpcResponse[JsonNode] {.raises: [Exception].} =
+  return callPrivateRPC("promoteSelfToControlNode".prefix, %* [communityId])
+
+proc setCommunityShard*(communityId: string, index: int): RpcResponse[JsonNode] {.raises: [Exception].} =
+  let mainStatusShardClusterID = 16
+  if index != -1:
+    result = callPrivateRPC("setCommunityShard".prefix, %*[
+      {
+        "communityId": communityId,
+        "shard": {
+          "cluster": mainStatusShardClusterID,
+          "index": index
+        },
+      }])
+  else: # unset community shard
+    result = callPrivateRPC("setCommunityShard".prefix, %*[
+      {
+        "communityId": communityId,
+      }])
+

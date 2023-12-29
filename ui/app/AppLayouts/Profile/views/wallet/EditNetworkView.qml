@@ -13,41 +13,49 @@ ColumnLayout {
     property var networksModule
     property var combinedNetwork
 
-    signal evaluateRpcEndPoint(string url)
-    signal updateNetworkValues(int chainId, string newMainRpcInput, string newFailoverRpcUrl)
+    signal evaluateRpcEndPoint(string url, bool isMainUrl)
+    signal updateNetworkValues(int chainId, string newMainRpcInput, string newFailoverRpcUrl, bool revertToDefault)
 
     StatusTabBar {
         id: editPreviwTabBar
+        objectName: "editPreviwTabBar"
         StatusTabButton {
+            leftPadding: 0
             text: qsTr("Live Network")
+            objectName: "editNetworkLiveButton"
             width: implicitWidth
         }
         StatusTabButton {
             text: qsTr("Test Network")
+            objectName: "editNetworkTestButton"
             width: implicitWidth
         }
     }
 
-    StackLayout {
-        id: stackLayout
-        Layout.preferredHeight: currentIndex === 0 ? editLiveNetwork.height: editTestNetwork.height
+    Loader {
+        objectName: "editNetworkLoader"
         Layout.fillWidth: true
-        currentIndex: editPreviwTabBar.currentIndex
+        active: root.visible
+        sourceComponent: editPreviwTabBar.currentIndex === 0 ? editLiveNetwork: editTestNetwork
+    }
 
+    Component {
+        id: editLiveNetwork
         EditNetworkForm {
-            id: editLiveNetwork
             network: !!root.combinedNetwork ? root.combinedNetwork.prod: null
             networksModule: root.networksModule
-            onEvaluateRpcEndPoint: root.evaluateRpcEndPoint(url)
-            onUpdateNetworkValues: root.updateNetworkValues(chainId, newMainRpcInput, newFailoverRpcUrl)
+            onEvaluateRpcEndPoint: root.evaluateRpcEndPoint(url, isMainUrl)
+            onUpdateNetworkValues: root.updateNetworkValues(chainId, newMainRpcInput, newFailoverRpcUrl, revertToDefault)
         }
+    }
 
+    Component {
+        id: editTestNetwork
         EditNetworkForm {
-            id: editTestNetwork
             network: !!root.combinedNetwork ? root.combinedNetwork.test: null
             networksModule: root.networksModule
-            onEvaluateRpcEndPoint: root.evaluateRpcEndPoint(url)
-            onUpdateNetworkValues: root.updateNetworkValues(chainId, newMainRpcInput, newFailoverRpcUrl)
+            onEvaluateRpcEndPoint: root.evaluateRpcEndPoint(url, isMainUrl)
+            onUpdateNetworkValues: root.updateNetworkValues(chainId, newMainRpcInput, newFailoverRpcUrl, revertToDefault)
         }
     }
 }

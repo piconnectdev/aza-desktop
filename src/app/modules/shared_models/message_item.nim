@@ -4,6 +4,7 @@ import ../../../app_service/service/contacts/dto/contact_details
 import ../../../app_service/service/message/dto/message
 import ../../../app_service/service/message/dto/link_preview
 import ./link_preview_model as link_preview_model
+import ./emoji_reactions_model as emoji_reactions_model
 
 export types.ContentType
 import message_reaction_model, message_reaction_item, message_transaction_parameters_item
@@ -42,8 +43,12 @@ type
     pinnedBy: string
     editMode: bool
     isEdited: bool
+    deleted: bool
+    deletedBy: string
+    deletedByContactDetails: ContactDetails
     links: seq[string]
     linkPreviewModel: link_preview_model.Model
+    emojiReactionsModel: emoji_reactions_model.Model
     transactionParameters: TransactionParametersItem
     mentionedUsersPks: seq[string]
     senderTrustStatus: TrustStatus
@@ -59,6 +64,8 @@ type
     quotedMessageAuthorDisplayName: string
     quotedMessageAuthorAvatar: string
     quotedMessageAuthorDetails: ContactDetails
+    quotedMessageAlbumMessageImages: seq[string]
+    quotedMessageAlbumImagesCount: int
     albumId: string
     albumMessageImages: seq[string]
     albumMessageIds: seq[string]
@@ -97,6 +104,9 @@ proc initItem*(
     senderEnsVerified: bool,
     discordMessage: DiscordMessage,
     resendError: string,
+    deleted: bool,
+    deletedBy: string,
+    deletedByContactDetails: ContactDetails,
     mentioned: bool,
     quotedMessageFrom: string,
     quotedMessageText: string,
@@ -105,6 +115,8 @@ proc initItem*(
     quotedMessageDeleted: bool,
     quotedMessageDiscordMessage: DiscordMessage,
     quotedMessageAuthorDetails: ContactDetails,
+    quotedMessageAlbumMessageImages: seq[string],
+    quotedMessageAlbumImagesCount: int,
     albumId: string,
     albumMessageImages: seq[string],
     albumMessageIds: seq[string],
@@ -139,8 +151,12 @@ proc initItem*(
   result.stickerPack = stickerPack
   result.editMode = false
   result.isEdited = false
+  result.deleted = deleted
+  result.deletedBy = deletedBy
+  result.deletedByContactDetails = deletedByContactDetails
   result.links = links
   result.linkPreviewModel = newLinkPreviewModel(linkPreviews)
+  result.emojiReactionsModel = newEmojiReactionsModel()
   result.transactionParameters = transactionParameters
   result.mentionedUsersPks = mentionedUsersPks
   result.gapFrom = 0
@@ -156,6 +172,8 @@ proc initItem*(
   result.quotedMessageContentType = quotedMessageContentType
   result.quotedMessageDeleted = quotedMessageDeleted
   result.quotedMessageAuthorDetails = quotedMessageAuthorDetails
+  result.quotedMessageAlbumMessageImages = quotedMessageAlbumMessageImages
+  result.quotedMessageAlbumImagesCount = quotedMessageAlbumImagesCount
   result.albumId = albumId
   result.albumMessageImages = albumMessageImages
   result.albumMessageIds = albumMessageIds
@@ -224,6 +242,9 @@ proc initNewMessagesMarkerItem*(clock, timestamp: int64): Item =
     senderEnsVerified = false,
     discordMessage = DiscordMessage(),
     resendError = "",
+    deleted = false,
+    deletedBy = "",
+    deletedByContactDetails = ContactDetails(),
     mentioned = false,
     quotedMessageFrom = "",
     quotedMessageText = "",
@@ -232,6 +253,8 @@ proc initNewMessagesMarkerItem*(clock, timestamp: int64): Item =
     quotedMessageDeleted = false,
     quotedMessageDiscordMessage = DiscordMessage(),
     quotedMessageAuthorDetails = ContactDetails(),
+    quotedMessageAlbumMessageImages = @[],
+    quotedMessageAlbumImagesCount = 0,
     albumId = "",
     albumMessageImages = @[],
     albumMessageIds = @[],
@@ -264,6 +287,8 @@ proc `$`*(self: Item): string =
     messageReactions: [{$self.reactionsModel}],
     editMode:{$self.editMode},
     isEdited:{$self.isEdited},
+    deleted:{self.deleted},
+    deletedBy:{$self.deletedBy},
     links:{$self.links},
     transactionParameters:{$self.transactionParameters},
     mentionedUsersPks:{$self.mentionedUsersPks},
@@ -436,9 +461,11 @@ proc getReactionId*(self: Item, emojiId: EmojiId, userPublicKey: string): string
 proc addReaction*(self: Item, emojiId: EmojiId, didIReactWithThisEmoji: bool, userPublicKey: string,
   userDisplayName: string, reactionId: string) =
   self.reactionsModel.addReaction(emojiId, didIReactWithThisEmoji, userPublicKey, userDisplayName, reactionId)
+  self.emojiReactionsModel.setItemDidIReactWithThisEmoji(ord(emojiId), didIReactWithThisEmoji)
 
 proc removeReaction*(self: Item, emojiId: EmojiId, reactionId: string, didIRemoveThisReaction: bool) =
   self.reactionsModel.removeReaction(emojiId, reactionId, didIRemoveThisReaction)
+  self.emojiReactionsModel.setItemDidIReactWithThisEmoji(ord(emojiId), not didIRemoveThisReaction)
 
 proc messageAttachments*(self: Item): seq[string] {.inline.} =
   self.messageAttachments
@@ -451,6 +478,9 @@ proc `links=`*(self: Item, links: seq[string]) {.inline.} =
 
 proc linkPreviewModel*(self: Item): link_preview_model.Model {.inline.} =
   return self.linkPreviewModel
+
+proc emojiReactionsModel*(self: Item): emoji_reactions_model.Model {.inline.} =
+  return self.emojiReactionsModel
 
 proc mentionedUsersPks*(self: Item): seq[string] {.inline.} =
   self.mentionedUsersPks
@@ -492,6 +522,8 @@ proc toJsonNode*(self: Item): JsonNode =
     "pinnedBy": self.pinnedBy,
     "editMode": self.editMode,
     "isEdited": self.isEdited,
+    "deleted": self.deleted,
+    "deletedBy": self.deletedBy,
     "links": self.links,
     "mentionedUsersPks": self.mentionedUsersPks,
     "senderEnsVerified": self.senderEnsVerified,
@@ -504,6 +536,8 @@ proc toJsonNode*(self: Item): JsonNode =
     "quotedMessageDeleted": self.quotedMessageDeleted,
     "quotedMessageAuthorDisplayName": self.quotedMessageAuthorDisplayName,
     "quotedMessageAuthorAvatar": self.quotedMessageAuthorAvatar,
+    "quotedMessageAlbumMessageImages": self.quotedMessageAlbumMessageImages,
+    "quotedMessageAlbumImagesCount": self.quotedMessageAlbumImagesCount,
     "albumId": self.albumId,
     "albumMessageImages": self.albumMessageImages,
     "albumMessageIds": self.albumMessageIds,
@@ -521,6 +555,23 @@ proc isEdited*(self: Item): bool {.inline.} =
 
 proc `isEdited=`*(self: Item, value: bool) {.inline.} =
   self.isEdited = value
+
+proc deleted*(self: Item): bool {.inline.} =
+  self.deleted
+
+proc `deleted=`*(self: Item, value: bool) {.inline.} =
+  self.deleted = value
+
+proc deletedBy*(self: Item): string {.inline.} =
+  self.deletedBy
+
+proc deletedByContactDetails*(self: Item): ContactDetails {.inline.} =
+  self.deletedByContactDetails
+proc `deletedByContactDetails=`*(self: Item, value: ContactDetails) {.inline.} =
+  self.deletedByContactDetails = value
+
+proc `deletedBy=`*(self: Item, value: string) {.inline.} =
+  self.deletedBy = value
 
 proc gapFrom*(self: Item): int64 {.inline.} =
   self.gapFrom
@@ -576,8 +627,20 @@ proc quotedMessageAuthorAvatar*(self: Item): string {.inline.} =
 
 proc `quotedMessageAuthorAvatar=`*(self: Item, value: string) {.inline.} =
   self.quotedMessageAuthorAvatar = value
-  
+
 proc quotedMessageAuthorDetails*(self: Item): ContactDetails {.inline.} =
   self.quotedMessageAuthorDetails
 proc `quotedMessageAuthorDetails=`*(self: Item, value: ContactDetails) {.inline.} =
   self.quotedMessageAuthorDetails = value
+
+proc quotedMessageAlbumMessageImages*(self: Item): seq[string] {.inline.} =
+  self.quotedMessageAlbumMessageImages
+
+proc `quotedMessageAlbumMessageImages=`*(self: Item, value: seq[string]) {.inline.} =
+  self.quotedMessageAlbumMessageImages = value
+
+proc quotedMessageAlbumImagesCount*(self: Item): int {.inline.} = 
+  self.quotedMessageAlbumImagesCount
+
+proc `quotedMessageAlbumImagesCount=`*(self: Item, value: int) {.inline.} = 
+  self.quotedMessageAlbumImagesCount = value

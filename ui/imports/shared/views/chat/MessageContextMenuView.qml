@@ -18,7 +18,7 @@ StatusMenu {
     id: root
 
     property var store
-    property var reactionModel
+    property var reactionModel: []
 
     property string myPublicKey: ""
     property bool amIChatAdmin: false
@@ -47,6 +47,7 @@ StatusMenu {
     signal toggleReaction(string messageId, int emojiId)
     signal deleteMessage(string messageId)
     signal editClicked(string messageId)
+    signal markMessageAsUnread(string messageId)
 
     width: Math.max(emojiContainer.visible ? emojiContainer.width : 0, 230)
 
@@ -150,6 +151,17 @@ StatusMenu {
             default:
                 return false
             }
+        }
+    }
+
+    StatusAction {
+        id: markMessageAsUnreadAction
+        text: qsTr("Mark as unread")
+        icon.name: "hide"
+        enabled: !root.disabledForChat
+        onTriggered: {
+            root.markMessageAsUnread(root.messageId)
+            root.close()
         }
     }
 

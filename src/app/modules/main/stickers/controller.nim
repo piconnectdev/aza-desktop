@@ -1,17 +1,18 @@
-import Tables, stint, json
+import Tables, uuids, stint, json
 
 import ./io_interface
 
-import ../../../core/eventemitter
-import ../../../../app_service/service/node/service as node_service
-import ../../../../app_service/service/stickers/service as stickers_service
-import ../../../../app_service/service/token/service
-import ../../../../app_service/service/settings/service as settings_service
-import ../../../../app_service/service/network/service as network_service
-import ../../../../app_service/service/eth/utils as eth_utils
-import ../../../../app_service/service/wallet_account/service as wallet_account_service
-import ../../../../app_service/service/token/service as token_service
-import ../../shared_modules/keycard_popup/io_interface as keycard_shared_module
+import app/core/eventemitter
+import app_service/service/node/service as node_service
+import app_service/service/stickers/service as stickers_service
+import app_service/service/token/service
+import app_service/service/settings/service as settings_service
+import app_service/service/network/service as network_service
+import app_service/service/eth/utils as eth_utils
+import app_service/service/wallet_account/service as wallet_account_service
+import app_service/service/token/service as token_service
+import app_service/service/keycard/service as keycard_service
+import app/modules/shared_modules/keycard_popup/io_interface as keycard_shared_module
 
 const UNIQUE_BUY_STICKER_TRANSACTION_MODULE_IDENTIFIER* = "StickersSection-TransactionModule"
 
@@ -24,6 +25,8 @@ type
     networkService: network_service.Service
     walletAccountService: wallet_account_service.Service
     tokenService: token_service.Service
+    keycardService: keycard_service.Service
+    connectionKeycardResponse: UUID
     disconnected: bool
 
 proc newController*(
@@ -34,6 +37,7 @@ proc newController*(
     walletAccountService: wallet_account_service.Service,
     networkService: network_service.Service,
     tokenService: token_service.Service,
+    keycardService: keycard_service.Service
     ): Controller =
   result = Controller()
   result.delegate = delegate
@@ -43,6 +47,7 @@ proc newController*(
   result.networkService = networkService
   result.walletAccountService = walletAccountService
   result.tokenService = tokenService
+  result.keycardService = keycardService
   result.disconnected = false
 
 proc delete*(self: Controller) =
@@ -51,6 +56,7 @@ proc delete*(self: Controller) =
 proc init*(self: Controller) =
 
   self.events.on(SIGNAL_LOAD_RECENT_STICKERS_DONE) do(e: Args):
+    self.delegate.clearStickers()
     let args = StickersArgs(e)
     for sticker in args.stickers:
       self.delegate.addRecentStickerToList(sticker)
@@ -91,16 +97,25 @@ proc init*(self: Controller) =
     let args = SharedKeycarModuleArgs(e)
     if args.uniqueIdentifier != UNIQUE_BUY_STICKER_TRANSACTION_MODULE_IDENTIFIER:
       return
-    self.delegate.onUserAuthenticated(args.password)
+    self.delegate.onKeypairAuthenticated(args.password, args.pin)
 
   self.events.on(SIGNAL_STICKER_PACK_INSTALLED) do(e: Args):
     let args = StickerPackInstalledArgs(e)
     self.delegate.onStickerPackInstalled(args.packId)
 
-proc buy*(self: Controller, packId: string, address: string, gas: string, gasPrice: string, maxPriorityFeePerGas: string, maxFeePerGas: string, password: string, eip1559Enabled: bool): tuple[response: string, success: bool] =
-  self.stickerService.buy(packId, address, gas, gasPrice, maxPriorityFeePerGas, maxFeePerGas, password, eip1559Enabled)
+proc prepareTxForBuyingStickers*(self: Controller, chainId: int, packId: string, address: string, gas: string, gasPrice: string,
+  maxPriorityFeePerGas: string, maxFeePerGas: string, eip1559Enabled: bool): JsonNode =
+  return self.stickerService.prepareTxForBuyingStickers(chainId, packId, address, gas, gasPrice, maxPriorityFeePerGas,
+    maxFeePerGas, eip1559Enabled)
 
-proc getRecentStickers*(self: Controller): seq[StickerDto] = 
+proc signBuyingStickersTxLocally*(self: Controller, data, account, hashedPasssword: string): string =
+  return self.stickerService.signBuyingStickersTxLocally(data, account, hashedPasssword)
+
+proc sendBuyingStickersTxWithSignatureAndWatch*(self: Controller, chainId: int, txData: JsonNode, packId: string,
+  signature: string): StickerBuyResultArgs =
+  return self.stickerService.sendBuyingStickersTxWithSignatureAndWatch(chainId, txData, packId, signature)
+
+proc getRecentStickers*(self: Controller): seq[StickerDto] =
   return self.stickerService.getRecentStickers()
 
 proc loadRecentStickers*(self: Controller) =
@@ -153,6 +168,9 @@ proc getSNTBalance*(self: Controller): string =
 proc getWalletDefaultAddress*(self: Controller): string =
   return self.walletAccountService.getWalletAccount(0).address
 
+proc getKeypairByAccountAddress*(self: Controller, address: string): KeypairDto =
+  return self.walletAccountService.getKeypairByAccountAddress(address)
+
 proc getCurrentCurrency*(self: Controller): string =
   return self.settingsService.getCurrency()
 
@@ -165,14 +183,38 @@ proc getChainIdForStickers*(self: Controller): int =
 proc getStatusToken*(self: Controller): string =
   let token = self.stickerService.getStatusToken()
 
+  if token == nil:
+    return $ %*{}
+
   let jsonObj = %* {
     "name": token.name,
     "symbol": token.symbol,
-    "address": token.addressAsString()
+    "address": token.address
   }
   return $jsonObj
 
-proc authenticateUser*(self: Controller, keyUid = "") =
+proc authenticate*(self: Controller, keyUid = "") =
   let data = SharedKeycarModuleAuthenticationArgs(uniqueIdentifier: UNIQUE_BUY_STICKER_TRANSACTION_MODULE_IDENTIFIER,
     keyUid: keyUid)
   self.events.emit(SIGNAL_SHARED_KEYCARD_MODULE_AUTHENTICATE_USER, data)
+
+proc disconnectKeycardReponseSignal(self: Controller) =
+  self.events.disconnect(self.connectionKeycardResponse)
+
+proc connectKeycardReponseSignal(self: Controller) =
+  self.connectionKeycardResponse = self.events.onWithUUID(SIGNAL_KEYCARD_RESPONSE) do(e: Args):
+    let args = KeycardLibArgs(e)
+    self.disconnectKeycardReponseSignal()
+    let currentFlow = self.keycardService.getCurrentFlow()
+    if currentFlow != KCSFlowType.Sign:
+      self.delegate.onTransactionSigned("", KeycardEvent())
+      return
+    self.delegate.onTransactionSigned(args.flowType, args.flowEvent)
+
+proc cancelCurrentFlow*(self: Controller) =
+  self.keycardService.cancelCurrentFlow()
+
+proc runSignFlow*(self: Controller, pin, bip44Path, txHash: string) =
+  self.cancelCurrentFlow()
+  self.connectKeycardReponseSignal()
+  self.keycardService.startSignFlow(bip44Path, txHash, pin)

@@ -29,7 +29,14 @@ QtObject {
         CommunityMembershipRequest = 8,
         CommunityKicked = 9,
         ContactVerification = 10,
-        ContactRemoved = 11
+        ContactRemoved = 11,
+        NewKeypairAddedToPairedDevice = 12,
+        OwnerTokenReceived = 13,
+        OwnershipReceived = 14,
+        OwnershipLost = 15,
+        OwnershipFailed = 16,
+        OwnershipDeclined = 17,
+        ShareAccounts = 18
     }
 
     enum ActivityCenterReadType {
@@ -39,9 +46,12 @@ QtObject {
     }
 
     enum ActivityCenterMembershipStatus {
+        None = 0,
         Pending = 1,
         Accepted = 2,
-        Declined = 3
+        Declined = 3,
+        AcceptedPending = 4,
+        DeclinedPending = 5
     }
 
     enum ActivityCenterContactRequestState {
@@ -70,15 +80,11 @@ QtObject {
     }
 
     function markActivityCenterNotificationRead(notification) {
-        root.activityCenterModuleInst.markActivityCenterNotificationRead(
-            notification.id, notification.message.communityId,
-            notification.message.chatId, notification.notificationType)
+        root.activityCenterModuleInst.markActivityCenterNotificationRead(notification.id)
     }
 
     function markActivityCenterNotificationUnread(notification) {
-        root.activityCenterModuleInst.markActivityCenterNotificationUnread(
-            notification.id, notification.message.communityId,
-            notification.message.chatId, notification.notificationType)
+        root.activityCenterModuleInst.markActivityCenterNotificationUnread(notification.id)
     }
 
     function markAsSeenActivityCenterNotifications() {
@@ -95,5 +101,9 @@ QtObject {
 
     function setActivityCenterReadType(readType) {
         root.activityCenterModuleInst.setActivityCenterReadType(readType)
+    }
+
+    function fetchActivityCenterNotifications() {
+        root.activityCenterModuleInst.fetchActivityCenterNotifications()
     }
 }

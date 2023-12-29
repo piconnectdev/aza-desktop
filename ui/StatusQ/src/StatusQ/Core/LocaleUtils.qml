@@ -80,6 +80,30 @@ QtObject {
         return num.toLocaleString(locale, 'f', precision)
     }
 
+    function numberToLocaleStringInCompactForm(num, locale = null) {
+        locale = locale || Qt.locale()
+        const numberOfDigits = integralPartLength(num)
+        let oneArgStrFormat = "%1"
+        let formattedNumber = num
+        let multiplier = 1
+        if(numberOfDigits >=4 && numberOfDigits < 7) { // 1K - 999K
+            multiplier = 1 / 1000
+            oneArgStrFormat = qsTr("%1K", "Thousand")
+        } else if(numberOfDigits >= 7 && numberOfDigits < 10) { // 1M - 999M
+            multiplier = 1 / 1000000
+            oneArgStrFormat = qsTr("%1M", "Million")
+        } else if(numberOfDigits >= 10 && numberOfDigits < 13) { // 1B - 999B
+            multiplier = 1 / 1000000000
+            oneArgStrFormat = qsTr("%1B", "Billion")
+        } else if(numberOfDigits >= 13 && numberOfDigits < 16) { // 1T - 999T
+            multiplier = 1 / 1000000000000
+            oneArgStrFormat = qsTr("%1T", "Trillion")
+        }
+
+        const stringNumber = numberToLocaleString(num * multiplier, 2, locale)
+        return oneArgStrFormat.arg(stripTrailingZeroes(stringNumber, locale))
+    }
+
     function numberFromLocaleString(num, locale = null) {
         locale = locale || Qt.locale()
         try {
@@ -113,6 +137,13 @@ QtObject {
         if (typeof currencyAmount.amount === "undefined")
             return qsTr("N/A")
 
+        let currencyValue = currencyAmount.amount
+
+        if (currencyAmount.symbol === "Gwei") {
+            // Special case when currency amount must be converted to float to properly display it
+            currencyValue = currencyAmount.amount / Math.pow(10, currencyAmount.displayDecimals)
+        }
+
         locale = locale || Qt.locale()
 
         // Parse options
@@ -139,26 +170,26 @@ QtObject {
         var amountSuffix = ""
 
         let minAmount = 10**-optDisplayDecimals
-        if (currencyAmount.amount > 0 && currencyAmount.amount < minAmount && !optRawAmount)
+        if (currencyValue > 0 && currencyValue < minAmount && !optRawAmount)
         {
             // Handle amounts smaller than resolution
             amountStr = "<%1".arg(numberToLocaleString(minAmount, optDisplayDecimals, locale))
         } else {
             var amount
             var displayDecimals
-            const numIntegerDigits = integralPartLength(currencyAmount.amount)
+            const numIntegerDigits = integralPartLength(currencyValue)
             const maxDigits = 11 // We add "B" suffix only after 999 Billion
             const maxDigitsToShowDecimal = 6 // We do not display decimal places after 1 million
             // For large numbers, we use the short scale system (https://en.wikipedia.org/wiki/Long_and_short_scales)
             // and 2 decimal digits.
             if (numIntegerDigits > maxDigits && !optRawAmount) {
-                amount = currencyAmount.amount/10**9 // Billion => 9 zeroes
+                amount = currencyValue/10**9 // Billion => 9 zeroes
                 displayDecimals = 2
                 amountSuffix = qsTr("B", "Billion")
             } else {
                 // For normal numbers, we show the whole integral part and as many decimal places not
                 // not to exceed the maximum
-                amount = currencyAmount.amount
+                amount = currencyValue
                 // For numbers over 1M , dont show decimal places
                 if(numIntegerDigits > maxDigitsToShowDecimal) {
                     displayDecimals = 0
@@ -175,6 +206,8 @@ QtObject {
         // Add symbol
         if (currencyAmount.symbol && !optNoSymbol) {
             amountStr = "%1%2 %3".arg(amountStr).arg(amountSuffix).arg(currencyAmount.symbol)
+        } else {
+            amountStr = "%1%2".arg(amountStr).arg(amountSuffix)
         }
 
         return amountStr
@@ -431,17 +464,14 @@ QtObject {
             return qsTr("%1 %2").arg(loc.standaloneDayName(value.getDay(), Locale.ShortFormat)).arg(value.toLocaleTimeString(loc, formatString))
         }
 
-        // otherwise
-        var fullFormatString = d.fixupTimeFormatString(loc.dateTimeFormat(Locale.ShortFormat))
+        // within this year
         if (now.getFullYear() === value.getFullYear()) {
-            // strip year part, if current year -> "31 December 09:41"
-            // It remove preceding dot or space
-            fullFormatString = fullFormatString.replace(/([.\s])?\b(y+)\b/g, "")
-        } else if (!fullFormatString.includes("yyyy")) {
-            fullFormatString = fullFormatString.replace("yy", "yyyy") // different year -> "31 December 2022 09:41"
+            // strip year part, if current year -> "31 Dec 09:41"
+            return getDayMonth(value) + " " + formatTime(value, Locale.ShortFormat)
         }
 
-        return value.toLocaleString(loc, fullFormatString)
+        // otherwise
+        return formatDateTime(value, Locale.ShortFormat)
     }
 
     function getTimeDifference(d1, d2) {

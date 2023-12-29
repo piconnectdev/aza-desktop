@@ -5,10 +5,6 @@ import utils 1.0
 
 QtObject {
     id: root
-//    property var utilsModelInst: !!utilsModel ? utilsModel :  null
-//    property var chatsModelInst: !!chatsModel ?chatsModel : null
-//    property var walletModelInst: !!walletModel ? walletModel : null
-//    property var profileModelInst: !!profileModel ? profileModel : null
 
     property var profileSectionModuleInst: profileSectionModule
     property var privacyModule: profileSectionModuleInst.privacyModule
@@ -21,35 +17,27 @@ QtObject {
 
     property bool notificationSoundsEnabled: !!appSettingsInst ? appSettingsInst.notificationSoundsEnabled : true
     property bool neverAskAboutUnfurlingAgain: !!accountSensitiveSettings ? accountSensitiveSettings.neverAskAboutUnfurlingAgain : false
-    property bool isGifWidgetEnabled: !!accountSensitiveSettings ? accountSensitiveSettings.isGifWidgetEnabled : false
-    property bool isTenorWarningAccepted: !!accountSensitiveSettings ? accountSensitiveSettings.isTenorWarningAccepted : false
-    property bool displayChatImages: !!accountSensitiveSettings ? accountSensitiveSettings.displayChatImages : false
-
-//    property string signingPhrase: !!walletModelInst ? walletModelInst.utilsView.signingPhrase : ""
-//    property string gasPrice: !!walletModelInst ? walletModelInst.gasView.gasPrice : "0"
-//    property string gasEthValue: !!walletModelInst ? walletModelInst.gasView.getGasEthValue : "0"
+    property bool gifUnfurlingEnabled: !!accountSensitiveSettings ? accountSensitiveSettings.gifUnfurlingEnabled : false
 
     property CurrenciesStore currencyStore: CurrenciesStore {}
-    property string currentCurrency: Global.appIsReady? walletSection.currentCurrency : ""
-//    property string defaultCurrency: !!walletModelInst ? walletModelInst.balanceView.defaultCurrency : "0"
-//    property string fiatValue: !!walletModelInst ? walletModelInst.balanceView.getFiatValue : "0"
-//    property string cryptoValue: !!walletModelInst ? walletModelInst.balanceView.getCryptoValue : "0"
+    property string currentCurrency: Global.appIsReady? walletSectionInst.currentCurrency : ""
 
-    property var history: typeof walletSectionTransactions !== "undefined" ? walletSectionTransactions
-                                                                          : null
-    property var historyTransactions: Global.appIsReady? walletSection.activityController.model : null
-    readonly property bool loadingHistoryTransactions: Global.appIsReady && walletSection.activityController.status.loadingData
-    readonly property bool newDataAvailable: Global.appIsReady && walletSection.activityController.status.newDataAvailable
-    readonly property var transactionActivityStatus: Global.appIsReady ? walletSection.activityController.status : null
+    readonly property var transactionActivityStatus: Global.appIsReady ? walletSectionInst.activityController.status : null
 
-    property bool isNonArchivalNode: history ? history.isNonArchivalNode
-                                             : false
+    property var historyTransactions: Global.appIsReady? walletSectionInst.activityController.model : null
+    readonly property bool loadingHistoryTransactions: Global.appIsReady && walletSectionInst.activityController.status.loadingData
+    readonly property bool newDataAvailable: Global.appIsReady && walletSectionInst.activityController.status.newDataAvailable
+    property bool isNonArchivalNode: Global.appIsReady && walletSectionInst.isNonArchivalNode
+
     property var marketValueStore: TokenMarketValuesStore{}
+    property var allNetworks: networksModule.all
 
     function resetFilter() {
-        walletSection.activityController.updateFilter()
+        walletSectionInst.activityController.updateFilter()
     }
 
+    // TODO remove all these by linking chainId for networks and activity using LeftJoinModel
+    // not possible currently due to the current structure of the activity model
     function getNetworkColor(chainId) {
         return networksModule.all.getChainColor(chainId)
     }
@@ -106,8 +94,8 @@ QtObject {
         localAccountSensitiveSettings.neverAskAboutUnfurlingAgain = value;
     }
 
-    function setIsTenorWarningAccepted(value) {
-        localAccountSensitiveSettings.isTenorWarningAccepted = value;
+    function setGifUnfurlingEnabled(value) {
+        localAccountSensitiveSettings.gifUnfurlingEnabled = value
     }
 
     function copyToClipboard(text) {
@@ -133,22 +121,6 @@ QtObject {
     function getTrendingsGifs() {
         if (chatSectionChatContentInputAreaInst)
             chatSectionChatContentInputAreaInst.getTrendingsGifs()
-    }
-
-    function updateWhitelistedUnfurlingSites(hostname, whitelisted) {
-        // no way to send update notification for individual array entries
-        let settings = localAccountSensitiveSettings.whitelistedUnfurlingSites
-
-        if (!settings)
-            settings = {}
-
-        if (settings[hostname] === whitelisted)
-            return
-
-        settings[hostname] = whitelisted
-        localAccountSensitiveSettings.whitelistedUnfurlingSites = settings
-        if(hostname === "media.tenor.com" && whitelisted === false)
-            RootStore.setIsTenorWarningAccepted(false)
     }
 
     function getRecentsGifs() {
@@ -185,12 +157,12 @@ QtObject {
                 || !RootStore.historyTransactions.hasMore
                 || loadingHistoryTransactions)
             return
-        walletSection.activityController.loadMoreItems()
+        walletSectionInst.activityController.loadMoreItems()
     }
 
     function updateTransactionFilter() {
         if (transactionActivityStatus.isFilterDirty)
-            walletSection.activityController.updateFilter()
+            walletSectionInst.activityController.updateFilter()
     }
 
     function hex2Eth(value) {
@@ -243,6 +215,12 @@ QtObject {
         return currencyStore.getGasEthValue(gweiValue, gasLimit)
     }
 
+    function getFeeEthValue(feeCurrency) {
+        if (!feeCurrency || feeCurrency.symbol !== "Gwei")
+            return 0
+        return currencyStore.getGasEthValue(feeCurrency.amount / Math.pow(10, feeCurrency.displayDecimals), 1)
+    }
+
     function formatCurrencyAmount(amount, symbol, options = null, locale = null) {
         return currencyStore.formatCurrencyAmount(amount, symbol, options, locale)
     }
@@ -252,11 +230,23 @@ QtObject {
             walletSectionAllTokens.getHistoricalDataForToken(symbol,currency)
     }
 
+    function fetchDecodedTxData(txHash, input) {
+        walletSectionInst.fetchDecodedTxData(txHash, input)
+    }
+
+    function fetchTxDetails(modelIndex) {
+        walletSectionInst.activityController.fetchTxDetails(modelIndex)
+    }
+
+    function getTxDetails() {
+        return walletSectionInst.activityController.activityDetails
+    }
+
     property bool marketHistoryIsLoading: Global.appIsReady? walletSectionAllTokens.marketHistoryIsLoading : false
 
-    function fetchHistoricalBalanceForTokenAsJson(address, tokenSymbol, currencySymbol, timeIntervalEnum) {
+    function fetchHistoricalBalanceForTokenAsJson(address, allAddresses, tokenSymbol, currencySymbol, timeIntervalEnum) {
         if (Global.appIsReady)
-            walletSectionAllTokens.fetchHistoricalBalanceForTokenAsJson(address, tokenSymbol, currencySymbol, timeIntervalEnum)
+            walletSectionAllTokens.fetchHistoricalBalanceForTokenAsJson(address, allAddresses, tokenSymbol, currencySymbol, timeIntervalEnum)
     }
 
     property bool balanceHistoryIsLoading: Global.appIsReady? walletSectionAllTokens.balanceHistoryIsLoading : false

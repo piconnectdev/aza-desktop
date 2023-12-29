@@ -1,7 +1,6 @@
 import NimQml, Tables, strutils, sequtils, strformat
-import ./item
 
-export item
+import ../../../../shared_models/wallet_account_item
 
 type
   ModelRole {.pure.} = enum
@@ -11,7 +10,6 @@ type
     ColorId,
     WalletType,
     Emoji,
-    RelatedAccounts,
     KeyUid,
     Position,
     KeycardAccount,
@@ -19,7 +17,7 @@ type
 QtObject:
   type
     Model* = ref object of QAbstractListModel
-      items: seq[Item]
+      items: seq[WalletAccountItem]
 
   proc delete(self: Model) =
     self.items = @[]
@@ -56,20 +54,19 @@ QtObject:
       ModelRole.ColorId.int:"colorId",
       ModelRole.WalletType.int:"walletType",
       ModelRole.Emoji.int: "emoji",
-      ModelRole.RelatedAccounts.int: "relatedAccounts",
       ModelRole.KeyUid.int: "keyUid",
       ModelRole.Position.int: "position",
       ModelRole.KeycardAccount.int: "keycardAccount",
     }.toTable
 
 
-  proc setItems*(self: Model, items: seq[Item]) =
+  proc setItems*(self: Model, items: seq[WalletAccountItem]) =
     self.beginResetModel()
     self.items = items
     self.endResetModel()
     self.countChanged()
 
-  proc onUpdatedAccount*(self: Model, account: Item) =
+  proc onUpdatedAccount*(self: Model, account: WalletAccountItem) =
     var i = 0
     for item in self.items.mitems:
       if account.address == item.address:
@@ -77,9 +74,8 @@ QtObject:
         item.colorId = account.colorId
         item.emoji = account.emoji
         let index = self.createIndex(i, 0, nil)
-        self.dataChanged(index, index, @[ModelRole.Name.int])
-        self.dataChanged(index, index, @[ModelRole.ColorId.int])
-        self.dataChanged(index, index, @[ModelRole.Emoji.int])
+        defer: index.delete
+        self.dataChanged(index, index, @[ModelRole.Name.int, ModelRole.ColorId.int, ModelRole.Emoji.int])
         break
       i.inc
 
@@ -106,8 +102,6 @@ QtObject:
       result = newQVariant(item.walletType())
     of ModelRole.Emoji:
       result = newQVariant(item.emoji())
-    of ModelRole.RelatedAccounts:
-      result = newQVariant(item.relatedAccounts())
     of ModelRole.KeyUid:
       result = newQVariant(item.keyUid())
     of ModelRole.Position:

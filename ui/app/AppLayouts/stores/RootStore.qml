@@ -2,18 +2,110 @@ import QtQuick 2.13
 
 import utils 1.0
 
+import SortFilterProxyModel 0.2
+import AppLayouts.Wallet.stores 1.0 as WalletStore
+
 import "../Profile/stores"
 
 QtObject {
     id: root
 
     property var mainModuleInst: mainModule
+    property var walletSectionInst: walletSection
     property var aboutModuleInst: aboutModule
     property var communitiesModuleInst: communitiesModule
-
     property bool newVersionAvailable: false
+    readonly property bool requirementsCheckPending: communitiesModuleInst.requirementsCheckPending
     property string latestVersion
     property string downloadURL
+
+    readonly property int loginType: getLoginType()
+    function getLoginType() {
+        if(!userProfileInst)
+            return Constants.LoginType.Password
+
+        if(userProfileInst.usingBiometricLogin)
+            return Constants.LoginType.Biometrics
+        if(userProfileInst.isKeycardUser)
+            return Constants.LoginType.Keycard
+        return Constants.LoginType.Password
+    }
+
+    function prepareTokenModelForCommunity(publicKey) {
+        root.communitiesModuleInst.prepareTokenModelForCommunity(publicKey)
+    }
+
+    property string communityKeyToImport
+    onCommunityKeyToImportChanged: {
+        if (!!communityKeyToImport)
+            root.prepareTokenModelForCommunity(communityKeyToImport);
+    }
+
+    readonly property var permissionsModel: !!root.communitiesModuleInst.spectatedCommunityPermissionModel ?
+                                     root.communitiesModuleInst.spectatedCommunityPermissionModel : null
+
+    readonly property var myRevealedAddressesForCurrentCommunity: {
+        try {
+            let revealedAddresses = root.communitiesModuleInst.myRevealedAddressesStringForCurrentCommunity
+            let revealedAddressArray = JSON.parse(revealedAddresses)
+            return revealedAddressArray.map(addr => addr.toLowerCase())
+        } catch (e) {
+            console.error("Error parsing my revealed addresses", e)
+        }
+        return []
+    }
+    readonly property string myRevealedAirdropAddressForCurrentCommunity:
+        root.communitiesModuleInst.myRevealedAirdropAddressForCurrentCommunity.toLowerCase()
+
+    property var walletAccountsModel: WalletStore.RootStore.nonWatchAccounts
+    property var assetsModel: SortFilterProxyModel {
+        sourceModel: communitiesModuleInst.tokenList
+        proxyRoles: ExpressionRole {
+            function tokenIcon(symbol) {
+                return Constants.tokenIcon(symbol)
+            }
+            name: "iconSource"
+            expression: !!model.icon ? model.icon : tokenIcon(model.symbol)
+        }
+        filters: [
+            AnyOf {
+                // We accept tokens from this community or general (empty community ID)
+                ValueFilter {
+                    roleName: "communityId"
+                    value: ""
+                }
+
+                ValueFilter {
+                    roleName: "communityId"
+                    value: root.communityKeyToImport
+                }
+            }
+        ]
+    }
+    property var collectiblesModel: SortFilterProxyModel {
+        sourceModel: communitiesModuleInst.collectiblesModel
+        proxyRoles: ExpressionRole {
+            function collectibleIcon(icon) {
+                return !!icon ? icon : Style.png("tokens/DEFAULT-TOKEN")
+            }
+            name: "iconSource"
+            expression: collectibleIcon(model.icon)
+        }
+        filters: [
+            AnyOf {
+                // We accept tokens from this community or general (empty community ID)
+                ValueFilter {
+                    roleName: "communityId"
+                    value: ""
+                }
+
+                ValueFilter {
+                    roleName: "communityId"
+                    value: root.communityKeyToImport
+                }
+            }
+        ]
+    }
 
     function setLatestVersionInfo(newVersionAvailable, latestVersion, downloadURL) {
         root.newVersionAvailable = newVersionAvailable;
@@ -30,9 +122,6 @@ QtObject {
     }
 
     property ProfileSectionStore profileSectionStore: ProfileSectionStore {
-    }
-
-    property EmojiReactions emojiReactionsModel: EmojiReactions {
     }
 
     property var chatSearchModel: mainModuleInst.chatSearchModel
@@ -54,7 +143,6 @@ QtObject {
     property var accounts: walletSectionSendInst.accounts
     // Not Refactored Yet
 //    property var profileModelInst: profileModel
-    property var tokensModelWallet//TODO this is not available yet
 
     property var contactStore: profileSectionStore.contactsStore
     property var privacyStore: profileSectionStore.privacyStore
@@ -71,12 +159,12 @@ QtObject {
     property var savedAddressesModel: walletSectionSavedAddresses.model
 
     readonly property bool showBrowserSelector: localAccountSensitiveSettings.showBrowserSelector
-    readonly property bool openLinksInStatus: localAccountSensitiveSettings.openLinksInStatus
+    readonly property bool openLinksInStatus: false
 
     property var allNetworks: networksModule.all
 
-    function getEtherscanLink() {
-        return profileSectionModule.ensUsernamesModule.getEtherscanLink()
+    function getEtherscanLink(chainID) {
+        return allNetworks.getBlockExplorerURL(chainID)
     }
 
     function createCommunity(communityName, communityDescription, checkedMembership, communityColor, communityTags,
@@ -94,8 +182,8 @@ QtObject {
         return communitiesModuleInst.isMemberOfCommunity(communityId, pubKey)
     }
 
-    function isCommunityRequestPending(id: string) {
-        return communitiesModuleInst.isCommunityRequestPending(id)
+    function isMyCommunityRequestPending(id: string) {
+        return communitiesModuleInst.isMyCommunityRequestPending(id)
     }
 
     function cancelPendingRequest(id: string) {
@@ -123,22 +211,6 @@ QtObject {
         return profileSectionStore.ensUsernamesStore.getGasEthValue(gweiValue, gasLimit)
     }
 
-    function suggestedFees(chainId) {
-        return JSON.parse(walletSectionSendInst.suggestedFees(chainId))
-    }
-
-    function getEstimatedTime(chainId, maxFeePerGas) {
-       return walletSectionSendInst.getEstimatedTime(chainId, maxFeePerGas)
-    }
-
-    function getChainIdForChat() {
-        return walletSectionTransactions.getChainIdForChat()
-    }
-
-    function getChainIdForBrowser() {
-        return walletSectionTransactions.getChainIdForBrowser()
-    }
-
     function hex2Eth(value) {
         return globalUtils.hex2Eth(value)
     }
@@ -163,5 +235,25 @@ QtObject {
 
     function windowDeactivated() {
         mainModuleInst.windowDeactivated()
+    }
+
+    function prepareKeypairsForSigning(communityId, ensName, addressesToShare = [], airdropAddress = "", editMode = false) {
+        communitiesModuleInst.prepareKeypairsForSigning(communityId, ensName, JSON.stringify(addressesToShare), airdropAddress, editMode)
+    }
+
+    function signSharedAddressesForAllNonKeycardKeypairs() {
+        communitiesModuleInst.signSharedAddressesForAllNonKeycardKeypairs()
+    }
+
+    function signSharedAddressesForKeypair(keyUid) {
+        communitiesModuleInst.signSharedAddressesForKeypair(keyUid)
+    }
+
+    function joinCommunityOrEditSharedAddresses() {
+        communitiesModuleInst.joinCommunityOrEditSharedAddresses()
+    }
+
+    function updatePermissionsModel(communityId, sharedAddresses) {
+        communitiesModuleInst.checkPermissions(communityId, JSON.stringify(sharedAddresses))
     }
 }

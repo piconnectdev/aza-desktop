@@ -30,8 +30,16 @@ StatusStackModal {
     required property var assetsModel
     required property var collectiblesModel
 
-    signal joined(string airdropAddress, var sharedAddresses)
+    required property bool requirementsCheckPending
+
+    property var keypairSigningModel
+
+    signal prepareForSigning(string airdropAddress, var sharedAddresses)
+    signal joinCommunity()
+    signal signSharedAddressesForAllNonKeycardKeypairs()
+    signal signSharedAddressesForKeypair(string keyUid)
     signal cancelMembershipRequest()
+    signal sharedAddressesUpdated(var sharedAddresses)
 
     width: 640 // by design
     padding: 0
@@ -40,21 +48,24 @@ StatusStackModal {
     rightButtons: [d.shareButton, finishButton]
 
     finishButton: StatusButton {
-        text: root.isInvitationPending ? qsTr("Cancel Membership Request")
-                                       : (root.accessType === Constants.communityChatOnRequestAccess
-                                          ? qsTr("Share your addresses to join")
-                                          : qsTr("Join %1").arg(root.name) )
+        text: root.isInvitationPending ?
+                  qsTr("Cancel Membership Request")
+                : root.accessType === Constants.communityChatOnRequestAccess?
+                       qsTr("Prove ownership")
+                     : qsTr("Join %1").arg(root.name)
+
         type: root.isInvitationPending ? StatusBaseButton.Type.Danger
                                        : StatusBaseButton.Type.Normal
-        icon.name: root.accessType === Constants.communityChatOnRequestAccess && !root.isInvitationPending ? Constants.authenticationIconByType[root.loginType] : ""
+
         onClicked: {
             if (root.isInvitationPending) {
                 root.cancelMembershipRequest()
-            } else {
-                root.joined(d.selectedAirdropAddress, d.selectedSharedAddresses)
+                root.close()
+                return
             }
 
-            root.close()
+            root.prepareForSigning(d.selectedAirdropAddress, d.selectedSharedAddresses)
+            root.replace(sharedAddressesSigningPanelComponent)
         }
     }
 
@@ -63,13 +74,6 @@ StatusStackModal {
 
         readonly property var tempAddressesModel: SortFilterProxyModel {
             sourceModel: root.walletAccountsModel
-            filters: [
-                ValueFilter {
-                    roleName: "walletType"
-                    value: Constants.watchWalletType
-                    inverted: true
-                }
-            ]
             sorters: [
                 ExpressionSorter {
                     function isGenerated(modelData) {
@@ -108,7 +112,27 @@ StatusStackModal {
             communityName: root.name
             communityIcon: root.imageSrc
             loginType: root.loginType
-            walletAccountsModel: root.walletAccountsModel
+            requirementsCheckPending: root.requirementsCheckPending
+            walletAccountsModel: SortFilterProxyModel {
+                sourceModel: root.walletAccountsModel
+                sorters: [
+                    ExpressionSorter {
+                        function isGenerated(modelData) {
+                            return modelData.walletType === Constants.generatedWalletType
+                        }
+
+                        expression: {
+                            return isGenerated(modelLeft)
+                        }
+                    },
+                    RoleSorter {
+                        roleName: "position"
+                    },
+                    RoleSorter {
+                        roleName: "name"
+                    }
+                ]
+            }
             permissionsModel: root.permissionsModel
             assetsModel: root.assetsModel
             collectiblesModel: root.collectiblesModel
@@ -117,31 +141,53 @@ StatusStackModal {
                 d.selectedSharedAddresses = sharedAddresses
                 root.replaceItem = undefined // go back, unload us
             }
+            onSharedAddressesChanged: {
+                root.sharedAddressesUpdated(sharedAddresses)
+            }
+        }
+    }
+
+    Component {
+        id: sharedAddressesSigningPanelComponent
+        SharedAddressesSigningPanel {
+
+            keypairSigningModel: root.keypairSigningModel
+
+            onSignSharedAddressesForAllNonKeycardKeypairs: {
+                root.signSharedAddressesForAllNonKeycardKeypairs()
+            }
+
+            onSignSharedAddressesForKeypair: {
+                root.signSharedAddressesForKeypair(keyUid)
+            }
+
+            onJoinCommunity: {
+                root.joinCommunity()
+                root.close()
+            }
         }
     }
 
     stackItems: [
         StatusScrollView {
-            id: scrollView
+           id: scrollView
             contentWidth: availableWidth
 
             ColumnLayout {
                 spacing: 24
-                width: scrollView.availableWidth
+                width: root.availableWidth
 
                 StatusRoundedImage {
-                    id: roundImage
-
-                    Layout.alignment: Qt.AlignCenter
-                    Layout.preferredHeight: 64
-                    Layout.preferredWidth: Layout.preferredHeight
-                    visible: image.status == Image.Loading || image.status == Image.Ready
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.preferredWidth: 64
+                    Layout.preferredHeight: Layout.preferredWidth
+                    visible: ((image.status == Image.Loading) ||
+                             (image.status == Image.Ready)) &&
+                             !image.isError
                     image.source: root.imageSrc
                 }
 
                 StatusBaseText {
-                    id: introText
-
                     Layout.fillWidth: true
                     text: root.introMessage || qsTr("Community <b>%1</b> has no intro message...").arg(root.name)
                     color: Theme.palette.directColor1

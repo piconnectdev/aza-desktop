@@ -20,21 +20,23 @@ method executeCancelCommand*(self: InsertKeycardState, controller: Controller) =
     self.flowType == FlowType.SetupNewKeycardOldSeedPhrase or
     self.flowType == FlowType.ImportFromKeycard or
     self.flowType == FlowType.Authentication or
+    self.flowType == FlowType.Sign or
     self.flowType == FlowType.UnlockKeycard or
     self.flowType == FlowType.DisplayKeycardContent or
     self.flowType == FlowType.RenameKeycard or
     self.flowType == FlowType.ChangeKeycardPin or
     self.flowType == FlowType.ChangeKeycardPuk or
     self.flowType == FlowType.ChangePairingCode or
-    self.flowType == FlowType.CreateCopyOfAKeycard:
+    self.flowType == FlowType.CreateCopyOfAKeycard or
+    self.flowType == FlowType.MigrateFromAppToKeycard:
       controller.terminateCurrentFlow(lastStepInTheCurrentFlow = false)
 
-method resolveKeycardNextState*(self: InsertKeycardState, keycardFlowType: string, keycardEvent: KeycardEvent, 
+method resolveKeycardNextState*(self: InsertKeycardState, keycardFlowType: string, keycardEvent: KeycardEvent,
   controller: Controller): State =
-  let state = ensureReaderAndCardPresenceAndResolveNextState(self, keycardFlowType, keycardEvent, controller)
+  let state = readingKeycard(self, keycardFlowType, keycardEvent, controller)
   if not state.isNil:
     return state
-  if keycardFlowType == ResponseTypeValueInsertCard and 
+  if keycardFlowType == ResponseTypeValueInsertCard and
     keycardEvent.error.len > 0 and
     keycardEvent.error == ErrorConnection:
       controller.setKeycardData(updatePredefinedKeycardData(controller.getKeycardData(), PredefinedKeycardData.WronglyInsertedCard, add = true))

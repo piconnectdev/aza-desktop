@@ -63,6 +63,14 @@ MembersSelectorBase {
         property ListModel selectedMembers: ListModel {}
 
         function lookupContact(value) {
+            const urlContactData = Utils.parseContactUrl(value)
+            if (urlContactData) {
+                // Ignore all the data from the link, because it might be malformed.
+                // Except for the publicKey.
+                processContact(urlContactData.publicKey)
+                return
+            }
+
             value = Utils.dropUserLinkPrefix(value.trim())
 
             if (Utils.isChatKey(value)) {
@@ -80,7 +88,6 @@ MembersSelectorBase {
 
         function processContact(publicKey) {
             const contactDetails = Utils.getContactDetailsAsJson(publicKey, false)
-
             if (contactDetails.publicKey === "") {
                 // not a valid key given
                 root.suggestionsDialog.forceHide = false
@@ -94,14 +101,15 @@ MembersSelectorBase {
                 return
             }
 
-            let hasPendingContactRequest = root.rootStore.contactsStore.hasPendingContactRequest(contactDetails.publicKey)
+            const hasPendingContactRequest = root.rootStore.contactsStore.hasPendingContactRequest(contactDetails.publicKey)
 
             if ((root.model.count === 0 && hasPendingContactRequest) ||
                     contactDetails.publicKey === root.rootStore.contactsStore.myPublicKey || contactDetails.isBlocked) {
                 // List is empty and we have a contact request
                 // OR it's our own chat key or a banned user
                 // Then open the contact's profile popup
-                Global.openProfilePopup(contactDetails.publicKey, null,  popup => popup.closed.connect(root.rejected))
+                Global.openProfilePopup(contactDetails.publicKey, null,
+                                        popup => popup.closed.connect(root.rejected))
                 return
             }
 

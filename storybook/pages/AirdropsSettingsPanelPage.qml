@@ -119,6 +119,10 @@ SplitView {
                             expression: ((model.index + 1) * 115).toString()
                         },
                         ExpressionRole {
+                            name: "multiplierIndex"
+                            expression: 0
+                        },
+                        ExpressionRole {
                             name: "infiniteSupply"
                             expression: !(model.index % 4)
                         },
@@ -158,7 +162,12 @@ SplitView {
                     proxyRoles: [
                         ExpressionRole {
                             name: "supply"
-                            expression: ((model.index + 1) * 258).toString()
+                            expression: ((model.index + 1) * 584).toString()
+                                        + "0".repeat(18)
+                        },
+                        ExpressionRole {
+                            name: "multiplierIndex"
+                            expression: 18
                         },
                         ExpressionRole {
                             name: "infiniteSupply"
@@ -198,6 +207,7 @@ SplitView {
                     readonly property string color: "red"
                     readonly property bool owner: true
                 }
+                accountsModel: WalletAccountsModel {}
 
                 onAirdropClicked: logs.logEvent("AirdropsSettingsPanel::onAirdropClicked")
             }
@@ -243,3 +253,5 @@ SplitView {
         }
     }
 }
+
+// category: Panels

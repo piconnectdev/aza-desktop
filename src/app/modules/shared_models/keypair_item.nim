@@ -25,8 +25,10 @@ QtObject:
     lastUsedDerivationIndex: int
     migratedToKeycard: bool
     operability: string
+    syncedFrom: string
     accounts: KeyPairAccountModel
     observedAccount: KeyPairAccountItem
+    ownershipVerified: bool
 
   proc setup*(self: KeyPairItem,
     keyUid: string,
@@ -38,7 +40,9 @@ QtObject:
     pairType: KeyPairType,
     derivedFrom: string,
     lastUsedDerivationIndex: int,
-    migratedToKeycard: bool
+    migratedToKeycard: bool,
+    syncedFrom: string,
+    ownershipVerified: bool
     ) =
     self.QObject.setup
     self.keyUid = keyUid
@@ -51,6 +55,8 @@ QtObject:
     self.derivedFrom = derivedFrom
     self.lastUsedDerivationIndex = lastUsedDerivationIndex
     self.migratedToKeycard = migratedToKeycard
+    self.syncedFrom = syncedFrom
+    self.ownershipVerified = ownershipVerified
     self.accounts = newKeyPairAccountModel()
 
   proc delete*(self: KeyPairItem) =
@@ -65,9 +71,12 @@ QtObject:
     pairType = KeyPairType.Unknown,
     derivedFrom = "",
     lastUsedDerivationIndex = 0,
-    migratedToKeycard = false): KeyPairItem =
+    migratedToKeycard = false,
+    syncedFrom = "",
+    ownershipVerified = false): KeyPairItem =
     new(result, delete)
-    result.setup(keyUid, pubKey, locked, name, image, icon, pairType, derivedFrom, lastUsedDerivationIndex, migratedToKeycard)
+    result.setup(keyUid, pubKey, locked, name, image, icon, pairType, derivedFrom, lastUsedDerivationIndex,
+      migratedToKeycard, syncedFrom, ownershipVerified)
 
   proc `$`*(self: KeyPairItem): string =
     result = fmt"""KeyPairItem[
@@ -82,7 +91,9 @@ QtObject:
       lastUsedDerivationIndex: {self.lastUsedDerivationIndex},
       migratedToKeycard: {self.migratedToKeycard},
       operability: {self.operability},
-      accounts: {$self.accounts}
+      syncedFrom: {self.syncedFrom},
+      ownershipVerified: {$self.ownershipVerified}
+      accounts: {$self.accounts},
       ]"""
 
   proc keyUidChanged*(self: KeyPairItem) {.signal.}
@@ -203,10 +214,31 @@ QtObject:
     if items.any(x => x.getOperability() == AccountPartiallyOperable):
       return AccountPartiallyOperable
     return AccountFullyOperable
-
   QtProperty[string] operability:
     read = getOperability
     notify = operabilityChanged
+
+  proc syncedFromChanged*(self: KeyPairItem) {.signal.}
+  proc getSyncedFrom*(self: KeyPairItem): string {.slot.} =
+    return self.syncedFrom
+  proc setSyncedFrom*(self: KeyPairItem, value: string) {.slot.} =
+    self.syncedFrom = value
+    self.syncedFromChanged()
+  QtProperty[string] syncedFrom:
+    read = getSyncedFrom
+    write = setSyncedFrom
+    notify = syncedFromChanged
+
+  proc ownershipVerifiedChanged*(self: KeyPairItem) {.signal.}
+  proc getOwnershipVerified*(self: KeyPairItem): bool {.slot.} =
+    return self.ownershipVerified
+  proc setOwnershipVerified*(self: KeyPairItem, value: bool) {.slot.} =
+    self.ownershipVerified = value
+    self.ownershipVerifiedChanged()
+  QtProperty[bool] ownershipVerified:
+    read = getOwnershipVerified
+    write = setOwnershipVerified
+    notify = ownershipVerifiedChanged
 
   proc observedAccountChanged*(self: KeyPairItem) {.signal.}
   proc getObservedAccountAsVariant*(self: KeyPairItem): QVariant {.slot.} =
@@ -250,10 +282,14 @@ QtObject:
     return self.accounts.containsPathOutOfTheDefaultStatusDerivationTree()
   proc updateDetailsForAccountWithAddressIfTheyAreSet*(self: KeyPairItem, address, name, colorId, emoji: string) =
     self.accounts.updateDetailsForAddressIfTheyAreSet(address, name, colorId, emoji)
+  proc updatePreferredSharingChainsForAddress*(self: KeyPairItem, address, prodPreferredChainIds, testPreferredChainIds: string) =
+    self.accounts.updatePreferredSharingChainsForAddress(address, prodPreferredChainIds, testPreferredChainIds)
+  proc updateAccountHiddenInTotalBalance*(self: KeyPairItem, address: string, hideFromTotalBalance: bool) =
+    self.accounts.updateAccountHiddenInTotalBalance(address, hideFromTotalBalance)
   proc setBalanceForAddress*(self: KeyPairItem, address: string, balance: CurrencyAmount) =
     self.accounts.setBalanceForAddress(address, balance)
-  proc updateOperabilityForAccountWithAddress*(self: KeyPairItem, address: string, operability: string) =
-    self.accounts.updateOperabilityForAddress(address, operability)
+  proc updateOperabilityForAllAddresses*(self: KeyPairItem, operability: string) =
+    self.accounts.updateOperabilityForAllAddresses(operability)
     self.operabilityChanged()
 
   proc setItem*(self: KeyPairItem, item: KeyPairItem) =
@@ -268,4 +304,5 @@ QtObject:
     self.setMigratedToKeycard(item.getMigratedToKeycard())
     self.setLastUsedDerivationIndex(item.getLastUsedDerivationIndex())
     self.setAccounts(item.getAccountsModel().getItems())
+    self.setOwnershipVerified(item.getOwnershipVerified())
     self.setLastAccountAsObservedAccount()

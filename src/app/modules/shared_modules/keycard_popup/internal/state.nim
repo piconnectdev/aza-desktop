@@ -6,6 +6,7 @@ export FlowType, KeycardEvent, KeyDetails
 
 type StateType* {.pure.} = enum
   NoState = "NoState"
+  Biometrics = "Biometrics"
   NoPCSCService = "NoPCSCService"
   PluginReader = "PluginReader"
   ReadingKeycard = "ReadingKeycard"
@@ -47,9 +48,14 @@ type StateType* {.pure.} = enum
   SeedPhraseEnterWords = "SeedPhraseEnterWords"
   KeyPairMigrateSuccess = "KeyPairMigrateSuccess"
   KeyPairMigrateFailure = "KeyPairMigrateFailure"
-  MigratingKeyPair = "MigratingKeyPair"
+  MigrateKeypairToApp = "MigrateKeypairToApp"
+  MigrateKeypairToKeycard = "MigrateKeypairToKeycard"
+  MigratingKeypairToApp = "MigratingKeypairToApp"
+  MigratingKeypairToKeycard = "MigratingKeypairToKeycard"
   EnterPassword = "EnterPassword"
   WrongPassword = "WrongPassword"
+  CreatePassword = "CreatePassword"
+  ConfirmPassword = "ConfirmPassword"
   BiometricsPasswordFailed = "BiometricsPasswordFailed"
   BiometricsPinFailed = "BiometricsPinFailed"
   BiometricsPinInvalid = "BiometricsPinInvalid"
@@ -106,7 +112,7 @@ proc setup*(self: State, flowType: FlowType, stateType: StateType, backState: St
 
 ## `flowType`  - detemines the flow this instance belongs to
 ## `stateType` - detemines the state this instance describes
-## `backState` - the sate (instance) we're moving to if user clicks "back" button, 
+## `backState` - the sate (instance) we're moving to if user clicks "back" button,
 ##               in case we should not display "back" button for this state, set it to `nil`
 proc newState*(self: State, flowType: FlowType, stateType: StateType, backState: State): State =
   result = State()
@@ -139,6 +145,10 @@ method getNextPrimaryState*(self: State, controller: Controller): State  {.inlin
 method getNextSecondaryState*(self: State, controller: Controller): State {.inline base.} =
   return nil
 
+## Returns next state instance in case the "tertiary" action is triggered
+method getNextTertiaryState*(self: State, controller: Controller): State {.inline base.} =
+  return nil
+
 ## This method is executed if "cancel" action is triggered (invalidates current flow)
 method executeCancelCommand*(self: State, controller: Controller) {.inline base.} =
   discard
@@ -167,7 +177,15 @@ method executePreSecondaryStateCommand*(self: State, controller: Controller) {.i
 method executePostSecondaryStateCommand*(self: State, controller: Controller) {.inline base.} =
   discard
 
+## This method is executed before tertiary state is set, if "tertiary" action is triggered
+method executePreTertiaryStateCommand*(self: State, controller: Controller) {.inline base.} =
+  discard
+
+## This method is executed after tertiary state is set, if "tertiary" action is triggered
+method executePostTertiaryStateCommand*(self: State, controller: Controller) {.inline base.} =
+  discard
+
 ## This method is used for handling aync responses for keycard related states
-method resolveKeycardNextState*(self: State, keycardFlowType: string, keycardEvent: KeycardEvent, 
+method resolveKeycardNextState*(self: State, keycardFlowType: string, keycardEvent: KeycardEvent,
   controller: Controller): State {.inline base.} =
   return nil

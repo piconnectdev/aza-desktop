@@ -17,9 +17,9 @@ QtObject:
       colorId: string
       emoji: string
       isAllAccounts: bool
-      includeWatchOnly: bool
       colorIds: string
       isWatchOnlyAccount: bool
+      canSend: bool
 
   proc setup(self: View) =
     self.QObject.setup
@@ -99,13 +99,6 @@ QtObject:
     read = getIsAllAccounts
     notify = isAllAccountsChanged
 
-  proc getIncludeWatchOnly(self: View): QVariant {.slot.} =
-    return newQVariant(self.includeWatchOnly)
-  proc includeWatchOnlyChanged(self: View) {.signal.}
-  QtProperty[QVariant] includeWatchOnly:
-    read = getIncludeWatchOnly
-    notify = includeWatchOnlyChanged
-
   proc getColorIds(self: View): QVariant {.slot.} =
     return newQVariant(self.colorIds)
   proc colorIdsChanged(self: View) {.signal.}
@@ -119,6 +112,13 @@ QtObject:
   QtProperty[bool] isWatchOnlyAccount:
     read = getIsWatchOnlyAccount
     notify = isWatchOnlyAccountChanged
+
+  proc getCanSend(self: View): bool {.slot.} =
+    return self.canSend
+  proc canSendChanged(self: View) {.signal.}
+  QtProperty[bool] canSend:
+    read = getCanSend
+    notify = canSendChanged
 
   proc setData*(self: View, item: Item) =
     if(self.name != item.getName()):
@@ -144,9 +144,9 @@ QtObject:
     if(self.isWatchOnlyAccount != item.getIsWatchOnlyAccount()):
       self.isWatchOnlyAccount = item.getIsWatchOnlyAccount()
       self.isWatchOnlyAccountChanged()
+    if(self.canSend != item.getCanSend()):
+      self.canSend = item.getCanSend()
+      self.canSendChanged()
     if(self.isAllAccounts != item.getIsAllAccounts()):
       self.isAllAccounts = item.getIsAllAccounts()
       self.isAllAccountsChanged()
-    if(self.includeWatchOnly != item.getIncludeWatchOnly()):
-      self.includeWatchOnly = item.getIncludeWatchOnly()
-      self.includeWatchOnlyChanged()

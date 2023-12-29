@@ -4,6 +4,7 @@ import QtQuick.Controls 2.15
 import StatusQ.Core 0.1
 import StatusQ.Components 0.1
 import StatusQ.Core.Theme 0.1
+import StatusQ.Core.Utils 0.1 as SQUtils
 
 import utils 1.0
 
@@ -28,10 +29,6 @@ Control {
             id: titleText
 
             width: parent.halfWidth
-            anchors.left: parent.left
-            anchors.top: parent.top
-            anchors.bottom: parent.bottom
-
 
             text: root.title
             wrapMode: Text.Wrap
@@ -51,12 +48,11 @@ Control {
 
             width: parent.halfWidth
             anchors.right: parent.right
-            anchors.top: parent.top
 
             textFormat: Text.RichText
             text: `<span style="color:${baseColor};` +
                   `font-size:${Style.current.tertiaryTextFontSize}px;">` +
-                  `${qsTr("Max.")}</span> ${root.feeText}`
+                  `${qsTr("Max.")}</span> ${SQUtils.StringUtils.escapeHtml(root.feeText)}`
 
             visible: root.feeText !== ""
             horizontalAlignment: Text.AlignRight

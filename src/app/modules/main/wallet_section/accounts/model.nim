@@ -1,8 +1,7 @@
-import NimQml, Tables, strutils, strformat, macros
+import NimQml, Tables, strutils, strformat
 
 import ./item
 import ../../../shared_models/currency_amount
-import ../../../shared_models/token_model
 
 type
   ModelRole {.pure.} = enum
@@ -19,6 +18,8 @@ type
     KeycardAccount,
     AssetsLoading,
     IsWallet,
+    PreferredSharingChainIds,
+    HideFromTotalBalance
 
 QtObject:
   type
@@ -68,6 +69,8 @@ QtObject:
       ModelRole.KeycardAccount.int: "keycardAccount",
       ModelRole.AssetsLoading.int: "assetsLoading",
       ModelRole.IsWallet.int: "isWallet",
+      ModelRole.PreferredSharingChainIds.int: "preferredSharingChainIds",
+      ModelRole.HideFromTotalBalance.int: "hideFromTotalBalance"
     }.toTable
 
 
@@ -117,6 +120,10 @@ QtObject:
       result = newQVariant(item.assetsLoading())
     of ModelRole.IsWallet:
       result = newQVariant(item.isWallet())
+    of ModelRole.PreferredSharingChainIds:
+      result = newQVariant(item.preferredSharingChainIds())
+    of ModelRole.HideFromTotalBalance:
+      result = newQVariant(item.hideFromTotalBalance())
 
   proc getNameByAddress*(self: Model, address: string): string =
     for item in self.items:
@@ -135,3 +142,9 @@ QtObject:
       if(cmpIgnoreCase(item.address(), address) == 0):
         return item.colorId()
     return ""
+
+  proc isOwnedAccount*(self: Model, address: string): bool =
+    for item in self.items:
+      if cmpIgnoreCase(item.address(), address) == 0 and item.walletType != "watch":
+        return true
+    return false

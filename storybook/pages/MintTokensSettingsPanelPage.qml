@@ -1,6 +1,8 @@
-import QtQuick 2.14
-import QtQuick.Controls 2.14
-import QtQuick.Layouts 1.14
+import QtQuick 2.15
+import QtQuick.Controls 2.15
+import QtQuick.Layouts 1.15
+
+import Qt.labs.settings 1.0
 
 import AppLayouts.Communities.panels 1.0
 import AppLayouts.Chat.stores 1.0
@@ -10,7 +12,7 @@ import SortFilterProxyModel 0.2
 
 import Storybook 1.0
 import Models 1.0
-
+import utils 1.0
 
 SplitView {
     orientation: Qt.Vertical
@@ -28,23 +30,40 @@ SplitView {
     }
 
     Timer {
-        id: feesTimer
-
-        interval: 1000
-
-        onTriggered: {
-            panel.isFeeLoading = false
-            panel.feeText = "0,0002 ETH (123,15 USD)"
+        id: timer
+        function delay(delayTime, cb) {
+            timer.interval = delayTime;
+            timer.repeat = false;
+            timer.triggered.connect(cb);
+            timer.start();
         }
     }
 
     Rectangle {
         SplitView.fillWidth: true
         SplitView.fillHeight: true
-        color: Theme.palette.statusAppLayout.rightPanelBackgroundColor        
+        color: Theme.palette.statusAppLayout.rightPanelBackgroundColor
 
         MintTokensSettingsPanel {
             id: panel
+
+            readonly property var singleTransactionFee: {
+                "ethCurrency": {
+                    "objectName":"",
+                    "amount":0.000007900500349933282,
+                    "symbol":"ETH",
+                    "displayDecimals":4,
+                    "stripTrailingZeroes":false
+                },
+                "fiatCurrency": {
+                    "objectName":"",
+                    "amount":0.012852533720433712,
+                    "symbol":"USD",
+                    "displayDecimals":2,
+                    "stripTrailingZeroes":false
+                },
+                "errorCode":0
+            }
 
             MintedTokensModel {
                 id: mintedTokensModel
@@ -55,10 +74,17 @@ SplitView {
 
                 sourceModel: mintedTokensModel
 
-                filters: ValueFilter {
-                    roleName: "isPrivilegedToken"
-                    value: true
-                }
+                filters: [
+                    ExpressionFilter {
+                        readonly property int ownerLevel: Constants.TokenPrivilegesLevel.Owner
+                        readonly property int tMasterLevel: Constants.TokenPrivilegesLevel.TMaster
+
+                        expression: {
+                            return ((model.privilegesLevel === ownerLevel) ||
+                                    (model.privilegesLevel === tMasterLevel))
+                        }
+                    }
+                ]
             }
 
             anchors.fill: parent
@@ -68,6 +94,7 @@ SplitView {
             communityLogo: ModelsData.collectibles.doodles
             communityColor: "#FFC4E9"
             communityName: "Doodles" // It cannot be changed since owner token and tMaster token in tokenModel used are related to the `Doodles` community
+            communityId: ""
 
             // Profile type:
             isAdmin: adminChecked.checked
@@ -77,26 +104,37 @@ SplitView {
             // Owner and TMaster related props:
             isOwnerTokenDeployed: deployCheck.checked
             isTMasterTokenDeployed: deployCheck.checked
+            anyPrivilegedTokenFailed: failedCheck.checked
 
             // Models:
             tokensModel: editorModelChecked.checked ? emptyModel :
                                                       privilegedModelChecked.checked ? privilegedTokensModel : mintedTokensModel
             layer1Networks: NetworksModel.layer1Networks
             layer2Networks: NetworksModel.layer2Networks
-            testNetworks: NetworksModel.testNetworks
             enabledNetworks: NetworksModel.enabledNetworks
             allNetworks: enabledNetworks
             accounts: WalletAccountsModel {}
-            tokensModelWallet: ListModel {
+            referenceAssetsBySymbolModel: ListModel {
                 ListElement {
-                    symbol: "MAI"
+                    name: "eth"
+                    symbol: "ETH"
+                }
+                ListElement {
+                    name: "dai"
+                    symbol: "DAI"
+                }
+                ListElement {
+                    name: "snt"
+                    symbol: "SNT"
                 }
             }
 
             onMintCollectible: logs.logEvent("CommunityMintTokensSettingsPanel::mintCollectible")
             onMintAsset: logs.logEvent("CommunityMintTokensSettingsPanel::mintAssets")
             onDeleteToken: logs.logEvent("CommunityMintTokensSettingsPanel::deleteToken: " + tokenKey)
-            onSignMintTransactionOpened: feesTimer.restart()
+            onRegisterDeployFeesSubscriber: timer.delay(2000, () => feeSubscriber.feesResponse = panel.singleTransactionFee)
+            onRegisterSelfDestructFeesSubscriber: timer.delay(2000, () => feeSubscriber.feesResponse = panel.singleTransactionFee)
+            onRegisterBurnTokenFeesSubscriber: timer.delay(2000, () => feeSubscriber.feesResponse = panel.singleTransactionFee)
         }
     }
 
@@ -142,6 +180,7 @@ SplitView {
                     id: privilegedModelChecked
 
                     text: "Owner token and TMaster token only"
+
                 }
                 RadioButton {
                     id: completeModelChecked
@@ -159,7 +198,10 @@ SplitView {
                 }
 
                 RadioButton {
+                    id: failedCheck
+
                     text: "Set all to 'Error'"
+                    checked: true
 
                     onClicked: mintedTokensModel.changeAllMintingStates(0)
                 }
@@ -174,4 +216,19 @@ SplitView {
             }
         }
     }
+
+    Settings {
+        property alias editorModelChecked: editorModelChecked.checked
+        property alias privilegedModelChecked: privilegedModelChecked.checked
+        property alias completeModelChecked: completeModelChecked.checked
+    }
 }
+
+// category: Panels
+
+// https://www.figma.com/file/17fc13UBFvInrLgNUKJJg5/Kuba%E2%8E%9CDesktop?node-id=22721%3A498587&t=v2Krj5iZQaSTK7Om-1
+// https://www.figma.com/file/17fc13UBFvInrLgNUKJJg5/Kuba%E2%8E%9CDesktop?node-id=2934%3A480877&t=v2Krj5iZQaSTK7Om-1
+// https://www.figma.com/file/17fc13UBFvInrLgNUKJJg5/Kuba%E2%8E%9CDesktop?node-id=22721%3A498811&t=v2Krj5iZQaSTK7Om-1
+// https://www.figma.com/file/17fc13UBFvInrLgNUKJJg5/Kuba%E2%8E%9CDesktop?node-id=2934%3A480927&t=v2Krj5iZQaSTK7Om-1
+// https://www.figma.com/file/17fc13UBFvInrLgNUKJJg5/Kuba%E2%8E%9CDesktop?type=design&node-id=29566-689073&t=mAtmLENvQyRJqDGQ-0
+// https://www.figma.com/file/17fc13UBFvInrLgNUKJJg5/Kuba%E2%8E%9CDesktop?type=design&node-id=29437-599353&t=mAtmLENvQyRJqDGQ-0

@@ -8,6 +8,7 @@ import ../../../../../app_service/service/contacts/service as contact_service
 import ../../../../../app_service/service/chat/service as chat_service
 import ../../../../../app_service/service/community/service as community_service
 import ../../../../../app_service/service/message/service as message_service
+import ../../../../../app_service/service/mailservers/service as mailservers_service
 import ../../../../../app_service/service/wallet_account/service as wallet_account_service
 
 import ../../../../core/signals/types
@@ -26,6 +27,7 @@ type
     isUsersListAvailable: bool #users list is not available for 1:1 chat
     nodeConfigurationService: node_configuration_service.Service
     settingsService: settings_service.Service
+    mailserversService: mailservers_service.Service
     contactService: contact_service.Service
     chatService: chat_service.Service
     communityService: community_service.Service
@@ -35,9 +37,10 @@ type
 proc getChatDetails*(self: Controller): ChatDto
 
 proc newController*(delegate: io_interface.AccessInterface, events: EventEmitter, sectionId: string, chatId: string,
-  belongsToCommunity: bool, isUsersListAvailable: bool, settingsService: settings_service.Service,
-  nodeConfigurationService: node_configuration_service.Service, contactService: contact_service.Service, chatService: chat_service.Service,
-  communityService: community_service.Service, messageService: message_service.Service): Controller =
+    belongsToCommunity: bool, isUsersListAvailable: bool, settingsService: settings_service.Service,
+    nodeConfigurationService: node_configuration_service.Service, contactService: contact_service.Service,
+    chatService: chat_service.Service, communityService: community_service.Service,
+    messageService: message_service.Service): Controller =
   result = Controller()
   result.delegate = delegate
   result.events = initUniqueUUIDEventEmitter(events)
@@ -190,9 +193,6 @@ proc getChatDetails*(self: Controller): ChatDto =
 proc getCommunityDetails*(self: Controller): CommunityDto =
   return self.communityService.getCommunityById(self.sectionId)
 
-proc getCommunityById*(self: Controller, communityId: string): CommunityDto =
-  return self.communityService.getCommunityById(communityId)
-
 proc getOneToOneChatNameAndImage*(self: Controller): tuple[name: string, image: string, largeImage: string] =
   return self.chatService.getOneToOneChatNameAndImage(self.chatId)
 
@@ -202,9 +202,8 @@ proc belongsToCommunity*(self: Controller): bool =
 proc unpinMessage*(self: Controller, messageId: string) =
   self.messageService.pinUnpinMessage(self.chatId, messageId, false)
 
-proc getMessageById*(self: Controller, messageId: string):
-    tuple[message: MessageDto, error: string] =
-  return self.messageService.fetchMessageByMessageId(self.chatId, messageId)
+proc getMessageById*(self: Controller, messageId: string): GetMessageResult =
+  return self.messageService.getMessageByMessageId(messageId)
 
 proc isUsersListAvailable*(self: Controller): bool =
   return self.isUsersListAvailable
@@ -223,6 +222,9 @@ proc unblockChat*(self: Controller) =
 
 proc markAllMessagesRead*(self: Controller) =
   self.messageService.markAllMessagesRead(self.chatId)
+
+proc requestMoreMessages*(self: Controller) =
+  self.mailserversService.requestMoreMessages(self.chatId)
 
 proc markMessageRead*(self: Controller, msgID: string) =
   self.messageService.markCertainMessagesRead(self.chatId, @[msgID])

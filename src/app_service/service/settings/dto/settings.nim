@@ -44,7 +44,10 @@ const KEY_GIF_API_KEY* = "gifs/api-key"
 const KEY_DISPLAY_NAME* = "display-name"
 const KEY_BIO* = "bio"
 const KEY_TEST_NETWORKS_ENABLED* = "test-networks-enabled?"
-const INCLUDE_WATCH_ONLY_ACCOUNT* = "include-watch-only-account?"
+const KEY_IS_SEPOLIA_ENABLED* = "is-sepolia-enabled?"
+const KEY_TOKEN_GROUP_BY_COMMUNITY* = "token-group-by-community?"
+const PROFILE_MIGRATION_NEEDED* = "profile-migration-needed"
+const KEY_URL_UNFURLING_MODE* = "url-unfurling-mode"
 
 # Notifications Settings Values
 const VALUE_NOTIF_SEND_ALERTS* = "SendAlerts"
@@ -58,6 +61,17 @@ const PROFILE_PICTURES_VISIBILITY_NO_ONE* = 3
 const PROFILE_PICTURES_SHOW_TO_CONTACTS_ONLY* = 1
 const PROFILE_PICTURES_SHOW_TO_EVERYONE* = 2
 const PROFILE_PICTURES_SHOW_TO_NO_ONE* = 3
+
+type UrlUnfurlingMode* {.pure.} = enum
+  AlwaysAsk = 1,
+  Enabled = 2,
+  Disabled = 3,
+
+proc toUrlUnfurlingMode*(value: int): UrlUnfurlingMode =
+  try:
+    return UrlUnfurlingMode(value)
+  except RangeDefect:
+    return AlwaysAsk # this is the default value
 
 type NotificationsExemptions* = object
   muteAllMessages*: bool
@@ -77,6 +91,7 @@ type PinnedMailserver* = object
   goWakuTest*: string
   statusTest*: string
   statusProd*: string
+  shardsTest*: string
 
 type CurrentUserStatus* = object
   statusType*: StatusType
@@ -136,7 +151,11 @@ type
     notificationsSoundsEnabled*: bool
     notificationsVolume*: int
     notificationsMessagePreview*: int
-    includeWatchOnlyAccount*: bool
+    profileMigrationNeeded*: bool
+    isSepoliaEnabled*: bool
+    tokenGroupByCommunity*: bool
+    urlUnfurlingMode*: UrlUnfurlingMode
+
 
 proc toPinnedMailserver*(jsonObj: JsonNode): PinnedMailserver =
   # we maintain pinned mailserver per fleet
@@ -147,6 +166,7 @@ proc toPinnedMailserver*(jsonObj: JsonNode): PinnedMailserver =
   discard jsonObj.getProp("go-waku.test", result.goWakuTest)
   discard jsonObj.getProp("status.test", result.statusTest)
   discard jsonObj.getProp("status.prod", result.statusProd)
+  discard jsonObj.getProp("shards.test", result.shardsTest)
 
 proc toCurrentUserStatus*(jsonObj: JsonNode): CurrentUserStatus =
   var statusTypeInt: int
@@ -190,7 +210,13 @@ proc toSettingsDto*(jsonObj: JsonNode): SettingsDto =
   discard jsonObj.getProp(KEY_GIF_RECENTS, result.gifRecents)
   discard jsonObj.getProp(KEY_GIF_FAVORITES, result.gifFavorites)
   discard jsonObj.getProp(KEY_TEST_NETWORKS_ENABLED, result.testNetworksEnabled)
-  discard jsonObj.getProp(INCLUDE_WATCH_ONLY_ACCOUNT, result.includeWatchOnlyAccount)
+  discard jsonObj.getProp(KEY_IS_SEPOLIA_ENABLED, result.isSepoliaEnabled)
+  discard jsonObj.getProp(KEY_TOKEN_GROUP_BY_COMMUNITY, result.tokenGroupByCommunity)
+  discard jsonObj.getProp(PROFILE_MIGRATION_NEEDED, result.profileMigrationNeeded)
+
+  var urlUnfurlingMode: int
+  discard jsonObj.getProp(KEY_URL_UNFURLING_MODE, urlUnfurlingMode)
+  result.urlUnfurlingMode = toUrlUnfurlingMode(urlUnfurlingMode)
 
   var pinnedMailserverObj: JsonNode
   if(jsonObj.getProp(KEY_PINNED_MAILSERVERS, pinnedMailserverObj)):

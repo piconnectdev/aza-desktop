@@ -1,22 +1,22 @@
-import NimQml, chronicles, json, marshal, sequtils, sugar, strutils
+import NimQml, chronicles, sequtils, sugar, strutils
 
 import ./io_interface, ./view, ./controller
 import ../io_interface as delegate_interface
 
-import ../../../../global/app_translatable_constants as atc
-import ../../../../global/global_singleton
-import ../../../../core/eventemitter
+import app/global/app_translatable_constants as atc
+import app/global/global_singleton
+import app/core/eventemitter
 
-import ../../../../../app_service/service/keycard/service as keycard_service
-import ../../../../../app_service/service/settings/service as settings_service
-import ../../../../../app_service/service/network/service as network_service
-import ../../../../../app_service/service/privacy/service as privacy_service
-import ../../../../../app_service/service/accounts/service as accounts_service
-import ../../../../../app_service/service/wallet_account/service as wallet_account_service
-import ../../../../../app_service/service/keychain/service as keychain_service
+import app_service/service/keycard/service as keycard_service
+import app_service/service/settings/service as settings_service
+import app_service/service/network/service as network_service
+import app_service/service/privacy/service as privacy_service
+import app_service/service/accounts/service as accounts_service
+import app_service/service/wallet_account/service as wallet_account_service
+import app_service/service/keychain/service as keychain_service
 
-import ../../../shared_modules/keycard_popup/module as keycard_shared_module
-import ../../../shared_modules/keycard_popup/models/keycard_model
+import app/modules/shared_modules/keycard_popup/module as keycard_shared_module
+import app/modules/shared_modules/keycard_popup/models/keycard_model
 
 export io_interface
 
@@ -105,20 +105,30 @@ proc createSharedKeycardModule(self: Module) =
     self.events, self.keycardService, self.settingsService, self.networkService, self.privacyService, self.accountsService,
     self.walletAccountService, self.keychainService)
 
-method onSharedKeycarModuleFlowTerminated*(self: Module, lastStepInTheCurrentFlow: bool) =
+method onSharedKeycarModuleFlowTerminated*(self: Module, lastStepInTheCurrentFlow: bool, nextFlow: keycard_shared_module.FlowType,
+  forceFlow: bool, nextKeyUid: string, returnToFlow: keycard_shared_module.FlowType) =
   if self.isSharedKeycardModuleFlowRunning():
-    self.view.emitDestroyKeycardSharedModuleFlow()
-    self.keycardSharedModule.delete
-    self.keycardSharedModule = nil
+    if nextFlow == keycard_shared_module.FlowType.General:
+      self.view.emitDestroyKeycardSharedModuleFlow()
+      self.keycardSharedModule.delete
+      self.keycardSharedModule = nil
+      return
+    self.keycardSharedModule.runFlow(nextFlow, nextKeyUid, bip44Paths = @[], txHash = "", forceFlow, returnToFlow)
 
 method onDisplayKeycardSharedModuleFlow*(self: Module) =
   self.view.emitDisplayKeycardSharedModuleFlow()
 
-method runSetupKeycardPopup*(self: Module) =
+method runSetupKeycardPopup*(self: Module, keyUid: string) =
   self.createSharedKeycardModule()
   if self.keycardSharedModule.isNil:
     return
-  self.keycardSharedModule.runFlow(keycard_shared_module.FlowType.SetupNewKeycard)
+  self.keycardSharedModule.runFlow(keycard_shared_module.FlowType.SetupNewKeycard, keyUid)
+
+method runStopUsingKeycardPopup*(self: Module, keyUid: string) =
+  self.createSharedKeycardModule()
+  if self.keycardSharedModule.isNil:
+    return
+  self.keycardSharedModule.runFlow(keycard_shared_module.FlowType.MigrateFromKeycardToApp, keyUid)
 
 method runCreateNewKeycardWithNewSeedPhrasePopup*(self: Module) =
   self.createSharedKeycardModule()
@@ -216,7 +226,7 @@ proc addAccountsToKeycardItem(self: Module, item: KeycardItem, accounts: seq[Wal
       icon = icon))
 
 proc buildMainViewKeycardItem(self: Module, keypair: KeypairDto): KeycardItem =
-  if keypair.isNil or keypair.keycards.len == 0:
+  if keypair.isNil or not keypair.migratedToKeycard():
     return
   var item = initKeycardItem(keycardUid = "",
     keyUid = keypair.keyUid,
@@ -285,13 +295,16 @@ proc buildKeycardList(self: Module) =
   if items.len > 0:
     self.view.setKeycardItems(items)
 
+method onLoggedInUserNameChanged*(self: Module) =
+  self.view.keycardModel().setName(singletonInstance.userProfile.getKeyUid(), singletonInstance.userProfile.getName())
+
 method onLoggedInUserImageChanged*(self: Module) =
-  self.view.keycardModel().setImage(singletonInstance.userProfile.getPubKey(), singletonInstance.userProfile.getIcon())
+  self.view.keycardModel().setImage(singletonInstance.userProfile.getKeyUid(), singletonInstance.userProfile.getIcon())
   if self.view.keycardDetailsModel().isNil:
     return
-  self.view.keycardDetailsModel().setImage(singletonInstance.userProfile.getPubKey(), singletonInstance.userProfile.getIcon())
+  self.view.keycardDetailsModel().setImage(singletonInstance.userProfile.getKeyUid(), singletonInstance.userProfile.getIcon())
 
-method resolveRelatedKeycardsForKeypair(self: Module, keypair: KeypairDto) =
+proc resolveRelatedKeycardsForKeypair(self: Module, keypair: KeypairDto) =
   if keypair.keyUid.len == 0:
     error "cannot rebuild keycards for a keypair with empty keyUid"
     return
@@ -311,14 +324,14 @@ method resolveRelatedKeycardsForKeypair(self: Module, keypair: KeypairDto) =
       detailsViewItems.add(item)
 
   if thereAreDisplayedKeycardsForKeypair:
-    if keypair.keycards.len == 0:
+    if not keypair.migratedToKeycard():
       # remove all related keycards from the app
       self.view.keycardModel().removeItemsWithKeyUid(keypair.keyUid)
       if not detailsViewCurrentlyDisplayed:
         return
       self.view.keycardDetailsModel().removeItemsWithKeyUid(keypair.keyUid)
       return
-    if keypair.keycards.len > 0:
+    if keypair.migratedToKeycard():
       # replace displayed keycards
       if not mainViewItem.isNil:
         self.view.keycardModel().replaceItemWithKeyUid(mainViewItem)

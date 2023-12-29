@@ -3,6 +3,8 @@ import utils 1.0
 
 import AppLayouts.Chat.stores 1.0
 
+import SortFilterProxyModel 0.2
+
 QtObject {
     id: root
 
@@ -19,6 +21,7 @@ QtObject {
     }
 
     property AdvancedStore advancedStore: AdvancedStore {
+        walletModule: profileSectionModuleInst.walletModule
         advancedModule: profileSectionModuleInst.advancedModule
     }
 
@@ -56,8 +59,7 @@ QtObject {
     }
 
     property WalletStore walletStore: WalletStore {
-        accountsModule: profileSectionModuleInst.walletAccountsModule
-        networksModule: profileSectionModuleInst.walletNetworksModule
+        walletModule: profileSectionModuleInst.walletModule
     }
 
     property KeycardStore keycardStore: KeycardStore {
@@ -73,7 +75,13 @@ QtObject {
     property bool walletMenuItemEnabled: profileStore.isWalletEnabled
 
     property var communitiesModuleInst: Global.appIsReady? communitiesModule : null
-    property var communitiesList: !!communitiesModuleInst? communitiesModuleInst.model : null
+    property var communitiesList: SortFilterProxyModel {
+        sourceModel: root.mainModuleInst.sectionsModel
+        filters: ValueFilter {
+            roleName: "sectionType"
+            value: Constants.appSection.community
+        }
+    }
     property var communitiesProfileModule: profileSectionModuleInst.communitiesModule
 
     property ListModel mainMenuItems: ListModel {
@@ -145,16 +153,12 @@ QtObject {
         root.communitiesModuleInst.importCommunity(communityKey);
     }
 
-    function requestCommunityInfo(communityKey, importing = false) {
-        const publicKey = Utils.isCompressedPubKey(communityKey)
-                            ? Utils.changeCommunityKeyCompression(communityKey)
-                            : communityKey
-        root.mainModuleInst.setCommunityIdToSpectate(publicKey)
-        root.communitiesModuleInst.requestCommunityInfo(publicKey, importing)
-    }
-
     function getCurrentVersion() {
         return aboutModuleInst.getCurrentVersion()
+    }
+
+    function getStatusGoVersion() {
+        return aboutModuleInst.getStatusGoVersion()
     }
 
     function nodeVersion() {

@@ -1,5 +1,6 @@
 import NimQml, Tables, strformat, sequtils, sugar
 import keypair_item
+import ./currency_amount
 
 export keypair_item
 
@@ -81,6 +82,24 @@ QtObject:
         item.getAccountsModel().updateDetailsForAddressIfTheyAreSet(address, name, colorId, emoji)
         break
 
+  proc onUpdatedKeypairOperability*(self: KeyPairModel, keyUid, operability: string) =
+    for item in self.items:
+      if keyUid == item.getKeyUid():
+        item.updateOperabilityForAllAddresses(operability)
+        break
+
+  proc onPreferredSharingChainsUpdated*(self: KeyPairModel, keyUid, address, prodPreferredChainIds, testPreferredChainIds: string) =
+    for item in self.items:
+      if keyUid == item.getKeyUid():
+        item.getAccountsModel().updatePreferredSharingChainsForAddress(address, prodPreferredChainIds, testPreferredChainIds)
+        break
+
+  proc onHideFromTotalBalanceUpdated*(self: KeyPairModel, keyUid, address: string, hideFromTotalBalance: bool) =
+    for item in self.items:
+      if keyUid == item.getKeyUid():
+        item.getAccountsModel().updateAccountHiddenInTotalBalance(address, hideFromTotalBalance)
+        break
+
   proc keypairNameExists*(self: KeyPairModel, name: string): bool =
     return self.items.any(x => x.getName() == name)
 
@@ -89,3 +108,13 @@ QtObject:
     if item.isNil:
       return
     item.setName(name)
+
+  proc setOwnershipVerified*(self: KeyPairModel, keyUid: string, ownershipVerified: bool) =
+    let item = self.findItemByKeyUid(keyUid)
+    if item.isNil:
+      return
+    item.setOwnershipVerified(ownershipVerified)
+
+  proc setBalanceForAddress*(self: KeyPairModel, address: string, balance: CurrencyAmount) =
+    for item in self.items:
+      item.setBalanceForAddress(address, balance)

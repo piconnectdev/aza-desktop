@@ -1,12 +1,15 @@
-import NimQml, Tables, json, sequtils, std/sets, std/algorithm, strformat, strutils, chronicles, json_serialization, sugar
+import NimQml, Tables, json, sequtils, std/sets, std/algorithm, strformat, strutils, chronicles, json_serialization, sugar, times
 import json_serialization/std/tables as ser_tables
 
 import ./dto/community as community_dto
+import ./dto/sign_params as sign_params_dto
 import ../community_tokens/dto/community_token as community_token_dto
 
 import ../activity_center/service as activity_center_service
 import ../message/service as message_service
 import ../chat/service as chat_service
+
+import ../../common/activity_center
 
 import ../../../app/global/global_singleton
 import ../../../app/core/signals/types
@@ -14,12 +17,13 @@ import ../../../app/core/eventemitter
 import ../../../app/core/[main]
 import ../../../app/core/tasks/[qt, threadpool]
 import ../../../backend/communities as status_go
+import ../../../backend/community_tokens as tokens_backend
 
 import ../../../app_service/common/types
 
 include ./async_tasks
 
-export community_dto
+export community_dto, sign_params_dto
 
 logScope:
   topics = "community-service"
@@ -27,8 +31,10 @@ logScope:
 type
   CommunityArgs* = ref object of Args
     community*: CommunityDto
+    communityId*: string # should be set when community is nil (i.e. error occured)
     error*: string
     fromUserAction*: bool
+    isPendingOwnershipRequest*: bool
 
   CommunitiesArgs* = ref object of Args
     communities*: seq[CommunityDto]
@@ -38,6 +44,9 @@ type
 
   CommunityIdArgs* = ref object of Args
     communityId*: string
+
+  ChannelIdArgs* = ref object of Args
+    channelId*: string
 
   CommunityChatIdArgs* = ref object of Args
     communityId*: string
@@ -117,9 +126,45 @@ type
     totalChunksCount*: int
     currentChunk*: int
 
+  DiscordImportChannelProgressArgs* = ref object of Args
+    channelId*: string
+    channelName*: string
+    tasks*: seq[DiscordImportTaskProgress]
+    progress*: float
+    errorsCount*: int
+    warningsCount*: int
+    stopped*: bool
+    totalChunksCount*: int
+    currentChunk*: int
+
   CheckPermissionsToJoinResponseArgs* = ref object of Args
     communityId*: string
     checkPermissionsToJoinResponse*: CheckPermissionsToJoinResponseDto
+
+  CheckPermissionsToJoinFailedArgs* = ref object of Args
+    communityId*: string
+    error*: string
+
+  CommunityMetricsArgs* = ref object of Args
+    communityId*: string
+    metricsType*: CommunityMetricsType
+
+  CommunityMemberRevealedAccountsArgs* = ref object of Args
+    communityId*: string
+    memberPubkey*: string
+    memberRevealedAccounts*: seq[RevealedAccount]
+
+  CommunityMembersRevealedAccountsArgs* = ref object of Args
+    communityId*: string
+    membersRevealedAccounts*: MembersRevealedAccounts
+
+  CommunityMemberStatusUpdatedArgs* = ref object of Args
+    communityId*: string
+    memberPubkey*: string
+    status*: MembershipRequestState
+
+  CommunityShardSetArgs* = ref object of Args
+    communityId*: string
 
 # Signals which may be emitted by this service:
 const SIGNAL_COMMUNITY_DATA_LOADED* = "communityDataLoaded"
@@ -129,6 +174,8 @@ const SIGNAL_COMMUNITY_MY_REQUEST_ADDED* = "communityMyRequestAdded"
 const SIGNAL_COMMUNITY_MY_REQUEST_FAILED* = "communityMyRequestFailed"
 const SIGNAL_COMMUNITY_EDIT_SHARED_ADDRESSES_SUCCEEDED* = "communityEditSharedAddressesSucceded"
 const SIGNAL_COMMUNITY_EDIT_SHARED_ADDRESSES_FAILED* = "communityEditSharedAddressesFailed"
+const SIGNAL_COMMUNITY_MEMBER_REVEALED_ACCOUNTS_LOADED* = "communityMemberRevealedAccountsLoaded"
+const SIGNAL_COMMUNITY_MEMBERS_REVEALED_ACCOUNTS_LOADED* = "communityMembersRevealedAccountsLoaded"
 const SIGNAL_COMMUNITY_LEFT* = "communityLeft"
 const SIGNAL_COMMUNITY_CREATED* = "communityCreated"
 const SIGNAL_COMMUNITY_ADDED* = "communityAdded"
@@ -149,12 +196,14 @@ const SIGNAL_COMMUNITY_CATEGORY_DELETED* = "communityCategoryDeleted"
 const SIGNAL_COMMUNITY_CATEGORY_REORDERED* = "communityCategoryReordered"
 const SIGNAL_COMMUNITY_CHANNEL_CATEGORY_CHANGED* = "communityChannelCategoryChanged"
 const SIGNAL_COMMUNITY_MEMBER_APPROVED* = "communityMemberApproved"
-const SIGNAL_COMMUNITY_MEMBER_REMOVED* = "communityMemberRemoved"
+const SIGNAL_COMMUNITY_MEMBER_STATUS_CHANGED* = "communityMemberStatusChanged"
 const SIGNAL_COMMUNITY_MEMBERS_CHANGED* = "communityMembersChanged"
 const SIGNAL_COMMUNITY_KICKED* = "communityKicked"
 const SIGNAL_NEW_REQUEST_TO_JOIN_COMMUNITY* = "newRequestToJoinCommunity"
 const SIGNAL_REQUEST_TO_JOIN_COMMUNITY_CANCELED* = "requestToJoinCommunityCanceled"
+const SIGNAL_WAITING_ON_NEW_COMMUNITY_OWNER_TO_CONFIRM_REQUEST_TO_REJOIN* = "waitingOnNewCommunityOwnerToConfirmRequestToRejoin"
 const SIGNAL_CURATED_COMMUNITY_FOUND* = "curatedCommunityFound"
+const SIGNAL_CURATED_COMMUNITIES_UPDATED* = "curatedCommunitiesUpdated"
 const SIGNAL_COMMUNITY_MUTED* = "communityMuted"
 const SIGNAL_CATEGORY_MUTED* = "categoryMuted"
 const SIGNAL_CATEGORY_UNMUTED* = "categoryUnmuted"
@@ -164,6 +213,11 @@ const SIGNAL_COMMUNITY_HISTORY_ARCHIVES_DOWNLOAD_FINISHED* = "communityHistoryAr
 const SIGNAL_DISCORD_CATEGORIES_AND_CHANNELS_EXTRACTED* = "discordCategoriesAndChannelsExtracted"
 const SIGNAL_DISCORD_COMMUNITY_IMPORT_FINISHED* = "discordCommunityImportFinished"
 const SIGNAL_DISCORD_COMMUNITY_IMPORT_PROGRESS* = "discordCommunityImportProgress"
+const SIGNAL_DISCORD_COMMUNITY_IMPORT_CANCELED* = "discordCommunityImportCanceled"
+const SIGNAL_DISCORD_CHANNEL_IMPORT_FINISHED* = "discordChannelImportFinished"
+const SIGNAL_DISCORD_CHANNEL_IMPORT_PROGRESS* = "discordChannelImportProgress"
+const SIGNAL_DISCORD_CHANNEL_IMPORT_CANCELED* = "discordChannelImportCanceled"
+
 const SIGNAL_COMMUNITY_TOKEN_PERMISSION_CREATED* = "communityTokenPermissionCreated"
 const SIGNAL_COMMUNITY_TOKEN_PERMISSION_CREATION_FAILED* = "communityTokenPermissionCreationFailed"
 const SIGNAL_COMMUNITY_TOKEN_PERMISSION_UPDATED* = "communityTokenPermissionUpdated"
@@ -180,14 +234,18 @@ const SIGNAL_ACCEPT_REQUEST_TO_JOIN_LOADING* = "acceptRequestToJoinLoading"
 const SIGNAL_ACCEPT_REQUEST_TO_JOIN_FAILED* = "acceptRequestToJoinFailed"
 const SIGNAL_ACCEPT_REQUEST_TO_JOIN_FAILED_NO_PERMISSION* = "acceptRequestToJoinFailedNoPermission"
 
-const SIGNAL_COMMUNITY_INFO_ALREADY_REQUESTED* = "communityInfoAlreadyRequested"
-
 const TOKEN_PERMISSIONS_ADDED = "tokenPermissionsAdded"
 const TOKEN_PERMISSIONS_MODIFIED = "tokenPermissionsModified"
+const TOKEN_PERMISSIONS_REMOVED = "tokenPermissionsRemoved"
 
 const SIGNAL_CHECK_PERMISSIONS_TO_JOIN_RESPONSE* = "checkPermissionsToJoinResponse"
+const SIGNAL_CHECK_PERMISSIONS_TO_JOIN_FAILED* = "checkPermissionsToJoinFailed"
 
-const SIGNAL_COMMUNITY_PRIVATE_KEY_REMOVED* = "communityPrivateKeyRemoved"
+const SIGNAL_COMMUNITY_METRICS_UPDATED* = "communityMetricsUpdated"
+const SIGNAL_COMMUNITY_LOST_OWNERSHIP* = "communityLostOwnership"
+
+const SIGNAL_COMMUNITY_SHARD_SET* = "communityShardSet"
+const SIGNAL_COMMUNITY_SHARD_SET_FAILED* = "communityShardSetFailed"
 
 QtObject:
   type
@@ -199,20 +257,20 @@ QtObject:
       messageService: message_service.Service
       communityTags: string # JSON string contraining tags map
       communities: Table[string, CommunityDto] # [community_id, CommunityDto]
-      myCommunityRequests*: seq[CommunityMembershipRequestDto]
       historyArchiveDownloadTaskCommunityIds*: HashSet[string]
-      requestedCommunityIds*: HashSet[string]
+      communityMetrics: Table[string, CommunityMetricsDto]
+      communityInfoRequests: Table[string, Time]
 
   # Forward declaration
   proc asyncLoadCuratedCommunities*(self: Service)
   proc asyncAcceptRequestToJoinCommunity*(self: Service, communityId: string, requestId: string)
   proc handleCommunityUpdates(self: Service, communities: seq[CommunityDto], updatedChats: seq[ChatDto], removedChats: seq[string])
+  proc handleCommunitiesRequestsToJoin(self: Service, membershipRequests: seq[CommunityMembershipRequestDto])
   proc handleCommunitiesSettingsUpdates(self: Service, communitiesSettings: seq[CommunitySettingsDto])
-  proc pendingRequestsToJoinForCommunity*(self: Service, communityId: string): seq[CommunityMembershipRequestDto]
-  proc declinedRequestsToJoinForCommunity*(self: Service, communityId: string): seq[CommunityMembershipRequestDto]
-  proc canceledRequestsToJoinForCommunity*(self: Service, communityId: string): seq[CommunityMembershipRequestDto]
   proc getPendingRequestIndex(self: Service, communityId: string, requestId: string): int
-  proc removeMembershipRequestFromCommunityAndGetMemberPubkey*(self: Service, communityId: string, requestId: string, updatedCommunity: CommunityDto): string
+  proc getWaitingForSharedAddressesRequestIndex(self: Service, communityId: string, requestId: string): int
+  proc updateMembershipRequestToNewState*(self: Service, communityId: string, requestId: string,
+    updatedCommunity: CommunityDto, newState: RequestToJoinType)
   proc getUserPubKeyFromPendingRequest*(self: Service, communityId: string, requestId: string): string
 
   proc delete*(self: Service) =
@@ -234,9 +292,9 @@ QtObject:
     result.messageService = messageService
     result.communityTags = newString(0)
     result.communities = initTable[string, CommunityDto]()
-    result.myCommunityRequests = @[]
     result.historyArchiveDownloadTaskCommunityIds = initHashSet[string]()
-    result.requestedCommunityIds = initHashSet[string]()
+    result.communityMetrics = initTable[string, CommunityMetricsDto]()
+    result.communityInfoRequests = initTable[string, Time]()
 
   proc getFilteredJoinedCommunities(self: Service): Table[string, CommunityDto] =
     result = initTable[string, CommunityDto]()
@@ -257,9 +315,14 @@ QtObject:
       self.events.emit(SIGNAL_COMMUNITY_DATA_IMPORTED, CommunityArgs(community: receivedData.community))
 
       if self.communities.contains(receivedData.community.id) and
-          self.communities[receivedData.community.id].listedInDirectory and not 
+          self.communities[receivedData.community.id].listedInDirectory and not
           self.communities[receivedData.community.id].isAvailable:
         self.events.emit(SIGNAL_CURATED_COMMUNITY_FOUND, CommunityArgs(community: self.communities[receivedData.community.id]))
+
+    self.events.on(SignalType.CuratedCommunitiesUpdated.event) do(e: Args):
+      var receivedData = CuratedCommunitiesSignal(e)
+      self.events.emit(SIGNAL_CURATED_COMMUNITIES_UPDATED,
+        CommunitiesArgs(communities: receivedData.communities))
 
     self.events.on(SignalType.Message.event) do(e: Args):
       var receivedData = MessageSignal(e)
@@ -273,30 +336,7 @@ QtObject:
 
       # Handling membership requests
       if(receivedData.membershipRequests.len > 0):
-        for membershipRequest in receivedData.membershipRequests:
-          if (not self.communities.contains(membershipRequest.communityId)):
-            error "Received a membership request for an unknown community", communityId=membershipRequest.communityId
-            continue
-          var community = self.communities[membershipRequest.communityId]
-
-          case RequestToJoinType(membershipRequest.state):
-          of RequestToJoinType.Pending:
-            community.pendingRequestsToJoin.add(membershipRequest)
-            self.communities[membershipRequest.communityId] = community
-            self.events.emit(SIGNAL_COMMUNITY_EDITED, CommunityArgs(community: community))
-            self.events.emit(SIGNAL_NEW_REQUEST_TO_JOIN_COMMUNITY, CommunityRequestArgs(communityRequest: membershipRequest))
-
-          of RequestToJoinType.Canceled:
-            let indexPending = self.getPendingRequestIndex(membershipRequest.communityId, membershipRequest.id)
-            if (indexPending != -1):
-              community.pendingRequestsToJoin.delete(indexPending)
-              self.communities[membershipRequest.communityId] = community
-              self.events.emit(SIGNAL_COMMUNITY_EDITED, CommunityArgs(community: community))
-          
-          of RequestToJoinType.Declined:
-            break
-          of RequestToJoinType.Accepted:
-            break
+        self.handleCommunitiesRequestsToJoin(receivedData.membershipRequests)
 
     self.events.on(SignalType.DiscordCategoriesAndChannelsExtracted.event) do(e: Args):
       var receivedData = DiscordCategoriesAndChannelsExtractedSignal(e)
@@ -312,12 +352,38 @@ QtObject:
       var receivedData = DiscordCommunityImportFinishedSignal(e)
       self.events.emit(SIGNAL_DISCORD_COMMUNITY_IMPORT_FINISHED, CommunityIdArgs(communityId: receivedData.communityId))
 
+    self.events.on(SignalType.DiscordCommunityImportCancelled.event) do(e: Args):
+      var receivedData = DiscordCommunityImportCancelledSignal(e)
+      self.events.emit(SIGNAL_DISCORD_COMMUNITY_IMPORT_CANCELED, CommunityIdArgs(communityId: receivedData.communityId))
+
+    self.events.on(SignalType.DiscordChannelImportFinished.event) do(e: Args):
+      var receivedData = DiscordChannelImportFinishedSignal(e)
+      self.events.emit(SIGNAL_DISCORD_CHANNEL_IMPORT_FINISHED, CommunityChatIdArgs(chatId: receivedData.channelId, communityId: receivedData.communityId))
+
+    self.events.on(SignalType.DiscordChannelImportCancelled.event) do(e: Args):
+      var receivedData = DiscordChannelImportCancelledSignal(e)
+      self.events.emit(SIGNAL_DISCORD_CHANNEL_IMPORT_CANCELED, ChannelIdArgs(channelId: receivedData.channelId))
+
     self.events.on(SignalType.DiscordCommunityImportProgress.event) do(e: Args):
       var receivedData = DiscordCommunityImportProgressSignal(e)
       self.events.emit(SIGNAL_DISCORD_COMMUNITY_IMPORT_PROGRESS, DiscordImportProgressArgs(
         communityId: receivedData.communityId,
         communityImage: receivedData.communityImages.thumbnail,
         communityName: receivedData.communityName,
+        tasks: receivedData.tasks,
+        progress: receivedData.progress,
+        errorsCount: receivedData.errorsCount,
+        warningsCount: receivedData.warningsCount,
+        stopped: receivedData.stopped,
+        totalChunksCount: receivedData.totalChunksCount,
+        currentChunk: receivedData.currentChunk,
+      ))
+
+    self.events.on(SignalType.DiscordChannelImportProgress.event) do(e: Args):
+      var receivedData = DiscordChannelImportProgressSignal(e)
+      self.events.emit(SIGNAL_DISCORD_CHANNEL_IMPORT_PROGRESS, DiscordImportChannelProgressArgs(
+        channelId: receivedData.channelId,
+        channelName: receivedData.channelName,
         tasks: receivedData.tasks,
         progress: receivedData.progress,
         errorsCount: receivedData.errorsCount,
@@ -354,6 +420,7 @@ QtObject:
     chatDto.position = chat.position
     chatDto.canPost = chat.canPost
     chatDto.categoryId = chat.categoryId
+    chatDto.members = chat.members
 
   proc findChatById(id: string, chats: seq[ChatDto]): ChatDto =
     for chat in chats:
@@ -398,6 +465,7 @@ QtObject:
     community.pendingRequestsToJoin = self.communities[community.id].pendingRequestsToJoin
     community.declinedRequestsToJoin = self.communities[community.id].declinedRequestsToJoin
     community.canceledRequestsToJoin = self.communities[community.id].canceledRequestsToJoin
+    community.waitingForSharedAddressesRequestsToJoin = self.communities[community.id].waitingForSharedAddressesRequestsToJoin
 
     # Update the joinded community list with the new data
     self.communities[community.id] = community
@@ -436,9 +504,12 @@ QtObject:
         self.events.emit(SIGNAL_COMMUNITY_CATEGORY_NAME_EDITED,
           CommunityCategoryArgs(communityId: community.id, category: category))
 
-    
+    self.events.emit(SIGNAL_COMMUNITY_MEMBERS_CHANGED,
+      CommunityMembersArgs(communityId: community.id, members: community.members))
+
   proc handleCommunityUpdates(self: Service, communities: seq[CommunityDto], updatedChats: seq[ChatDto], removedChats: seq[string]) =
     try:
+      let myPublicKey = singletonInstance.userProfile.getPubKey()
       var community = communities[0]
       if not self.communities.hasKey(community.id):
         self.communities[community.id] = community
@@ -446,12 +517,15 @@ QtObject:
 
         if (community.joined and community.isMember):
           self.events.emit(SIGNAL_COMMUNITY_JOINED, CommunityArgs(community: community, fromUserAction: false))
-          # remove my pending requests
-          keepIf(self.myCommunityRequests, request => request.communityId != community.id)
-
         return
 
       let prev_community = self.communities[community.id]
+
+      # ownership lost
+      if prev_community.isOwner and not community.isOwner:
+        self.events.emit(SIGNAL_COMMUNITY_LOST_OWNERSHIP, CommunityIdArgs(communityId: community.id))
+        let response = tokens_backend.registerLostOwnershipNotification(community.id)
+        checkAndEmitACNotificationsFromResponse(self.events, response.result{"activityCenterNotifications"})
 
       # If there's settings without `id` it means the original
       # signal didn't include actual communitySettings, hence we
@@ -550,9 +624,13 @@ QtObject:
             let data = CommunityChatArgs(chat: updatedChat)
             self.events.emit(SIGNAL_COMMUNITY_CHANNEL_EDITED, data)
 
+          # Handle channel members update
+          if chat.members != prev_chat.members:
+            self.chatService.updateChannelMembers(chat)
+
       # members list was changed
       if (community.isMember or community.tokenPermissions.len == 0) and community.members != prev_community.members:
-        self.events.emit(SIGNAL_COMMUNITY_MEMBERS_CHANGED, 
+        self.events.emit(SIGNAL_COMMUNITY_MEMBERS_CHANGED,
         CommunityMembersArgs(communityId: community.id, members: community.members))
 
       # token metadata was added
@@ -591,7 +669,8 @@ QtObject:
           if tokenPermission.tokenCriteria.len != prevTokenPermission.tokenCriteria.len or
             tokenPermission.isPrivate != prevTokenPermission.isPrivate or
             tokenPermission.chatIds.len != prevTokenPermission.chatIds.len or
-            tokenPermission.`type` != prevTokenPermission.`type`:
+            tokenPermission.`type` != prevTokenPermission.`type` or
+            tokenPermission.state != prevTokenPermission.state:
 
               permissionUpdated = true
 
@@ -608,7 +687,7 @@ QtObject:
 
           if permissionUpdated:
             self.communities[community.id].tokenPermissions[id] = tokenPermission
-            self.events.emit(SIGNAL_COMMUNITY_TOKEN_PERMISSION_UPDATED, 
+            self.events.emit(SIGNAL_COMMUNITY_TOKEN_PERMISSION_UPDATED,
               CommunityTokenPermissionArgs(communityId: community.id, tokenPermission: tokenPermission))
 
       let wasJoined = self.communities[community.id].joined
@@ -622,9 +701,35 @@ QtObject:
       self.events.emit(SIGNAL_COMMUNITIES_UPDATE, CommunitiesArgs(communities: @[community]))
       if wasJoined and not community.joined and not community.isMember:
         self.events.emit(SIGNAL_COMMUNITY_KICKED, CommunityArgs(community: community))
-    
+
     except Exception as e:
       error "Error handling community updates", msg = e.msg
+
+  proc handleCommunitiesRequestsToJoin(self: Service, membershipRequests: seq[CommunityMembershipRequestDto]) =
+    for membershipRequest in membershipRequests:
+          if (not self.communities.contains(membershipRequest.communityId)):
+            error "Received a membership request for an unknown community", communityId=membershipRequest.communityId
+            continue
+
+          let requestToJoinState = RequestToJoinType(membershipRequest.state)
+          let noAwaitingIndex = self.getWaitingForSharedAddressesRequestIndex(membershipRequest.communityId, membershipRequest.id) == -1
+          if requestToJoinState == RequestToJoinType.AwaitingAddress and noAwaitingIndex:
+            self.communities[membershipRequest.communityId].waitingForSharedAddressesRequestsToJoin.add(membershipRequest)
+            let myPublicKey = singletonInstance.userProfile.getPubKey()
+            if myPublicKey == membershipRequest.publicKey:
+              self.events.emit(SIGNAL_WAITING_ON_NEW_COMMUNITY_OWNER_TO_CONFIRM_REQUEST_TO_REJOIN, CommunityIdArgs(communityId: membershipRequest.communityId))
+          elif RequestToJoinType.Pending == requestToJoinState and self.getPendingRequestIndex(membershipRequest.communityId, membershipRequest.id) == -1:
+            self.communities[membershipRequest.communityId].pendingRequestsToJoin.add(membershipRequest)
+            self.events.emit(SIGNAL_NEW_REQUEST_TO_JOIN_COMMUNITY,
+              CommunityRequestArgs(communityRequest: membershipRequest))
+          else:
+            try:
+              self.updateMembershipRequestToNewState(membershipRequest.communityId, membershipRequest.id, self.communities[membershipRequest.communityId],
+                requestToJoinState)
+            except Exception as e:
+              error "Unknown request", msg = e.msg
+
+          self.events.emit(SIGNAL_COMMUNITY_EDITED, CommunityArgs(community: self.communities[membershipRequest.communityId]))
 
   proc init*(self: Service) =
     self.doConnect()
@@ -655,10 +760,6 @@ QtObject:
       let communities = parseCommunities(responseObj["communities"])
       for community in communities:
         self.communities[community.id] = community
-        if community.memberRole == MemberRole.Owner or community.memberRole == MemberRole.Admin:
-          self.communities[community.id].pendingRequestsToJoin = self.pendingRequestsToJoinForCommunity(community.id)
-          self.communities[community.id].declinedRequestsToJoin = self.declinedRequestsToJoinForCommunity(community.id)
-          self.communities[community.id].canceledRequestsToJoin = self.canceledRequestsToJoinForCommunity(community.id)
 
       # Communities settings
       let communitiesSettings = parseCommunitiesSettings(responseObj["settings"])
@@ -666,12 +767,26 @@ QtObject:
         if self.communities.hasKey(settings.id):
           self.communities[settings.id].settings = settings
 
-      # My pending requests
-      let myPendingRequestResponse = responseObj["myPendingRequestsToJoin"]
-      if myPendingRequestResponse{"result"}.kind != JNull:
-        for jsonCommunityReqest in myPendingRequestResponse["result"]:
+      # Non approver requests to join for all communities
+      let nonAprrovedRequestsToJoinObj = responseObj["nonAprrovedRequestsToJoin"]
+
+      if nonAprrovedRequestsToJoinObj{"result"}.kind != JNull:
+        for jsonCommunityReqest in nonAprrovedRequestsToJoinObj["result"]:
           let communityRequest = jsonCommunityReqest.toCommunityMembershipRequestDto()
-          self.myCommunityRequests.add(communityRequest)
+          if not (communityRequest.communityId in self.communities):
+            warn "community was not found for community request", communityID=communityRequest.communityId, requestId=communityRequest.id
+            continue
+          case RequestToJoinType(communityRequest.state):
+            of RequestToJoinType.Pending, RequestToJoinType.AcceptedPending, RequestToJoinType.DeclinedPending:
+              self.communities[communityRequest.communityId].pendingRequestsToJoin.add(communityRequest)
+            of RequestToJoinType.Declined:
+              self.communities[communityRequest.communityId].declinedRequestsToJoin.add(communityRequest)
+            of RequestToJoinType.Canceled:
+              self.communities[communityRequest.communityId].canceledRequestsToJoin.add(communityRequest)
+            of RequestToJoinType.AwaitingAddress:
+              self.communities[communityRequest.communityId].waitingForSharedAddressesRequestsToJoin.add(communityRequest)
+            of RequestToJoinType.Accepted:
+              continue
 
       self.events.emit(SIGNAL_COMMUNITY_DATA_LOADED, Args())
     except Exception as e:
@@ -695,7 +810,6 @@ QtObject:
       return
 
     if not self.communities.hasKey(communityId):
-      error "requested community doesn't exists", communityId
       return
 
     return self.communities[communityId]
@@ -735,7 +849,7 @@ QtObject:
     else:
       return 0
 
-  proc getCategoryById*(self: Service, communityId: string, categoryId: string): Category = 
+  proc getCategoryById*(self: Service, communityId: string, categoryId: string): Category =
     if(not self.communities.contains(communityId)):
       error "trying to get community categories for an unexisting community id"
       return
@@ -809,7 +923,14 @@ QtObject:
 
     for jsonCommunityReqest in responseResult["requestsToJoinCommunity"]:
       let communityRequest = jsonCommunityReqest.toCommunityMembershipRequestDto()
-      self.myCommunityRequests.add(communityRequest)
+      if (not self.communities.contains(communityRequest.communityId)):
+        error "Request to join for an unknown community", communityId=communityRequest.communityId
+        return false
+
+      var community = self.communities[communityRequest.communityId]
+      community.pendingRequestsToJoin.add(communityRequest)
+      self.communities[communityRequest.communityId] = community
+
       self.events.emit(SIGNAL_COMMUNITY_MY_REQUEST_ADDED, CommunityRequestArgs(communityRequest: communityRequest))
 
     return true
@@ -845,8 +966,10 @@ QtObject:
       self.communities[communityId] = updatedCommunity
       self.chatService.loadChannelGroupById(communityId)
 
+      let ownerTokenNotification = self.activityCenterService.getNotificationForTypeAndCommunityId(notification.ActivityCenterNotificationType.OwnerTokenReceived, communityId)
+
       self.events.emit(SIGNAL_COMMUNITIES_UPDATE, CommunitiesArgs(communities: @[updatedCommunity]))
-      self.events.emit(SIGNAL_COMMUNITY_SPECTATED, CommunityArgs(community: updatedCommunity, fromUserAction: true))
+      self.events.emit(SIGNAL_COMMUNITY_SPECTATED, CommunityArgs(community: updatedCommunity, fromUserAction: true, isPendingOwnershipRequest: (ownerTokenNotification != nil)))
 
       for k, chat in updatedCommunity.chats:
         let fullChatId = communityId & chat.id
@@ -864,43 +987,9 @@ QtObject:
       error "Error joining the community", msg = e.msg
       result = fmt"Error joining the community: {e.msg}"
 
-  proc canceledRequestsToJoinForCommunity*(self: Service, communityId: string): seq[CommunityMembershipRequestDto] =
-    try:
-      let response = status_go.canceledRequestsToJoinForCommunity(communityId)
-
-      result = @[]
-      if response.result.kind != JNull:
-        for jsonCommunityReqest in response.result:
-          result.add(jsonCommunityReqest.toCommunityMembershipRequestDto())
-    except Exception as e:
-      error "Error fetching community requests", msg = e.msg
-
-  proc pendingRequestsToJoinForCommunity*(self: Service, communityId: string): seq[CommunityMembershipRequestDto] =
-    try:
-      let response = status_go.pendingRequestsToJoinForCommunity(communityId)
-
-      result = @[]
-      if response.result.kind != JNull:
-        for jsonCommunityReqest in response.result:
-          result.add(jsonCommunityReqest.toCommunityMembershipRequestDto())
-    except Exception as e:
-      error "Error fetching community requests", msg = e.msg
-
-  proc declinedRequestsToJoinForCommunity*(self: Service, communityId: string): seq[CommunityMembershipRequestDto] =
-    try:
-      let response = status_go.declinedRequestsToJoinForCommunity(communityId)
-
-      result = @[]
-      if response.result.kind != JNull:
-        for jsonCommunityReqest in response.result:
-          result.add(jsonCommunityReqest.toCommunityMembershipRequestDto())
-    except Exception as e:
-      error "Error fetching community declined requests", msg = e.msg
-
   proc leaveCommunity*(self: Service, communityId: string) =
     try:
       let response = status_go.leaveCommunity(communityId)
-      self.activityCenterService.parseActivityCenterResponse(response)
 
       if response.error != nil:
         let error = Json.decode($response.error, RpcError)
@@ -918,10 +1007,8 @@ QtObject:
       for chat in updatedCommunity.chats:
         self.messageService.resetMessageCursor(chat.id)
 
-      # remove related community requests
-      keepIf(self.myCommunityRequests, request => request.communityId != communityId)
-
       self.events.emit(SIGNAL_COMMUNITY_LEFT, CommunityIdArgs(communityId: communityId))
+      checkAndEmitACNotificationsFromResponse(self.events, response.result{"activityCenterNotifications"})
 
     except Exception as e:
       error "Error leaving community", msg = e.msg, communityId
@@ -964,10 +1051,38 @@ QtObject:
 
       if response.error != nil:
         let error = Json.decode($response.error, RpcError)
-        raise newException(RpcException, "Error creating community: " & error.message)
+        raise newException(RpcException, "Error importing discord community: " & error.message)
 
     except Exception as e:
-      error "Error creating community", msg = e.msg
+      error "Error importing discord community", msg = e.msg
+
+  proc requestImportDiscordChannel*(
+        self: Service,
+        name: string,
+        discordChannelId: string,
+        communityId: string,
+        description: string,
+        color: string,
+        emoji: string,
+        filesToImport: seq[string],
+        fromTimestamp: int) =
+      try:
+        let response = status_go.requestImportDiscordChannel(
+          name,
+          discordChannelId,
+          communityId,
+          description,
+          color,
+          emoji,
+          filesToImport,
+          fromTimestamp)
+
+        if response.error != nil:
+          let error = Json.decode($response.error, RpcError)
+          raise newException(RpcException, "Error importing discord channel: " & error.message)
+
+      except Exception as e:
+        error "Error importing discord channel", msg = e.msg
 
   proc createCommunity*(
       self: Service,
@@ -1018,7 +1133,7 @@ QtObject:
         self.communities[community.id] = community
         # add new community channel group and chats to chat service
         self.chatService.updateOrAddChannelGroup(community.toChannelGroupDto())
-        for chat in community.chats: 
+        for chat in community.chats:
           self.chatService.updateOrAddChat(chat)
 
         self.events.emit(SIGNAL_COMMUNITY_CREATED, CommunityArgs(community: community))
@@ -1201,7 +1316,7 @@ QtObject:
         chatDetails.updateMissingFields(self.communities[communityId].chats[prev_chat_idx])
         self.chatService.updateOrAddChat(chatDetails) # we have to update chats stored in the chat service.
         updatedChats.add(chat)
-    
+
       self.events.emit(SIGNAL_COMMUNITY_CHANNELS_REORDERED,
         CommunityChatsOrderArgs(communityId: updatedCommunity.id, chats: updatedChats))
 
@@ -1359,55 +1474,126 @@ QtObject:
     except Exception as e:
       error "Error reordering category channel", msg = e.msg, communityId, categoryId, position
 
+  proc asyncCommunityMetricsLoaded*(self: Service, rpcResponse: string) {.slot.} =
+    let rpcResponseObj = rpcResponse.parseJson
+    if rpcResponseObj{"error"}.kind != JNull and rpcResponseObj{"error"}.getStr != "":
+      error "Error collecting community metrics", msg = rpcResponseObj{"error"}
+      return
+
+    let communityId = rpcResponseObj{"communityId"}.getStr()
+    let metricsType = rpcResponseObj{"response"}{"result"}{"type"}.getInt()
+
+    var metrics = rpcResponseObj{"response"}{"result"}.toCommunityMetricsDto()
+    self.communityMetrics[communityId] = metrics
+    self.events.emit(SIGNAL_COMMUNITY_METRICS_UPDATED, CommunityMetricsArgs(communityId: communityId, metricsType: metrics.metricsType))
 
   proc asyncCommunityInfoLoaded*(self: Service, communityIdAndRpcResponse: string) {.slot.} =
     let rpcResponseObj = communityIdAndRpcResponse.parseJson
+
+    let requestedCommunityId = rpcResponseObj{"communityId"}.getStr()
+
     if rpcResponseObj{"error"}.kind != JNull and rpcResponseObj{"error"}.getStr != "":
       error "Error requesting community info", msg = rpcResponseObj{"error"}
+      self.events.emit(SIGNAL_COMMUNITY_LOAD_DATA_FAILED, CommunityArgs(communityId: requestedCommunityId, error: "Couldn't find community info"))
       return
 
     var community = rpcResponseObj{"response"}{"result"}.toCommunityDto()
-    let requestedCommunityId = rpcResponseObj{"communityId"}.getStr()
-    self.requestedCommunityIds.excl(requestedCommunityId)
 
     if community.id == "":
       community.id = requestedCommunityId
-      self.events.emit(SIGNAL_COMMUNITY_LOAD_DATA_FAILED, CommunityArgs(community: community, error: "Couldn't find community info"))
+      self.events.emit(SIGNAL_COMMUNITY_LOAD_DATA_FAILED, CommunityArgs(communityId: requestedCommunityId, community: community, error: "Couldn't find community info"))
       return
-    
+
     self.communities[community.id] = community
+    debug "asyncRequestCommunityInfoTask finished", communityId = requestedCommunityId, communityName = community.name
 
     if rpcResponseObj{"importing"}.getBool():
       self.events.emit(SIGNAL_COMMUNITY_IMPORTED, CommunityArgs(community: community))
 
     self.events.emit(SIGNAL_COMMUNITY_DATA_IMPORTED, CommunityArgs(community: community))
+    self.events.emit(SIGNAL_COMMUNITIES_UPDATE, CommunitiesArgs(communities: @[community]))
 
-  proc asyncCheckPermissionsToJoin*(self: Service, communityId: string) =
+  proc asyncCheckPermissionsToJoin*(self: Service, communityId: string, addresses: seq[string]) =
     let arg = AsyncCheckPermissionsToJoinTaskArg(
       tptr: cast[ByteAddress](asyncCheckPermissionsToJoinTask),
       vptr: cast[ByteAddress](self.vptr),
       slot: "onAsyncCheckPermissionsToJoinDone",
-      communityId: communityId
+      communityId: communityId,
+      addresses: addresses
     )
     self.threadpool.start(arg)
 
   proc onAsyncCheckPermissionsToJoinDone*(self: Service, rpcResponse: string) {.slot.} =
+    let rpcResponseObj = rpcResponse.parseJson
+    let communityId = rpcResponseObj{"communityId"}.getStr()
     try:
-      let rpcResponseObj = rpcResponse.parseJson
       if rpcResponseObj{"error"}.kind != JNull and rpcResponseObj{"error"}.getStr != "":
-        let error = Json.decode($rpcResponseObj["error"], RpcError)
-        error "Error checking permissions to join", msg = error.message
-        return
+        raise newException(CatchableError, rpcResponseObj["error"].getStr)
 
-      let communityId = rpcResponseObj{"communityId"}.getStr()
+      if rpcResponseObj["response"]{"error"}.kind != JNull:
+        let error = Json.decode(rpcResponseObj["response"]["error"].getStr, RpcError)
+        raise newException(RpcException, error.message)
+
       let checkPermissionsToJoinResponse = rpcResponseObj["response"]["result"].toCheckPermissionsToJoinResponseDto
-      self.events.emit(SIGNAL_CHECK_PERMISSIONS_TO_JOIN_RESPONSE, CheckPermissionsToJoinResponseArgs(communityId: communityId, checkPermissionsToJoinResponse: checkPermissionsToJoinResponse))
+
+      self.events.emit(SIGNAL_CHECK_PERMISSIONS_TO_JOIN_RESPONSE, CheckPermissionsToJoinResponseArgs(
+        communityId: communityId,
+        checkPermissionsToJoinResponse: checkPermissionsToJoinResponse
+      ))
     except Exception as e:
       let errMsg = e.msg
-      error "error checking permissions to join: ", errMsg
+      error "Error checking permissions to join: ", errMsg
+      self.events.emit(SIGNAL_CHECK_PERMISSIONS_TO_JOIN_FAILED, CheckPermissionsToJoinFailedArgs(
+        communityId: communityId,
+        error: errMsg,
+      ))
 
-  proc asyncRequestToJoinCommunity*(self: Service, communityId: string, ensName: string, password: string,
-      addressesToShare: seq[string], airdropAddress: string) =
+  proc generateJoiningCommunityRequestsForSigning*(self: Service, memberPubKey: string, communityId: string,
+    addressesToReveal: seq[string]): seq[SignParamsDto] =
+    try:
+      let response = status_go.generateJoiningCommunityRequestsForSigning(memberPubKey, communityId, addressesToReveal)
+      if not response.error.isNil:
+        raise newException(RpcException, response.error.message)
+      result = map(response.result.getElems(), x => x.toSignParamsDto())
+    except Exception as e:
+      error "Error while generating join community request", msg = e.msg
+      self.events.emit(SIGNAL_COMMUNITY_MY_REQUEST_FAILED, CommunityRequestFailedArgs(
+        communityId: communityId,
+        error: e.msg
+      ))
+
+  proc generateEditCommunityRequestsForSigning*(self: Service, memberPubKey: string, communityId: string,
+    addressesToReveal: seq[string]): seq[SignParamsDto] =
+    try:
+      let response = status_go.generateEditCommunityRequestsForSigning(memberPubKey, communityId, addressesToReveal)
+      if not response.error.isNil:
+        raise newException(RpcException, response.error.message)
+      result = map(response.result.getElems(), x => x.toSignParamsDto())
+    except Exception as e:
+      error "Error while generating edit community request", msg = e.msg
+      self.events.emit(SIGNAL_COMMUNITY_EDIT_SHARED_ADDRESSES_FAILED, CommunityRequestFailedArgs(
+        communityId: communityId,
+        error: e.msg
+      ))
+
+  proc signCommunityRequests*(self: Service, communityId: string, signParams: seq[SignParamsDto]): seq[string] =
+    try:
+      var data = %* []
+      for param in signParams:
+        data.add(param.toJson())
+      let response = status_go.signData(data)
+      if not response.error.isNil:
+        raise newException(RpcException, response.error.message)
+      result = map(response.result.getElems(), x => x.getStr())
+    except Exception as e:
+      error "Error while signing joining community request", msg = e.msg
+      self.events.emit(SIGNAL_COMMUNITY_MY_REQUEST_FAILED, CommunityRequestFailedArgs(
+        communityId: communityId,
+        error: e.msg
+      ))
+
+  proc asyncRequestToJoinCommunity*(self: Service, communityId: string, ensName: string, addressesToShare: seq[string],
+    airdropAddress: string, signatures: seq[string]) =
     try:
       let arg = AsyncRequestToJoinCommunityTaskArg(
         tptr: cast[ByteAddress](asyncRequestToJoinCommunityTask),
@@ -1415,14 +1601,14 @@ QtObject:
         slot: "onAsyncRequestToJoinCommunityDone",
         communityId: communityId,
         ensName: ensName,
-        password: password,
         addressesToShare: addressesToShare,
+        signatures: signatures,
         airdropAddress: airdropAddress,
       )
       self.threadpool.start(arg)
     except Exception as e:
-      error "Error request to join community", msg = e.msg 
-    
+      error "Error request to join community", msg = e.msg
+
   proc onAsyncRequestToJoinCommunityDone*(self: Service, communityIdAndRpcResponse: string) {.slot.} =
     let rpcResponseObj = communityIdAndRpcResponse.parseJson
     try:
@@ -1430,8 +1616,8 @@ QtObject:
         raise newException(CatchableError, rpcResponseObj{"error"}.getStr)
 
       let rpcResponse = Json.decode($rpcResponseObj["response"], RpcResponse[JsonNode])
-      self.activityCenterService.parseActivityCenterResponse(rpcResponse)
-      
+      checkAndEmitACNotificationsFromResponse(self.events, rpcResponse.result{"activityCenterNotifications"})
+
       if not self.processRequestsToJoinCommunity(rpcResponse.result):
         raise newException(CatchableError, "no 'requestsToJoinCommunity' key in response")
 
@@ -1442,19 +1628,19 @@ QtObject:
         error: e.msg
       ))
 
-  proc asyncEditSharedAddresses*(self: Service, communityId: string, password: string, addressesToShare: seq[string],
-      airdropAddress: string) =
+  proc asyncEditSharedAddresses*(self: Service, communityId: string, addressesToShare: seq[string], airdropAddress: string,
+    signatures: seq[string]) =
     let arg = AsyncEditSharedAddressesTaskArg(
       tptr: cast[ByteAddress](asyncEditSharedAddressesTask),
       vptr: cast[ByteAddress](self.vptr),
       slot: "onAsyncEditSharedAddressesDone",
       communityId: communityId,
-      password: password,
       addressesToShare: addressesToShare,
+      signatures: signatures,
       airdropAddress: airdropAddress,
     )
     self.threadpool.start(arg)
-    
+
   proc onAsyncEditSharedAddressesDone*(self: Service, communityIdAndRpcResponse: string) {.slot.} =
     let rpcResponseObj = communityIdAndRpcResponse.parseJson
     try:
@@ -1485,7 +1671,7 @@ QtObject:
       )
       self.threadpool.start(arg)
     except Exception as e:
-      error "Error accepting request to join community", msg = e.msg 
+      error "Error accepting request to join community", msg = e.msg
 
   proc onAsyncAcceptRequestToJoinCommunityDone*(self: Service, response: string) {.slot.} =
     var communityId: string
@@ -1500,28 +1686,35 @@ QtObject:
         let errorMessage = rpcResponseObj{"error"}.getStr
 
         if errorMessage.contains("has no permission to join"):
-          self.events.emit(SIGNAL_ACCEPT_REQUEST_TO_JOIN_FAILED_NO_PERMISSION, CommunityMemberArgs(communityId: communityId, pubKey: userKey, requestId: requestId))
+          self.events.emit(SIGNAL_ACCEPT_REQUEST_TO_JOIN_FAILED_NO_PERMISSION,
+            CommunityMemberArgs(communityId: communityId, pubKey: userKey, requestId: requestId))
         else:
-          self.events.emit(SIGNAL_ACCEPT_REQUEST_TO_JOIN_FAILED, CommunityMemberArgs(communityId: communityId, pubKey: userKey, requestId: requestId))
+          self.events.emit(SIGNAL_ACCEPT_REQUEST_TO_JOIN_FAILED,
+            CommunityMemberArgs(communityId: communityId, pubKey: userKey, requestId: requestId))
         return
-    
-      discard self.removeMembershipRequestFromCommunityAndGetMemberPubkey(communityId, requestId,
-        rpcResponseObj["response"]["result"]["communities"][0].toCommunityDto)
+
+      let updatedCommunity = rpcResponseObj["response"]["result"]["communities"][0].toCommunityDto
+      let requestToJoin = rpcResponseObj["response"]["result"]["requestsToJoinCommunity"][0].toCommunityMembershipRequestDto
+
+      self.updateMembershipRequestToNewState(communityId, requestId, updatedCommunity,
+        RequestToJoinType(requestToJoin.state))
 
       if (userKey == ""):
         error "Did not find pubkey in the pending request"
         return
 
       self.events.emit(SIGNAL_COMMUNITY_EDITED, CommunityArgs(community: self.communities[communityId]))
-      self.events.emit(SIGNAL_COMMUNITY_MEMBER_APPROVED, CommunityMemberArgs(communityId: communityId, pubKey: userKey, requestId: requestId))
+      self.events.emit(SIGNAL_COMMUNITY_MEMBER_APPROVED,
+        CommunityMemberArgs(communityId: communityId, pubKey: userKey, requestId: requestId))
 
-      if rpcResponseObj["response"]["result"]{"activityCenterNotifications"}.kind != JNull:
-        self.activityCenterService.parseActivityCenterNotifications(rpcResponseObj["response"]["result"]["activityCenterNotifications"])
+      let rpcResponse = Json.decode($rpcResponseObj["response"], RpcResponse[JsonNode])
+      checkAndEmitACNotificationsFromResponse(self.events, rpcResponse.result{"activityCenterNotifications"})
 
     except Exception as e:
       let errMsg = e.msg
       error "error accepting request to join: ", errMsg
-      self.events.emit(SIGNAL_ACCEPT_REQUEST_TO_JOIN_FAILED, CommunityMemberArgs(communityId: communityId, pubKey: userKey, requestId: requestId))
+      self.events.emit(SIGNAL_ACCEPT_REQUEST_TO_JOIN_FAILED,
+        CommunityMemberArgs(communityId: communityId, pubKey: userKey, requestId: requestId))
 
   proc asyncLoadCuratedCommunities*(self: Service) =
     self.events.emit(SIGNAL_CURATED_COMMUNITIES_LOADING, Args())
@@ -1533,7 +1726,7 @@ QtObject:
       )
       self.threadpool.start(arg)
     except Exception as e:
-      error "Error loading curated communities", msg = e.msg 
+      error "Error loading curated communities", msg = e.msg
 
   proc onAsyncLoadCuratedCommunitiesDone*(self: Service, response: string) {.slot.} =
     try:
@@ -1551,65 +1744,97 @@ QtObject:
       error "error loading curated communities: ", errMsg
       self.events.emit(SIGNAL_CURATED_COMMUNITIES_LOADING_FAILED, Args())
 
-  proc requestCommunityInfo*(self: Service, communityId: string, importing = false) =
+  proc getCommunityMetrics*(self: Service, communityId: string, metricsType: CommunityMetricsType): CommunityMetricsDto =
+    # NOTE: use metricsType when other metrics types added
+    if self.communityMetrics.hasKey(communityId):
+      return self.communityMetrics[communityId]
+    return CommunityMetricsDto()
 
-    if communityId in self.requestedCommunityIds:
-      info "requestCommunityInfo: skipping as already requested", communityId
-      self.events.emit(SIGNAL_COMMUNITY_INFO_ALREADY_REQUESTED, Args())
-      return
+  proc collectCommunityMetricsMessagesTimestamps*(self: Service, communityId: string, intervals: string) =
+    let arg = AsyncCollectCommunityMetricsTaskArg(
+      tptr: cast[ByteAddress](asyncCollectCommunityMetricsTask),
+      vptr: cast[ByteAddress](self.vptr),
+      slot: "asyncCommunityMetricsLoaded",
+      communityId: communityId,
+      metricsType: CommunityMetricsType.MessagesTimestamps,
+      intervals: parseJson(intervals)
+    )
+    self.threadpool.start(arg)
 
-    self.requestedCommunityIds.incl(communityId)
+  proc collectCommunityMetricsMessagesCount*(self: Service, communityId: string, intervals: string) =
+    let arg = AsyncCollectCommunityMetricsTaskArg(
+      tptr: cast[ByteAddress](asyncCollectCommunityMetricsTask),
+      vptr: cast[ByteAddress](self.vptr),
+      slot: "asyncCommunityMetricsLoaded",
+      communityId: communityId,
+      metricsType: CommunityMetricsType.MessagesCount,
+      intervals: parseJson(intervals)
+    )
+    self.threadpool.start(arg)
+
+  proc requestCommunityInfo*(self: Service, communityId: string, shard: Shard, importing = false, tryDatabase = true,
+      requiredTimeSinceLastRequest = initDuration(0, 0)) =
+
+    let now = now().toTime()
+    if self.communityInfoRequests.hasKey(communityId):
+      let lastRequestTime = self.communityInfoRequests[communityId]
+      let actualTimeSincLastRequest = now - lastRequestTime
+      if actualTimeSincLastRequest < requiredTimeSinceLastRequest:
+        debug "requestCommunityInfo: skipping as required time has not passed yet since last request", communityId, actualTimeSincLastRequest, requiredTimeSinceLastRequest
+        return
+
+    self.communityInfoRequests[communityId] = now
 
     let arg = AsyncRequestCommunityInfoTaskArg(
       tptr: cast[ByteAddress](asyncRequestCommunityInfoTask),
       vptr: cast[ByteAddress](self.vptr),
       slot: "asyncCommunityInfoLoaded",
       communityId: communityId,
-      importing: importing
+      importing: importing,
+      tryDatabase: tryDatabase,
+      shardCluster: if shard == nil: -1 else: shard.cluster,
+      shardIndex: if shard == nil: -1 else: shard.index,
     )
     self.threadpool.start(arg)
 
-  proc removePrivateKey*(self: Service, communityId: string) =
-    try:
-      let response = status_go.removePrivateKey(communityId)
-      if (response.error != nil):
-        let error = Json.decode($response.error, RpcError)
-        raise newException(RpcException, fmt"err: {error.message}")
+  proc asyncImportCommunity*(self: Service, communityKey: string) =
+    let arg = AsyncImportCommunityTaskArg(
+      tptr: cast[ByteAddress](asyncImportCommunityTask),
+      vptr: cast[ByteAddress](self.vptr),
+      slot: "onAsyncImportCommunityCompleted",
+      communityKey: communityKey,
+    )
+    self.threadpool.start(arg)
 
-      var community = self.communities[communityId]
-      community.isControlNode = false
-      self.communities[communityId] = community
-      self.events.emit(SIGNAL_COMMUNITY_PRIVATE_KEY_REMOVED, CommunityArgs(community: community))
-    except Exception as e:
-      error "Error removing community private key: ", msg = e.msg
-
-  proc importCommunity*(self: Service, communityKey: string) =
+  proc onAsyncImportCommunityCompleted*(self: Service, response: string) {.slot.} =
     try:
-      let response = status_go.importCommunity(communityKey)
+      let rpcResponseObj = response.parseJson
+      if rpcResponseObj{"error"}.kind != JNull and rpcResponseObj{"error"}.getStr != "":
+        raise newException(RpcException, rpcResponseObj["error"].getStr)
       ## after `importCommunity` call everything should be handled in a slot cnnected to `SignalType.CommunityFound.event`
       ## but because of insufficient data (chats details are missing) sent as a payload of that signal we're unable to do
       ## that until `status-go` part gets improved in ragards of that.
 
-      if (response.error != nil):
-        let error = Json.decode($response.error, RpcError)
-        raise newException(RpcException, fmt"community id `{communityKey}` err: {error.message}")
+      if rpcResponseObj["response"]{"error"}.kind != JNull:
+        let error = Json.decode(rpcResponseObj["response"]["error"].getStr, RpcError)
+        raise newException(RpcException, error.message)
 
-      if response.result == nil or response.result.kind != JObject:
-        raise newException(RpcException, fmt"response is empty or not an json object, community id `{communityKey}`")
+      if rpcResponseObj["response"]{"result"} == nil or rpcResponseObj["response"]{"result"}.kind != JObject:
+        raise newException(RpcException, "response is empty or not an json object")
 
       var communityJArr: JsonNode
-      if(not response.result.getProp("communities", communityJArr)):
-        raise newException(RpcException, fmt"there is no `communities` key in the response for community id: {communityKey}")
+      if not rpcResponseObj["response"]{"result"}.getProp("communities", communityJArr):
+        raise newException(RpcException, "there is no `communities` key in the response")
 
-      if(communityJArr.len == 0):
-        raise newException(RpcException, fmt"`communities` array is empty in the response for community id: {communityKey}")
+      if communityJArr.len == 0:
+        raise newException(RpcException, "`communities` array is empty in the response")
 
       var communitiesSettingsJArr: JsonNode
-      if(not response.result.getProp("communitiesSettings", communitiesSettingsJArr)):
-        raise newException(RpcException, fmt"there is no `communitiesSettings` key in the response for community id: {communityKey}")
+      if not rpcResponseObj["response"]{"result"}.getProp("communitiesSettings", communitiesSettingsJArr):
+        raise newException(RpcException, "there is no `communitiesSettings` key in the response")
 
-      if(communitiesSettingsJArr.len == 0):
-        raise newException(RpcException, fmt"`communitiesSettings` array is empty in the response for community id: {communityKey}")
+      if communitiesSettingsJArr.len == 0:
+        raise newException(RpcException, "`communitiesSettings` array is empty in the response")
 
       var communityDto = communityJArr[0].toCommunityDto()
       let communitySettingsDto = communitiesSettingsJArr[0].toCommunitySettingsDto()
@@ -1618,7 +1843,7 @@ QtObject:
       self.communities[communityDto.id] = communityDto
 
       var chatsJArr: JsonNode
-      if(response.result.getProp("chats", chatsJArr)):
+      if rpcResponseObj["response"]{"result"}.getProp("chats", chatsJArr):
         for chatObj in chatsJArr:
           let chatDto = chatObj.toChatDto(communityDto.id)
           self.chatService.updateOrAddChat(chatDto) # we have to update chats stored in the chat service.
@@ -1681,71 +1906,90 @@ QtObject:
       i.inc()
     return -1
 
-  proc removeMembershipRequestFromCommunityAndGetMemberPubkey*(self: Service, communityId: string, requestId: string,
-      updatedCommunity: CommunityDto): string =
+  proc getWaitingForSharedAddressesRequestIndex(self: Service, communityId: string, requestId: string): int =
+    let community = self.communities[communityId]
+    for i in 0 ..< len(community.waitingForSharedAddressesRequestsToJoin):
+      if (community.waitingForSharedAddressesRequestsToJoin[i].id == requestId):
+        return i
+    return -1
+
+  proc updateMembershipRequestToNewState*(self: Service, communityId: string, requestId: string,
+      updatedCommunity: CommunityDto, newState: RequestToJoinType) =
     let indexPending = self.getPendingRequestIndex(communityId, requestId)
     let indexDeclined = self.getDeclinedRequestIndex(communityId, requestId)
+    let indexAwaitingAddresses = self.getWaitingForSharedAddressesRequestIndex(communityId, requestId)
 
-    if (indexPending == -1 and indexDeclined == -1):
+    if (indexPending == -1 and indexDeclined == -1 and indexAwaitingAddresses == -1):
       raise newException(RpcException, fmt"Community request not found: {requestId}")
 
     var community = self.communities[communityId]
 
     if (indexPending != -1):
-      result = community.pendingRequestsToJoin[indexPending].publicKey
-      community.pendingRequestsToJoin.delete(indexPending)
-    elif (indexDeclined != -1):
-      result = community.declinedRequestsToJoin[indexDeclined].publicKey
+      if @[RequestToJoinType.Declined, RequestToJoinType.Accepted, RequestToJoinType.Canceled].any(x => x == newState):
+        # If the state is now declined, add to the declined requests
+        if newState == RequestToJoinType.Declined:
+          community.declinedRequestsToJoin.add(community.pendingRequestsToJoin[indexPending])
+
+        # If the state is no longer pending, delete the request
+        community.pendingRequestsToJoin.delete(indexPending)
+      else:
+        community.pendingRequestsToJoin[indexPending].state = newState.int
+    elif indexDeclined != -1:
       community.declinedRequestsToJoin.delete(indexDeclined)
+    elif indexAwaitingAddresses != -1 and newState != RequestToJoinType.AwaitingAddress:
+      if newState == RequestToJoinType.Declined:
+        community.declinedRequestsToJoin.add(community.waitingForSharedAddressesRequestsToJoin[indexAwaitingAddresses])
+
+      let myPublicKey = singletonInstance.userProfile.getPubKey()
+      let awaitingRequestToJoin = community.waitingForSharedAddressesRequestsToJoin[indexAwaitingAddresses]
+      community.waitingForSharedAddressesRequestsToJoin.delete(indexAwaitingAddresses)
+      if awaitingRequestToJoin.publicKey == myPublicKey:
+        self.events.emit(SIGNAL_WAITING_ON_NEW_COMMUNITY_OWNER_TO_CONFIRM_REQUEST_TO_REJOIN, CommunityIdArgs(communityId: communityId))
 
     community.members = updatedCommunity.members
     self.communities[communityId] = community
 
-  proc moveRequestToDeclined*(self: Service, communityId: string, requestId: string) =
-    let indexPending = self.getPendingRequestIndex(communityId, requestId)
-    if (indexPending == -1):
-      raise newException(RpcException, fmt"Community request not found: {requestId}")
-
-    var community = self.communities[communityId]
-
-    let itemToMove = community.pendingRequestsToJoin[indexPending]
-    community.declinedRequestsToJoin.add(itemToMove)
-    community.pendingRequestsToJoin.delete(indexPending)
-
-    self.communities[communityId] = community
-
   proc cancelRequestToJoinCommunity*(self: Service, communityId: string) =
     try:
+      if (not self.communities.contains(communityId)):
+        error "Cancel request to join community failed: unknown community", communityId=communityId
+        return
+
+      var community = self.communities[communityId]
+      let myPublicKey = singletonInstance.userProfile.getPubKey()
       var i = 0
-      for communityRequest in self.myCommunityRequests:
-        if (communityRequest.communityId == communityId):
-          let response = status_go.cancelRequestToJoinCommunity(communityRequest.id)
+      for myPendingRequest in community.pendingRequestsToJoin:
+        if myPendingRequest.publicKey == myPublicKey:
+          let response = status_go.cancelRequestToJoinCommunity(myPendingRequest.id)
           if (not response.error.isNil):
             let msg = response.error.message & " communityId=" & communityId
             error "error while cancel membership request ", msg
             return
-          self.myCommunityRequests.delete(i)
-          self.activityCenterService.parseActivityCenterResponse(response)
+
+          community.pendingRequestsToJoin.delete(i)
+          self.communities[communityId] = community
           self.events.emit(SIGNAL_REQUEST_TO_JOIN_COMMUNITY_CANCELED, Args())
+          checkAndEmitACNotificationsFromResponse(self.events, response.result{"activityCenterNotifications"})
           return
 
         i.inc()
-      
     except Exception as e:
       error "Error canceled request to join community", msg = e.msg
 
   proc declineRequestToJoinCommunity*(self: Service, communityId: string, requestId: string) =
     try:
       let response = status_go.declineRequestToJoinCommunity(requestId)
-      self.activityCenterService.parseActivityCenterResponse(response)
+      let requestToJoin = response.result["requestsToJoinCommunity"][0].toCommunityMembershipRequestDto
 
-      self.moveRequestToDeclined(communityId, requestId)
+      self.updateMembershipRequestToNewState(communityId, requestId, self.communities[communityId],
+        RequestToJoinType(requestToJoin.state))
 
       self.events.emit(SIGNAL_COMMUNITY_EDITED, CommunityArgs(community: self.communities[communityId]))
+      checkAndEmitACNotificationsFromResponse(self.events, response.result{"activityCenterNotifications"})
     except Exception as e:
       error "Error declining request to join community", msg = e.msg
 
-  proc inviteUsersToCommunityById*(self: Service, communityId: string, pubKeysJson: string, inviteMessage: string): string =
+  proc shareCommunityToUsers*(self: Service, communityId: string, pubKeysJson: string, inviteMessage: string): string =
     try:
       let pubKeysParsed = pubKeysJson.parseJson
       var pubKeys: seq[string] = @[]
@@ -1785,26 +2029,74 @@ QtObject:
     except Exception as e:
       error "Error unmuting category", msg = e.msg
 
-  proc removeUserFromCommunity*(self: Service, communityId: string, pubKey: string)  =
-    try:
-      discard status_go.removeUserFromCommunity(communityId, pubKey)
+  proc asyncRemoveUserFromCommunity*(self: Service, communityId, pubKey: string) =
+    let arg = AsyncCommunityMemberActionTaskArg(
+      tptr: cast[ByteAddress](asyncRemoveUserFromCommunityTask),
+      vptr: cast[ByteAddress](self.vptr),
+      slot: "onAsyncCommunityMemberActionCompleted",
+      communityId: communityId,
+      pubKey: pubKey,
+    )
+    self.threadpool.start(arg)
 
-      self.events.emit(SIGNAL_COMMUNITY_MEMBER_REMOVED,
-        CommunityMemberArgs(communityId: communityId, pubKey: pubKey))
-    except Exception as e:
-      error "Error removing user from community", msg = e.msg
+  proc asyncBanUserFromCommunity*(self: Service, communityId, pubKey: string) =
+    let arg = AsyncCommunityMemberActionTaskArg(
+      tptr: cast[ByteAddress](asyncBanUserFromCommunityTask),
+      vptr: cast[ByteAddress](self.vptr),
+      slot: "onAsyncCommunityMemberActionCompleted",
+      communityId: communityId,
+      pubKey: pubKey,
+    )
+    self.threadpool.start(arg)
 
-  proc banUserFromCommunity*(self: Service, communityId: string, pubKey: string)  =
-    try:
-      discard status_go.banUserFromCommunity(communityId, pubKey)
-    except Exception as e:
-      error "Error banning user from community", msg = e.msg
+  proc asyncUnbanUserFromCommunity*(self: Service, communityId, pubKey: string) =
+    let arg = AsyncCommunityMemberActionTaskArg(
+      tptr: cast[ByteAddress](asyncUnbanUserFromCommunityTask),
+      vptr: cast[ByteAddress](self.vptr),
+      slot: "onAsyncCommunityMemberActionCompleted",
+      communityId: communityId,
+      pubKey: pubKey,
+    )
+    self.threadpool.start(arg)
 
-  proc unbanUserFromCommunity*(self: Service, communityId: string, pubKey: string)  =
+  proc onAsyncCommunityMemberActionCompleted*(self: Service, response: string) {.slot.} =
     try:
-      discard status_go.unbanUserFromCommunity(communityId, pubKey)
+      let rpcResponseObj = response.parseJson
+
+      if rpcResponseObj{"error"}.kind != JNull and rpcResponseObj{"error"}.getStr != "":
+        raise newException(RpcException, rpcResponseObj["error"].getStr)
+
+      if rpcResponseObj["response"]{"error"}.kind != JNull:
+        let error = Json.decode(rpcResponseObj["response"]["error"].getStr, RpcError)
+        raise newException(RpcException, error.message)
+
+      let memberPubkey = rpcResponseObj{"pubKey"}.getStr()
+
+      var communityJArr: JsonNode
+      if not rpcResponseObj["response"]{"result"}.getProp("communities", communityJArr):
+        raise newException(RpcException, "there is no `communities` key in the response")
+
+      if communityJArr.len == 0:
+        raise newException(RpcException, "`communities` array is empty in the response")
+
+      var community = communityJArr[0].toCommunityDto()
+
+      var status: MembershipRequestState = MembershipRequestState.None
+      if community.pendingAndBannedMembers.hasKey(memberPubkey):
+        status = community.pendingAndBannedMembers[memberPubkey].toMembershipRequestState()
+      else:
+        for member in community.members:
+          if member.id == memberPubkey:
+            status = MembershipRequestState.Accepted
+
+      self.events.emit(SIGNAL_COMMUNITY_MEMBER_STATUS_CHANGED, CommunityMemberStatusUpdatedArgs(
+        communityId: community.id,
+        memberPubkey: memberPubkey,
+        status: status
+      ))
+
     except Exception as e:
-      error "Error banning user from community", msg = e.msg
+      error "error while getting the community members' revealed addressesses", msg = e.msg
 
   proc setCommunityMuted*(self: Service, communityId: string, mutedType: int) =
     try:
@@ -1812,16 +2104,34 @@ QtObject:
       if not response.error.isNil:
         error "error muting the community", msg = response.error.message
         return
-      
+
       let muted = if (MutedType(mutedType) == MutedType.Unmuted): false else: true
       self.events.emit(SIGNAL_COMMUNITY_MUTED,
         CommunityMutedArgs(communityId: communityId, muted: muted))
     except Exception as e:
       error "Error setting community un/muted", msg = e.msg
 
-  proc isCommunityRequestPending*(self: Service, communityId: string): bool {.slot.} =
-    for communityRequest in self.myCommunityRequests:
-      if (communityRequest.communityId == communityId):
+  proc isMyCommunityRequestPending*(self: Service, communityId: string): bool {.slot.} =
+    if not self.communities.contains(communityId):
+      error "IsMyCommunityRequestPending failed: unknown community", communityId=communityId
+      return false
+
+    let myPublicKey = singletonInstance.userProfile.getPubKey()
+    var community = self.communities[communityId]
+    for pendingRequest in community.pendingRequestsToJoin:
+      if pendingRequest.publicKey == myPublicKey:
+        return true
+    return false
+
+  proc waitingOnNewCommunityOwnerToConfirmRequestToRejoin*(self: Service, communityId: string): bool {.slot.} =
+    if not self.communities.contains(communityId):
+      error "waitingOnNewCommunityOwnerToConfirmRequestToRejoin failed: unknown community", communityId=communityId
+      return false
+
+    let myPublicKey = singletonInstance.userProfile.getPubKey()
+    var community = self.communities[communityId]
+    for request in community.waitingForSharedAddressesRequestsToJoin:
+      if request.publicKey == myPublicKey:
         return true
     return false
 
@@ -1835,33 +2145,34 @@ QtObject:
     try:
       discard status_go.requestCancelDiscordCommunityImport(communityId)
     except Exception as e:
-      error "Error extracting discord channels and categories", msg = e.msg
+      error "Error canceling discord community import", msg = e.msg
+
+  proc requestCancelDiscordChannelImport*(self: Service, discordChannelId: string) =
+    try:
+      discard status_go.requestCancelDiscordChannelImport(discordChannelId)
+    except Exception as e:
+      error "Error canceling discord channel import", msg = e.msg
 
   proc createOrEditCommunityTokenPermission*(self: Service, communityId: string, tokenPermission: CommunityTokenPermissionDto) =
     try:
       let editing = tokenPermission.id != ""
-
       var response: RpcResponse[JsonNode]
-
       if editing:
         response = status_go.editCommunityTokenPermission(communityId, tokenPermission.id, int(tokenPermission.`type`), Json.encode(tokenPermission.tokenCriteria), tokenPermission.chatIDs, tokenPermission.isPrivate)
       else:
         response = status_go.createCommunityTokenPermission(communityId, int(tokenPermission.`type`), Json.encode(tokenPermission.tokenCriteria), tokenPermission.chatIDs, tokenPermission.isPrivate)
 
       if response.result != nil and response.result.kind != JNull:
-        var changesField = TOKEN_PERMISSIONS_ADDED
-        if editing:
-          changesField = TOKEN_PERMISSIONS_MODIFIED
-
-        for permissionId, permission in response.result["communityChanges"].getElems()[0][changesField].pairs():
+        for permissionId, permission in response.result["communityChanges"].getElems()[0][TOKEN_PERMISSIONS_ADDED].pairs():
           let p = permission.toCommunityTokenPermissionDto()
           self.communities[communityId].tokenPermissions[permissionId] = p
+          self.events.emit(SIGNAL_COMMUNITY_TOKEN_PERMISSION_CREATED, CommunityTokenPermissionArgs(communityId: communityId, tokenPermission: p))
 
-          var signal = SIGNAL_COMMUNITY_TOKEN_PERMISSION_CREATED
-          if editing:
-            signal = SIGNAL_COMMUNITY_TOKEN_PERMISSION_UPDATED
+        for permissionId, permission in response.result["communityChanges"].getElems()[0][TOKEN_PERMISSIONS_MODIFIED].pairs():
+          let p = permission.toCommunityTokenPermissionDto()
+          self.communities[communityId].tokenPermissions[permissionId] = p
+          self.events.emit(SIGNAL_COMMUNITY_TOKEN_PERMISSION_UPDATED, CommunityTokenPermissionArgs(communityId: communityId, tokenPermission: p))
 
-          self.events.emit(signal, CommunityTokenPermissionArgs(communityId: communityId, tokenPermission: p))
         return
 
       var signal = SIGNAL_COMMUNITY_TOKEN_PERMISSION_CREATION_FAILED
@@ -1876,12 +2187,18 @@ QtObject:
     try:
       let response = status_go.deleteCommunityTokenPermission(communityId, permissionId)
       if response.result != nil and response.result.kind != JNull:
-        for permissionId in response.result["communityChanges"].getElems()[0]["tokenPermissionsRemoved"].getElems():
-          if self.communities[communityId].tokenPermissions.hasKey(permissionId.getStr()):
-            self.communities[communityId].tokenPermissions.del(permissionId.getStr())
-          self.events.emit(SIGNAL_COMMUNITY_TOKEN_PERMISSION_DELETED,
-        CommunityTokenPermissionRemovedArgs(communityId: communityId, permissionId: permissionId.getStr))
+        for permissionId, permission in response.result["communityChanges"].getElems()[0][TOKEN_PERMISSIONS_REMOVED].pairs():
+          if self.communities[communityId].tokenPermissions.hasKey(permissionId):
+            self.communities[communityId].tokenPermissions.del(permissionId)
+          self.events.emit(SIGNAL_COMMUNITY_TOKEN_PERMISSION_DELETED, CommunityTokenPermissionRemovedArgs(communityId: communityId, permissionId: permissionId))
+
+        for permissionId, permission in response.result["communityChanges"].getElems()[0][TOKEN_PERMISSIONS_MODIFIED].pairs():
+          let p = permission.toCommunityTokenPermissionDto()
+          self.communities[communityId].tokenPermissions[permissionId] = p
+          self.events.emit(SIGNAL_COMMUNITY_TOKEN_PERMISSION_UPDATED, CommunityTokenPermissionArgs(communityId: communityId, tokenPermission: p))
+
         return
+
       var tokenPermission = CommunityTokenPermissionDto()
       tokenPermission.id = permissionId
       self.events.emit(SIGNAL_COMMUNITY_TOKEN_PERMISSION_DELETION_FAILED,
@@ -1891,11 +2208,15 @@ QtObject:
 
   proc getUserPubKeyFromPendingRequest*(self: Service, communityId: string, requestId: string): string =
     let indexPending = self.getPendingRequestIndex(communityId, requestId)
-    if (indexPending == -1):
+    let indexDeclined = self.getDeclinedRequestIndex(communityId, requestId)
+    if (indexPending == -1 and indexDeclined == -1):
       raise newException(RpcException, fmt"Community request not found: {requestId}")
 
     let community = self.communities[communityId]
-    return community.pendingRequestsToJoin[indexPending].publicKey
+    if (indexPending != -1):
+      return community.pendingRequestsToJoin[indexPending].publicKey
+    else:
+      return community.declinedRequestsToJoin[indexDeclined].publicKey
 
   proc checkChatHasPermissions*(self: Service, communityId: string, chatId: string): bool =
     let community = self.getCommunityById(communityId)
@@ -1918,25 +2239,140 @@ QtObject:
       let response = status_go.shareCommunityUrlWithChatKey(communityId)
       return response.result.getStr
     except Exception as e:
-        error "error while getting community url with chat key", msg = e.msg
+      error "error while getting community url with chat key", msg = e.msg
 
   proc shareCommunityUrlWithData*(self: Service, communityId: string): string =
     try:
       let response = status_go.shareCommunityUrlWithData(communityId)
       return response.result.getStr
     except Exception as e:
-        error "error while getting community url with data", msg = e.msg
+      error "error while getting community url with data", msg = e.msg
 
   proc shareCommunityChannelUrlWithChatKey*(self: Service, communityId: string, chatId: string): string =
     try:
       let response = status_go.shareCommunityChannelUrlWithChatKey(communityId, chatId)
       return response.result.getStr
     except Exception as e:
-        error "error while getting community channel url with chat key ", msg = e.msg
+      error "error while getting community channel url with chat key ", msg = e.msg
 
   proc shareCommunityChannelUrlWithData*(self: Service, communityId: string, chatId: string): string =
     try:
       let response = status_go.shareCommunityChannelUrlWithData(communityId, chatId)
       return response.result.getStr
     except Exception as e:
-        error "error while getting community channel url with data ", msg = e.msg
+      error "error while getting community channel url with data ", msg = e.msg
+
+  proc getCommunityPublicKeyFromPrivateKey*(self: Service, communityPrivateKey: string): string =
+    try:
+      let response = status_go.getCommunityPublicKeyFromPrivateKey(communityPrivateKey)
+      result = response.result.getStr
+    except Exception as e:
+      error "error while getting community public key", msg = e.msg
+
+  proc asyncGetRevealedAccountsForMember*(self: Service, communityId, memberPubkey: string) =
+    let arg = AsyncGetRevealedAccountsArg(
+      tptr: cast[ByteAddress](asyncGetRevealedAccountsForMemberTask),
+      vptr: cast[ByteAddress](self.vptr),
+      slot: "onAsyncGetRevealedAccountsForMemberCompleted",
+      communityId: communityId,
+      memberPubkey: memberPubkey,
+    )
+    self.threadpool.start(arg)
+
+  proc onAsyncGetRevealedAccountsForMemberCompleted*(self: Service, response: string) {.slot.} =
+    try:
+      let rpcResponseObj = response.parseJson
+
+      if rpcResponseObj{"error"}.kind != JNull and rpcResponseObj{"error"}.getStr != "":
+        raise newException(RpcException, rpcResponseObj["error"].getStr)
+
+      if rpcResponseObj["response"]{"error"}.kind != JNull:
+        let error = Json.decode(rpcResponseObj["response"]["error"].getStr, RpcError)
+        raise newException(RpcException, error.message)
+
+      let revealedAccounts = rpcResponseObj["response"]["result"].toRevealedAccounts()
+
+      self.events.emit(SIGNAL_COMMUNITY_MEMBER_REVEALED_ACCOUNTS_LOADED, CommunityMemberRevealedAccountsArgs(
+        communityId: rpcResponseObj["communityId"].getStr,
+        memberPubkey: rpcResponseObj["memberPubkey"].getStr,
+        memberRevealedAccounts: revealedAccounts,
+      ))
+    except Exception as e:
+      error "error while getting the community members' revealed addressesses", msg = e.msg
+
+  proc asyncGetRevealedAccountsForAllMembers*(self: Service, communityId: string) =
+    let arg = AsyncGetRevealedAccountsArg(
+      tptr: cast[ByteAddress](asyncGetRevealedAccountsForAllMembersTask),
+      vptr: cast[ByteAddress](self.vptr),
+      slot: "onAsyncGetRevealedAccountsForAllMembersCompleted",
+      communityId: communityId,
+    )
+    self.threadpool.start(arg)
+
+  proc onAsyncGetRevealedAccountsForAllMembersCompleted*(self: Service, response: string) {.slot.} =
+    try:
+      let rpcResponseObj = response.parseJson
+
+      if rpcResponseObj{"error"}.kind != JNull and rpcResponseObj{"error"}.getStr != "":
+        raise newException(RpcException, rpcResponseObj["error"].getStr)
+
+      if rpcResponseObj["response"]{"error"}.kind != JNull:
+        let error = Json.decode(rpcResponseObj["response"]["error"].getStr, RpcError)
+        raise newException(RpcException, error.message)
+
+      let revealedAccounts = rpcResponseObj["response"]["result"].toMembersRevealedAccounts
+
+      self.events.emit(SIGNAL_COMMUNITY_MEMBERS_REVEALED_ACCOUNTS_LOADED, CommunityMembersRevealedAccountsArgs(
+        communityId: rpcResponseObj["communityId"].getStr,
+        membersRevealedAccounts: revealedAccounts
+      ))
+    except Exception as e:
+      error "error while getting the community members' revealed addressesses", msg = e.msg
+
+  proc asyncReevaluateCommunityMembersPermissions*(self: Service, communityId: string) =
+    let arg = AsyncGetRevealedAccountsArg(
+      tptr: cast[ByteAddress](asyncReevaluateCommunityMembersPermissionsTask),
+      vptr: cast[ByteAddress](self.vptr),
+      slot: "onAsyncReevaluateCommunityMembersPermissionsCompleted",
+      communityId: communityId,
+    )
+    self.threadpool.start(arg)
+
+  proc onAsyncReevaluateCommunityMembersPermissionsCompleted*(self: Service, response: string) {.slot.} =
+    try:
+      let rpcResponseObj = response.parseJson
+
+      if rpcResponseObj{"error"}.kind != JNull and rpcResponseObj{"error"}.getStr != "":
+        raise newException(RpcException, rpcResponseObj["error"].getStr)
+
+    except Exception as e:
+      error "error while reevaluating community members permissions", msg = e.msg
+
+  proc asyncSetCommunityShard*(self: Service, communityId: string, shardIndex: int) =
+    try:
+      let arg = AsyncSetCommunityShardArg(
+        tptr: cast[ByteAddress](asyncSetCommunityShardTask),
+        vptr: cast[ByteAddress](self.vptr),
+        slot: "onAsyncSetCommunityShardDone",
+        communityId: communityId,
+        shardIndex: shardIndex,
+      )
+      self.threadpool.start(arg)
+    except Exception as e:
+      error "Error request to join community", msg = e.msg
+
+  proc onAsyncSetCommunityShardDone*(self: Service, communityIdAndRpcResponse: string) {.slot.} =
+    let rpcResponseObj = communityIdAndRpcResponse.parseJson
+    try:
+      if (rpcResponseObj{"error"}.kind != JNull and rpcResponseObj{"error"}.getStr != ""):
+        raise newException(CatchableError, rpcResponseObj{"error"}.getStr)
+
+      let rpcResponse = Json.decode($rpcResponseObj["response"], RpcResponse[JsonNode])
+      let community = rpcResponse.result["communities"][0].toCommunityDto()
+
+      self.handleCommunityUpdates(@[community], @[], @[])
+      self.events.emit(SIGNAL_COMMUNITY_SHARD_SET, CommunityShardSetArgs(communityId: rpcResponseObj["communityId"].getStr))
+
+    except Exception as e:
+      error "Error setting community shard", msg = e.msg
+      self.events.emit(SIGNAL_COMMUNITY_SHARD_SET_FAILED, CommunityShardSetArgs(communityId: rpcResponseObj["communityId"].getStr))

@@ -1,14 +1,16 @@
 import QtQuick 2.15
 
+import utils 1.0
+
 ListModel {
     id: root
 
     readonly property ListModel tokenOwnersModel: TokenHoldersModel {}
+    readonly property ListModel emptyModel: ListModel {}
 
     readonly property var data: [
         {
-            isPrivilegedToken: true,
-            isOwner: true,
+            privilegesLevel: Constants.TokenPrivilegesLevel.Owner,
             contractUniqueKey: "0x15a23414a3",
             tokenType: 2,
             name: "Owner-Doodles",
@@ -21,14 +23,14 @@ ListModel {
             infiniteSupply: false,
             transferable: true,
             remoteSelfDestruct: false,
-            chainId: 2,
-            chainName: "Optimism",
-            chainIcon: ModelsData.networks.optimism,
-            accountName: "Another account - generated"
+            chainId: 3,
+            chainName: "Arbitrum",
+            chainIcon: ModelsData.networks.arbitrum,
+            accountName: "Another account - generated",
+            tokenOwnersModel: root.emptyModel
         },
         {
-            isPrivilegedToken: true,
-            isOwner: false,
+            privilegesLevel: Constants.TokenPrivilegesLevel.TMaster,
             contractUniqueKey: "0x23124443",
             tokenType: 2,
             name: "TMaster-Doodles",
@@ -41,14 +43,14 @@ ListModel {
             infiniteSupply: true,
             transferable: false,
             remoteSelfDestruct: true,
-            chainId: 2,
-            chainName: "Optimism",
-            chainIcon: ModelsData.networks.optimism,
-            accountName: "Another account - generated"
+            chainId: 3,
+            chainName: "Arbitrum",
+            chainIcon: ModelsData.networks.arbitrum,
+            accountName: "Another account - generated",
+            tokenOwnersModel: root.tokenOwnersModel
         },
         {
-            isPrivilegedToken: false,
-            isOwner: false,
+            privilegesLevel: Constants.TokenPrivilegesLevel.Community,
             contractUniqueKey: "0x1726362343",
             tokenType: 2,
             name: "SuperRare artwork",
@@ -64,11 +66,11 @@ ListModel {
             chainId: 1,
             chainName: "Testnet",
             chainIcon: ModelsData.networks.testnet,
-            accountName: "Status Account"
+            accountName: "Status Account",
+            tokenOwnersModel: root.emptyModel
         },
         {
-            isPrivilegedToken: false,
-            isOwner: false,
+            privilegesLevel: Constants.TokenPrivilegesLevel.Community,
             contractUniqueKey: "0x847843",
             tokenType: 2,
             name: "Kitty artwork",
@@ -84,11 +86,11 @@ ListModel {
             chainId: 2,
             chainName: "Optimism",
             chainIcon: ModelsData.networks.optimism,
-            accountName: "Status New Account"
+            accountName: "Status New Account",
+            tokenOwnersModel: root.emptyModel
         },
         {
-            isPrivilegedToken: false,
-            isOwner: false,
+            privilegesLevel: Constants.TokenPrivilegesLevel.Community,
             contractUniqueKey: "0x1234525",
             tokenType: 2,
             name: "More artwork",
@@ -104,11 +106,11 @@ ListModel {
             chainId: 5,
             chainName: "Custom",
             chainIcon: ModelsData.networks.custom,
-            accountName: "Other Account"
+            accountName: "Other Account",
+            tokenOwnersModel: root.emptyModel
         },
         {
-            isPrivilegedToken: false,
-            isOwner: false,
+            privilegesLevel: Constants.TokenPrivilegesLevel.Community,
             contractUniqueKey: "0x38576852",
             tokenType: 2,
             name: "Crypto Punks artwork",
@@ -128,8 +130,7 @@ ListModel {
             tokenOwnersModel: root.tokenOwnersModel
         },
         {
-            isPrivilegedToken: false,
-            isOwner: false,
+            privilegesLevel: Constants.TokenPrivilegesLevel.Community,
             contractUniqueKey: "0x38745623865",
             tokenType: 1,
             name: "Unisocks",
@@ -144,11 +145,11 @@ ListModel {
             chainId: 2,
             chainName: "Optimism",
             chainIcon: ModelsData.networks.optimism,
-            accountName: "Status SNT Account"
+            accountName: "Status SNT Account",
+            tokenOwnersModel: root.emptyModel
         },
         {
-            isPrivilegedToken: false,
-            isOwner: false,
+            privilegesLevel: Constants.TokenPrivilegesLevel.Community,
             contractUniqueKey: "0x872364871623",
             tokenType: 1,
             name: "Dai",
@@ -163,7 +164,8 @@ ListModel {
             chainId: 1,
             chainName: "Testnet",
             chainIcon: ModelsData.networks.testnet,
-            accountName: "Status Account"
+            accountName: "Status Account",
+            tokenOwnersModel: root.emptyModel
         }
     ]
 

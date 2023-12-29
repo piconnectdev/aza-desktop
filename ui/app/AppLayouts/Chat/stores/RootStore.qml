@@ -56,6 +56,17 @@ QtObject {
         }
     }
 
+    function prepareTokenModelForCommunity(publicKey) {
+        root.communitiesModuleInst.prepareTokenModelForCommunity(publicKey)
+    }
+
+    readonly property bool requirementsCheckPending: root.communitiesModuleInst.requirementsCheckPending
+
+    readonly property var permissionsModel: !!root.communitiesModuleInst.spectatedCommunityPermissionModel ?
+                                     root.communitiesModuleInst.spectatedCommunityPermissionModel : null
+
+    readonly property string overviewChartData: chatCommunitySectionModule.overviewChartData
+
     readonly property bool isUserAllowedToSendMessage: _d.isUserAllowedToSendMessage
     readonly property string chatInputPlaceHolderText: _d.chatInputPlaceHolderText
     readonly property var oneToOneChatContact: _d.oneToOneChatContact
@@ -68,6 +79,10 @@ QtObject {
         return chatCommunitySectionModule.getChatContentModule()
     }
 
+    function copyToClipboard(text) {
+        globalUtils.copyToClipboard(text)
+    }
+
     // Contact requests related part
     property var contactRequestsModel: chatCommunitySectionModule.contactRequestsModel
 
@@ -75,11 +90,13 @@ QtObject {
 
     property var advancedModule: profileSectionModule.advancedModule
 
+    property var privacyModule: profileSectionModule.privacyModule
+
+    readonly property bool permissionsCheckOngoing: chatCommunitySectionModule.permissionsCheckOngoing
+
     signal importingCommunityStateChanged(string communityId, int state, string errorMsg)
 
     signal communityAdded(string communityId)
-
-    signal communityInfoAlreadyRequested()
 
     signal communityAccessRequested(string communityId)
 
@@ -200,8 +217,6 @@ QtObject {
 
     property var walletSectionSendInst: walletSectionSend
 
-    property bool isWakuV2StoreEnabled: advancedModule ? advancedModule.isWakuV2StoreEnabled : false
-
     property string communityTags: communitiesModule.tags
 
     property var stickersModuleInst: stickersModule
@@ -216,11 +231,6 @@ QtObject {
 
     function sendSticker(channelId, hash, replyTo, pack, url) {
         stickersModuleInst.send(channelId, hash, replyTo, pack, url)
-    }
-
-    // TODO: This seems to be better in Utils.qml
-    function copyToClipboard(text) {
-        globalUtilsInst.copyToClipboard(text)
     }
 
     function isCurrentUser(pubkey) {
@@ -380,8 +390,28 @@ QtObject {
         return communitiesModuleInst.spectateCommunity(id, ensName)
     }
 
-    function requestToJoinCommunityWithAuthentication(ensName, addressesToShare = [], airdropAddress = "") {
-        chatCommunitySectionModule.requestToJoinCommunityWithAuthenticationWithSharedAddresses(ensName, JSON.stringify(addressesToShare), airdropAddress)
+    function prepareKeypairsForSigning(communityId, ensName, addressesToShare = [], airdropAddress = "", editMode = false) {
+        communitiesModuleInst.prepareKeypairsForSigning(communityId, ensName, JSON.stringify(addressesToShare), airdropAddress, editMode)
+    }
+
+    function signSharedAddressesForAllNonKeycardKeypairs() {
+        communitiesModuleInst.signSharedAddressesForAllNonKeycardKeypairs()
+    }
+
+    function signSharedAddressesForKeypair(keyUid) {
+        communitiesModuleInst.signSharedAddressesForKeypair(keyUid)
+    }
+
+    function joinCommunityOrEditSharedAddresses() {
+        communitiesModuleInst.joinCommunityOrEditSharedAddresses()
+    }
+
+    function getChainIdForChat() {
+        return walletSection.getChainIdForChat()
+    }
+
+    function getLatestBlockNumber(chainId) {
+        return walletSection.getChainIdForSend(chainId)
     }
 
     function userCanJoin(id) {
@@ -392,8 +422,8 @@ QtObject {
         return communitiesModuleInst.isUserMemberOfCommunity(id)
     }
 
-    function isCommunityRequestPending(id) {
-        return communitiesModuleInst.isCommunityRequestPending(id)
+    function isMyCommunityRequestPending(id) {
+        return communitiesModuleInst.isMyCommunityRequestPending(id)
     }
 
     function cancelPendingRequest(id: string) {
@@ -408,8 +438,17 @@ QtObject {
         return communitiesList.getSectionByIdJson(id)
     }
 
-    function requestCommunityInfo(id, importing = false) {
-        communitiesModuleInst.requestCommunityInfo(id, importing)
+    // intervals is a string containing json array [{startTimestamp: 1690548852, startTimestamp: 1690547684}, {...}]
+    function collectCommunityMetricsMessagesTimestamps(intervals) {
+        chatCommunitySectionModule.collectCommunityMetricsMessagesTimestamps(intervals)
+    }
+
+    function collectCommunityMetricsMessagesCount(intervals) {
+        chatCommunitySectionModule.collectCommunityMetricsMessagesCount(intervals)
+    }
+
+    function requestCommunityInfo(id, shardCluster, shardIndex, importing = false) {
+        communitiesModuleInst.requestCommunityInfo(id, shardCluster, shardIndex, importing)
     }
 
     function getCommunityDetailsAsJson(id) {
@@ -431,75 +470,6 @@ QtObject {
         catch (e) {
             console.warn("error parsing chat by id: ", id, " error: ", e.message)
             return {}
-        }
-    }
-
-    function getLinkTitleAndCb(link) {
-        const result = {
-            title: "Status",
-            callback: null,
-            fetching: true,
-            communityId: ""
-        }
-
-        // User profile
-        // There is invitation bubble only for /c/ link for now
-        /*let index = link.indexOf("/u/")
-        if (index > -1) {
-            //const pk = link.substring(index + 3)
-            result.title = qsTr("Display user profile")
-            result.callback = function () {
-                mainModuleInst.activateStatusDeepLink(link)
-            }
-            return result
-        }*/
-
-        // Community
-        result.communityId = Utils.getCommunityIdFromShareLink(link)
-        if(!result.communityId) return result
-
-        const communityName = getSectionNameById(result.communityId)
-        if (!communityName) {
-            // Unknown community, fetch the info if possible
-            root.requestCommunityInfo(result.communityId)
-            return result
-        }
-
-        result.title = qsTr("Join the %1 community").arg(communityName)
-        result.fetching = false
-        result.callback = function () {
-            const isUserMemberOfCommunity = isUserMemberOfCommunity(result.communityId)
-            if (isUserMemberOfCommunity) {
-                setActiveCommunity(result.communityId)
-                return
-            }
-
-            const userCanJoin = userCanJoin(result.communityId)
-            // TODO find what to do when you can't join
-            if (userCanJoin) {
-                requestToJoinCommunityWithAuthentication(userProfileInst.preferredName) // FIXME what addresses to share?
-            }
-        }
-        return result
-    }
-
-    function getLinkDataForStatusLinks(link) {
-        if (!Utils.isStatusDeepLink(link)) {
-            return
-        }
-
-        const result = getLinkTitleAndCb(link)
-
-        return {
-            site: Constants.externalStatusLinkWithHttps,
-            title: result.title,
-            communityId: result.communityId,
-            fetching: result.fetching,
-            thumbnailUrl: Style.png("status"),
-            contentType: "",
-            height: 0,
-            width: 0,
-            callback: result.callback
         }
     }
 
@@ -568,32 +538,12 @@ QtObject {
         return profileSectionModule.ensUsernamesModule.getGasEthValue(gweiValue, gasLimit)
     }
 
-    function estimateGas(from_addr, to, assetSymbol, value, chainId, data) {
-        return walletSectionSendInst.estimateGas(from_addr, to, assetSymbol, value === "" ? "0.00" : value, chainId, data)
-    }
-
-    function authenticateAndTransfer(from, to, tokenSymbol, amount, uuid, selectedRoutes) {
-        walletSectionSendInst.authenticateAndTransfer(from, to, tokenSymbol, amount, uuid, selectedRoutes)
-    }
-
-    function suggestedFees(chainId) {
-        return JSON.parse(walletSectionSendInst.suggestedFees(chainId))
-    }
-
-    function suggestedRoutes(account, amount, token, disabledFromChainIDs, disabledToChainIDs, preferredChainIds, sendType, lockedInAmounts) {
-        walletSectionSendInst.suggestedRoutes(account, amount, token, disabledFromChainIDs, disabledToChainIDs, preferredChainIds, sendType, lockedInAmounts)
-    }
-
     function resolveENS(value) {
         mainModuleInst.resolveENS(value, "")
     }
 
     function getWei2Eth(wei) {
         return globalUtilsInst.wei2Eth(wei,18)
-    }
-
-    function getEth2Wei(eth) {
-         return globalUtilsInst.eth2Wei(eth, 18)
     }
 
     function getEtherscanLink() {
@@ -615,23 +565,10 @@ QtObject {
         return Constants.LoginType.Password
     }
 
-    function authenticateWithCallback(callback) {
-        _d.authenticationCallbacks.push(callback)
-        chatCommunitySectionModule.authenticateWithCallback()
-    }
-
-    function removePrivateKey(communityId) {
-        root.communitiesModuleInst.removePrivateKey(communityId)
-    }
-
     readonly property Connections communitiesModuleConnections: Connections {
       target: communitiesModuleInst
       function onImportingCommunityStateChanged(communityId, state, errorMsg) {
           root.importingCommunityStateChanged(communityId, state, errorMsg)
-      }
-
-      function onCommunityInfoAlreadyRequested() {
-          root.communityInfoAlreadyRequested()
       }
 
       function onCommunityAccessRequested(communityId) {
@@ -647,7 +584,7 @@ QtObject {
         target: mainModuleInst
         enabled: !!chatCommunitySectionModule
         function onOpenCommunityMembershipRequestsView(sectionId: string) {
-            if(root.getMySectionId() != sectionId)
+            if(root.getMySectionId() !== sectionId)
                 return
 
             root.goToMembershipRequestsPage()
@@ -655,19 +592,6 @@ QtObject {
     }
 
     readonly property QtObject _d: QtObject {
-        property var authenticationCallbacks: []
-
-        readonly property Connections chatCommunitySectionModuleConnections: Connections {
-            target: chatCommunitySectionModule
-            function onCallbackFromAuthentication(authenticated: bool) {
-                _d.authenticationCallbacks.forEach((callback) => {
-                    if(!!callback)
-                        callback(authenticated)
-                })
-                _d.authenticationCallbacks = []
-            }
-        }
-
         readonly property var sectionDetailsInstantiator: Instantiator {
             model: SortFilterProxyModel {
                 sourceModel: mainModuleInst.sectionsModel
@@ -680,6 +604,7 @@ QtObject {
                 readonly property string id: model.id
                 readonly property int sectionType: model.sectionType
                 readonly property string name: model.name
+                readonly property string image: model.image
                 readonly property bool joined: model.joined
                 readonly property bool amIBanned: model.amIBanned
                 // add others when needed..
@@ -691,9 +616,9 @@ QtObject {
         readonly property bool amIMember: chatCommunitySectionModule ? chatCommunitySectionModule.amIMember : false
 
         property var oneToOneChatContact: undefined
-        readonly property string oneToOneChatContactName: !!_d.oneToOneChatContact ? ProfileUtils.displayName(_d.oneToOneChatContact.localNickname, 
-                                                                                                    _d.oneToOneChatContact.name, 
-                                                                                                    _d.oneToOneChatContact.displayName, 
+        readonly property string oneToOneChatContactName: !!_d.oneToOneChatContact ? ProfileUtils.displayName(_d.oneToOneChatContact.localNickname,
+                                                                                                    _d.oneToOneChatContact.name,
+                                                                                                    _d.oneToOneChatContact.displayName,
                                                                                                     _d.oneToOneChatContact.alias) : ""
 
         //Update oneToOneChatContact when the contact is updated
@@ -753,9 +678,13 @@ QtObject {
 
         //Update oneToOneChatContact when activeChat id changes
         Binding on oneToOneChatContact {
-            when: _d.activeChatId && _d.activeChatType === Constants.chatType.oneToOne 
+            when: _d.activeChatId && _d.activeChatType === Constants.chatType.oneToOne
             value: Utils.getContactDetailsAsJson(_d.activeChatId, false)
             restoreMode: Binding.RestoreBindingOrValue
         }
+    }
+
+    function updatePermissionsModel(communityId, sharedAddresses) {
+        communitiesModuleInst.checkPermissions(communityId, JSON.stringify(sharedAddresses))
     }
 }

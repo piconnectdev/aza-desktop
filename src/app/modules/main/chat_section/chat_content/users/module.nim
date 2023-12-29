@@ -98,7 +98,7 @@ proc addChatMember(self: Module,  member: ChatMember) =
   if member.id == "":
     return
 
-  if not member.joined:
+  if not self.controller.belongsToCommunity() and not member.joined:
     if self.view.model().isContactWithIdAdded(member.id):
       # Member is no longer joined
       self.view.model().removeItemById(member.id)
@@ -133,7 +133,6 @@ proc addChatMember(self: Module,  member: ChatMember) =
     memberRole = member.role,
     joined = member.joined,
     isUntrustworthy = contactDetails.dto.trustStatus == TrustStatus.Untrustworthy,
-    airdropAddress = member.airdropAccount.address,
     ))
 
 method onChatMembersAdded*(self: Module, ids: seq[string]) =

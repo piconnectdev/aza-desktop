@@ -5,6 +5,8 @@ QtObject {
     id: root
 
     property var advancedModule
+    property var walletModule
+    property var networksModule: root.walletModule.networksModule
 
     // Advanced Module Properties
     property string fleet: advancedModule? advancedModule.fleet : ""
@@ -13,7 +15,7 @@ QtObject {
     property bool isTelemetryEnabled: advancedModule? advancedModule.isTelemetryEnabled : false
     property bool isAutoMessageEnabled: advancedModule? advancedModule.isAutoMessageEnabled : false
     property bool isDebugEnabled: advancedModule? advancedModule.isDebugEnabled : false
-    property bool isWakuV2StoreEnabled: advancedModule ? advancedModule.isWakuV2StoreEnabled : false
+    readonly property bool isWakuV2ShardedCommunitiesEnabled: localAppSettings.wakuV2ShardedCommunitiesEnabled ?? false
     property int logMaxBackups: advancedModule ? advancedModule.logMaxBackups : 1
 
     property var customNetworksModel: advancedModule? advancedModule.customNetworksModel : []
@@ -21,26 +23,28 @@ QtObject {
     property bool isWakuV2: root.fleet === Constants.waku_prod   ||
                             root.fleet === Constants.waku_test   ||
                             root.fleet === Constants.status_test ||
-                            root.fleet === Constants.status_prod
+                            root.fleet === Constants.status_prod ||
+                            root.fleet === Constants.shards_test
 
     readonly property bool isFakeLoadingScreenEnabled: localAppSettings.fakeLoadingScreenEnabled ?? false
+    property bool isManageCommunityOnTestModeEnabled: false
     readonly property QtObject experimentalFeatures: QtObject {
         readonly property string browser: "browser"
         readonly property string communities: "communities"
         readonly property string activityCenter: "activityCenter"
         readonly property string nodeManagement: "nodeManagement"
         readonly property string onlineUsers: "onlineUsers"
-        readonly property string gifWidget: "gifWidget"
         readonly property string communitiesPortal: "communitiesPortal"
         readonly property string communityPermissions: "communityPermissions"
         readonly property string discordImportTool: "discordImportTool"
-        readonly property string wakuV2StoreEnabled: "wakuV2StoreEnabled"
         readonly property string communityTokens: "communityTokens"
     }
 
     readonly property bool isCustomScrollingEnabled: localAppSettings.isCustomMouseScrollingEnabled ?? false
     readonly property real scrollVelocity: localAppSettings.scrollVelocity
     readonly property real scrollDeceleration: localAppSettings.scrollDeceleration
+
+    readonly property bool isSepoliaEnabled: networksModule.isSepoliaEnabled
 
     function logDir() {
         if(!root.advancedModule)
@@ -125,10 +129,6 @@ QtObject {
         else if (feature === experimentalFeatures.communitiesPortal) {
             advancedModule.toggleCommunitiesPortalSection()
         }
-        else if (feature === experimentalFeatures.wakuV2StoreEnabled) {
-            // toggle history archive support
-            advancedModule.toggleWakuV2Store()
-        }
         else if (feature === experimentalFeatures.activityCenter) {
             localAccountSensitiveSettings.isActivityCenterEnabled = !localAccountSensitiveSettings.isActivityCenterEnabled
         }
@@ -138,9 +138,6 @@ QtObject {
         else if (feature === experimentalFeatures.onlineUsers) {
             localAccountSensitiveSettings.showOnlineUsers = !localAccountSensitiveSettings.showOnlineUsers
         }
-        else if (feature === experimentalFeatures.gifWidget) {
-            localAccountSensitiveSettings.isGifWidgetEnabled = !localAccountSensitiveSettings.isGifWidgetEnabled
-        }
     }
 
     function toggleFakeLoadingScreen() {
@@ -148,6 +145,17 @@ QtObject {
             return
 
         localAppSettings.fakeLoadingScreenEnabled = !localAppSettings.fakeLoadingScreenEnabled
+    }
+
+    function toggleManageCommunityOnTestnet() {
+        root.isManageCommunityOnTestModeEnabled = !root.isManageCommunityOnTestModeEnabled
+    }
+
+    function toggleWakuV2ShardedCommunities() {
+        if(!localAppSettings)
+            return
+
+        localAppSettings.wakuV2ShardedCommunitiesEnabled = !localAppSettings.wakuV2ShardedCommunitiesEnabled
     }
 
     function setCustomScrollingEnabled(value) {
@@ -170,4 +178,9 @@ QtObject {
 
         localAppSettings.scrollDeceleration = value
     }
+
+    function toggleIsSepoliaEnabled(){
+        networksModule.toggleIsSepoliaEnabled()
+    }
+
 }

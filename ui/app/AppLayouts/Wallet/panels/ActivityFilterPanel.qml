@@ -18,11 +18,12 @@ Column {
     property var activityFilterStore
     property var store
     property bool isLoading: false
+    property bool hideNoResults: false
 
     spacing: 12
 
-    Component.onCompleted: {
-        activityFilterStore.updateFilterBase()
+    function resetView() {
+        activityFilterMenu.resetView()
     }
 
     Flow {
@@ -39,7 +40,10 @@ Column {
             border.color: Theme.palette.directColor8
             type: StatusRoundButton.Type.Tertiary
             icon.color: Theme.palette.primaryColor1
-            onClicked: activityFilterMenu.popup(x, y + height + 4)
+            onClicked: {
+                activityFilterStore.updateStartTimestamp()
+                activityFilterMenu.popup(x, y + height + 4)
+            }
         }
 
         ActivityFilterTagItem {
@@ -76,12 +80,14 @@ Column {
                                           return qsTr("Send")
                                       case Constants.TransactionType.Receive:
                                           return qsTr("Receive")
-                                      case Constants.TransactionType.Buy:
-                                          return qsTr("Buy")
                                       case Constants.TransactionType.Swap:
                                           return qsTr("Swap")
                                       case Constants.TransactionType.Bridge:
                                           return qsTr("Bridge")
+                                      case Constants.TransactionType.ContractDeployment:
+                                          return qsTr("Contract Deployment")
+                                      case Constants.TransactionType.Mint:
+                                          return qsTr("Mint")
                                       default:
                                           console.warn("Unhandled type :: ",activityFilterStore.typeFilters[index])
                                           return ""
@@ -91,12 +97,14 @@ Column {
                                     return "send"
                                 case Constants.TransactionType.Receive:
                                     return "receive"
-                                case Constants.TransactionType.Buy:
-                                    return "token"
                                 case Constants.TransactionType.Swap:
                                     return "swap"
                                 case Constants.TransactionType.Bridge:
                                     return "bridge"
+                                case Constants.TransactionType.ContractDeployment:
+                                    return "contract_deploy"
+                                case Constants.TransactionType.Mint:
+                                    return "token"
                                 default:
                                     console.warn("Unhandled type :: ",activityFilterStore.typeFilters[index])
                                     return ""
@@ -116,7 +124,7 @@ Column {
                                           return qsTr("Pending")
                                       case Constants.TransactionStatus.Complete:
                                           return qsTr("Complete")
-                                      case Constants.TransactionStatus.Finished:
+                                      case Constants.TransactionStatus.Finalised:
                                           return qsTr("Finalised")
                                       default:
                                           console.warn("Unhandled status :: ",activityFilterStore.statusFilters[index])
@@ -128,7 +136,7 @@ Column {
                                 case Constants.TransactionStatus.Pending:
                                     return Style.svg("transaction/pending")
                                 case Constants.TransactionStatus.Complete:
-                                    return Style.svg("transaction/verified")
+                                    return Style.svg("transaction/confirmed")
                                 case Constants.TransactionStatus.Finished:
                                     return Style.svg("transaction/finished")
                                 default:
@@ -141,55 +149,79 @@ Column {
         }
 
         Repeater {
-            model: activityFilterStore.tokensList
+            model: activityFilterStore.tokensFilter
             delegate: ActivityFilterTagItem {
-                tagPrimaryLabel.text: symbol
-                iconAsset.icon: Constants.tokenIcon(symbol)
+                tagPrimaryLabel.text: modelData
+                iconAsset.icon: Constants.tokenIcon(modelData)
                 iconAsset.color: "transparent"
-                visible: !activityFilterMenu.allTokensChecked && activityFilterStore.tokensFilter.includes(symbol)
-                onClosed: activityFilterStore.toggleToken(symbol)
+                onClosed: activityFilterStore.toggleToken(modelData)
             }
         }
 
         Repeater {
-            model: activityFilterStore.collectiblesList
+            model: activityFilterStore.collectiblesFilter
             delegate: ActivityFilterTagItem {
-                tagPrimaryLabel.text: model.name
-                iconAsset.icon: model.imageUrl
+                id: collectibleTag
+                property string uid: modelData
+                readonly property string name: activityFilterStore.collectiblesList.getName(uid)
+                readonly property bool isValid: name.length > 0
+                tagPrimaryLabel.text: {
+                    if (!!name)
+                        return name
+                    // Fallback, get tokenId from uid
+                    const data = uid.split("+")
+                    if (data.length === 3)
+                        return "#" + data[2]
+                    return ""
+                }
+                iconAsset.icon: activityFilterStore.collectiblesList.getImageUrl(uid)
                 iconAsset.color: "transparent"
-                visible: !activityFilterMenu.allCollectiblesChecked && activityFilterStore.collectiblesFilter.includes(model.id)
-                onClosed: activityFilterStore.toggleCollectibles(model.id)
+                onClosed: activityFilterStore.toggleCollectibles(uid)
+
+                Connections {
+                    // Collectibles model is fetched asynchronously, so data might not be available
+                    target: activityFilterStore
+                    enabled: !collectibleTag.isValid
+                    function onLoadingCollectiblesChanged() {
+                        if (activityFilterStore.loadingCollectibles || !activityFilterStore.collectiblesList.hasMore)
+                            return
+                        collectibleTag.uid = ""
+                        collectibleTag.uid = modelData
+                        if (!collectibleTag.isValid)
+                            activityFilterStore.collectiblesList.loadMore()
+                    }
+                }
             }
         }
 
         Repeater {
-            model: activityFilterStore.recentsList
+            model: activityFilterStore.recentsFilters
             delegate: ActivityFilterTagItem {
-                tagPrimaryLabel.text: root.store.getNameForAddress(model.address) || StatusQUtils.Utils.elideText(model.address,6,4)
-                visible: !activityFilterMenu.allRecentsChecked && activityFilterMenu.recentsFilters.includes(model.address)
-                onClosed: activityFilterStore.toggleRecents(model.address)
+                tagPrimaryLabel.text: root.store.getNameForAddress(modelData) || StatusQUtils.Utils.elideText(modelData,6,4)
+                onClosed: activityFilterStore.toggleRecents(modelData)
             }
         }
 
         Repeater {
-            model: activityFilterStore.savedAddressList
+            model: activityFilterStore.savedAddressFilters
             delegate: ActivityFilterTagItem {
-                tagPrimaryLabel.text: ens.length > 0 ? ens : chainShortNames + StatusQUtils.Utils.elideText(address,6,4)
-                visible: !activityFilterMenu.allSavedAddressesChecked && activityFilterMenu.savedAddressFilters.includes(address)
-                onClosed: activityFilterStore.toggleSavedAddress(address)
+                tagPrimaryLabel.text: activityFilterStore.getEnsForSavedWalletAddress(modelData)
+                                      || activityFilterStore.getChainShortNamesForSavedWalletAddress(modelData) + StatusQUtils.Utils.elideText(modelData,6,4)
+                onClosed: activityFilterStore.toggleSavedAddress(modelData)
             }
         }
     }
 
     Separator {
-        visible: noResultsAfterFilter.visible
+        visible: noResultsAfterFilter.noResults
     }
 
     StatusBaseText {
         id: noResultsAfterFilter
+        readonly property bool noResults: !root.isLoading && activityFilterStore.transactionsList.count === 0 && activityFilterStore.filtersSet
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.topMargin: 16
-        visible: !root.isLoading && activityFilterStore.transactionsList.count === 0 && activityFilterStore.filtersSet
+        visible: !root.hideNoResults && noResults
         text: qsTr("No activity items for the current filter")
         font.pixelSize: Style.current.primaryTextFontSize
         color: Theme.palette.baseColor1
@@ -227,11 +259,12 @@ Column {
         collectiblesList: activityFilterStore.collectiblesList
         collectiblesFilter: activityFilterStore.collectiblesFilter
         onUpdateTokensFilter: activityFilterStore.toggleToken(tokenSymbol)
-        onUpdateCollectiblesFilter: activityFilterStore.toggleCollectibles(id)
+        onUpdateCollectiblesFilter: activityFilterStore.toggleCollectibles(uid)
 
         store: root.store
         recentsList: activityFilterStore.recentsList
         loadingRecipients: activityFilterStore.loadingRecipients
+        loadingCollectibles: activityFilterStore.loadingCollectibles
         recentsFilters: activityFilterStore.recentsFilters
         savedAddressList: activityFilterStore.savedAddressList
         savedAddressFilters: activityFilterStore.savedAddressFilters
@@ -243,8 +276,8 @@ Column {
     StatusDateRangePicker {
         id: dialog
         anchors.centerIn: parent
-        fromTimestamp: activityFilterStore.fromTimestamp
-        toTimestamp: activityFilterStore.toTimestamp
+        fromTimestamp: activityFilterStore.currentActivityStartTimestamp
+        toTimestamp: new Date().valueOf()
         onNewRangeSet: {
             activityFilterStore.setCustomTimeRange(fromTimestamp, toTimestamp)
             activityFilterStore.setSelectedTimestamp(Constants.TransactionTimePeriod.Custom)

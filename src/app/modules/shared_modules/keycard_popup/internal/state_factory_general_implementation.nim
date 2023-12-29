@@ -6,7 +6,7 @@ proc extractPredefinedKeycardDataToNumber*(currValue: string): int =
     return currNum
   except:
     return 0
-    
+
 proc updatePredefinedKeycardData*(currValue: string, value: PredefinedKeycardData, add: bool): string =
   var currNum: int
   try:
@@ -19,7 +19,7 @@ proc updatePredefinedKeycardData*(currValue: string, value: PredefinedKeycardDat
       if parseInt(currValue, currNum) == 0:
         return ""
       else:
-        return $(currNum and (not value.int))  
+        return $(currNum and (not value.int))
   except:
     return if add: $(value.int) else: ""
 
@@ -31,6 +31,8 @@ proc isPredefinedKeycardDataFlagSet*(currValue: string, value: PredefinedKeycard
     return (currNum and value.int) == value.int
 
 proc createState*(stateToBeCreated: StateType, flowType: FlowType, backState: State): State =
+  if stateToBeCreated == StateType.Biometrics:
+    return newBiometricsState(flowType, backState)
   if stateToBeCreated == StateType.BiometricsPasswordFailed:
     return newBiometricsPasswordFailedState(flowType, backState)
   if stateToBeCreated == StateType.BiometricsPinFailed:
@@ -45,12 +47,16 @@ proc createState*(stateToBeCreated: StateType, flowType: FlowType, backState: St
     return newChangingKeycardPinState(flowType, backState)
   if stateToBeCreated == StateType.ChangingKeycardPuk:
     return newChangingKeycardPukState(flowType, backState)
+  if stateToBeCreated == StateType.ConfirmPassword:
+    return newConfirmPasswordState(flowType, backState)
   if stateToBeCreated == StateType.CopyToKeycard:
     return newCopyToKeycardState(flowType, backState)
   if stateToBeCreated == StateType.CopyingKeycard:
     return newCopyingKeycardState(flowType, backState)
   if stateToBeCreated == StateType.CreatePairingCode:
     return newCreatePairingCodeState(flowType, backState)
+  if stateToBeCreated == StateType.CreatePassword:
+    return newCreatePasswordState(flowType, backState)
   if stateToBeCreated == StateType.CreatePin:
     return newCreatePinState(flowType, backState)
   if stateToBeCreated == StateType.CreatePuk:
@@ -143,8 +149,14 @@ proc createState*(stateToBeCreated: StateType, flowType: FlowType, backState: St
     return newMaxPukRetriesReachedState(flowType, backState)
   if stateToBeCreated == StateType.MaxPairingSlotsReached:
     return newMaxPairingSlotsReachedState(flowType, backState)
-  if stateToBeCreated == StateType.MigratingKeyPair:
-    return newMigratingKeyPairState(flowType, backState)
+  if stateToBeCreated == StateType.MigrateKeypairToApp:
+    return newMigrateKeypairToAppState(flowType, backState)
+  if stateToBeCreated == StateType.MigrateKeypairToKeycard:
+    return newMigrateKeypairToKeycardState(flowType, backState)
+  if stateToBeCreated == StateType.MigratingKeypairToApp:
+    return newMigratingKeypairToAppState(flowType, backState)
+  if stateToBeCreated == StateType.MigratingKeypairToKeycard:
+    return newMigratingKeypairToKeycardState(flowType, backState)
   if stateToBeCreated == StateType.NoPCSCService:
     return newNoPCSCServiceState(flowType, backState)
   if stateToBeCreated == StateType.NotKeycard:
@@ -193,5 +205,15 @@ proc createState*(stateToBeCreated: StateType, flowType: FlowType, backState: St
     return newWrongKeychainPinState(flowType, backState)
   if stateToBeCreated == StateType.WrongSeedPhrase:
     return newWrongSeedPhraseState(flowType, backState)
-  
+
   error "No implementation available for state ", state=stateToBeCreated
+
+proc findBackStateWithTargetedStateType*(currentState: State, targetedStateType: StateType): State =
+  if currentState.isNil:
+    return nil
+  var state = currentState
+  while not state.isNil:
+    if state.stateType == targetedStateType:
+      return state
+    state = state.getBackState
+  return nil

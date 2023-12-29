@@ -1,14 +1,24 @@
 #include <QtQuickTest/quicktest.h>
 #include <QQmlEngine>
 
+#include <QtWebEngine>
+
 #include "TestHelpers/MonitorQtOutput.h"
+#include "TestHelpers/modelaccessobserverproxy.h"
+
+class RunBeforeQApplicationIsInitialized {
+public:
+    RunBeforeQApplicationIsInitialized()
+    {
+        QtWebEngine::initialize();
+    }
+};
+
+static RunBeforeQApplicationIsInitialized runBeforeQApplicationIsInitialized;
 
 class TestSetup : public QObject
 {
     Q_OBJECT
-
-public:
-    TestSetup() {}
 
 public slots:
     void qmlEngineAvailable(QQmlEngine *engine)
@@ -18,9 +28,10 @@ public slots:
 
         // TODO: Alternative to not yet supported QML_ELEMENT
         qmlRegisterType<MonitorQtOutput>("StatusQ.TestHelpers", 0, 1, "MonitorQtOutput");
+        qmlRegisterType<ModelAccessObserverProxy>("StatusQ.TestHelpers", 0, 1, "ModelAccessObserverProxy");
     }
 };
 
-QUICK_TEST_MAIN_WITH_SETUP(TestControls, TestSetup)
+QUICK_TEST_MAIN_WITH_SETUP(TestStatusQ, TestSetup)
 
 #include "main.moc"

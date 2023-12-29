@@ -2,8 +2,9 @@ import NimQml, Tables, strformat, sequtils, stint
 import token_item
 import token_owners_item
 import token_owners_model
+import ../../../../../../app_service/service/community/dto/community
 import ../../../../../../app_service/service/community_tokens/dto/community_token
-import ../../../../../../app_service/service/collectible/dto
+import ../../../../../../app_service/service/community_tokens/community_collectible_owner
 import ../../../../../../app_service/common/utils
 import ../../../../../../app_service/common/types
 
@@ -26,9 +27,13 @@ type
     ChainIcon
     TokenOwnersModel
     AccountName
+    AccountAddress
     RemainingSupply
     Decimals
     BurnState
+    RemotelyDestructState
+    PrivilegesLevel
+    MultiplierIndex
 
 QtObject:
   type TokenModel* = ref object of QAbstractListModel
@@ -54,6 +59,15 @@ QtObject:
         self.dataChanged(index, index, @[ModelRole.DeployState.int])
         return
 
+  proc updateAddress*(self: TokenModel, chainId: int, oldContractAddress: string, newContractAddress: string) =
+    for i in 0 ..< self.items.len:
+      if((self.items[i].tokenDto.address == oldContractAddress) and (self.items[i].tokenDto.chainId == chainId)):
+        self.items[i].tokenDto.address = newContractAddress
+        let index = self.createIndex(i, 0, nil)
+        defer: index.delete
+        self.dataChanged(index, index, @[ModelRole.TokenAddress.int])
+        return
+
   proc updateBurnState*(self: TokenModel, chainId: int, contractAddress: string, burnState: ContractTransactionStatus) =
     for i in 0 ..< self.items.len:
       if((self.items[i].tokenDto.address == contractAddress) and (self.items[i].tokenDto.chainId == chainId)):
@@ -63,11 +77,23 @@ QtObject:
         self.dataChanged(index, index, @[ModelRole.BurnState.int])
         return
 
-  proc updateSupply*(self: TokenModel, chainId: int, contractAddress: string, supply: Uint256) =
+  proc updateRemoteDestructedAddresses*(self: TokenModel, chainId: int, contractAddress: string, remoteDestructedAddresses: seq[string]) =
     for i in 0 ..< self.items.len:
       if((self.items[i].tokenDto.address == contractAddress) and (self.items[i].tokenDto.chainId == chainId)):
-        if self.items[i].tokenDto.supply != supply:
+        self.items[i].remoteDestructedAddresses = remoteDestructedAddresses
+        let index = self.createIndex(i, 0, nil)
+        defer: index.delete
+        self.dataChanged(index, index, @[ModelRole.RemotelyDestructState.int])
+        self.items[i].tokenOwnersModel.updateRemoteDestructState(remoteDestructedAddresses)
+        self.dataChanged(index, index, @[ModelRole.TokenOwnersModel.int])
+        return
+
+  proc updateSupply*(self: TokenModel, chainId: int, contractAddress: string, supply: Uint256, destructedAmount: Uint256) =
+    for i in 0 ..< self.items.len:
+      if((self.items[i].tokenDto.address == contractAddress) and (self.items[i].tokenDto.chainId == chainId)):
+        if self.items[i].tokenDto.supply != supply or self.items[i].destructedAmount != destructedAmount:
           self.items[i].tokenDto.supply = supply
+          self.items[i].destructedAmount = destructedAmount
           let index = self.createIndex(i, 0, nil)
           defer: index.delete
           self.dataChanged(index, index, @[ModelRole.Supply.int])
@@ -83,12 +109,12 @@ QtObject:
           self.dataChanged(index, index, @[ModelRole.RemainingSupply.int])
         return
 
-  proc setCommunityTokenOwners*(self: TokenModel, chainId: int, contractAddress: string, owners: seq[CollectibleOwner]) =
+  proc setCommunityTokenOwners*(self: TokenModel, chainId: int, contractAddress: string, owners: seq[CommunityCollectibleOwner]) =
     for i in 0 ..< self.items.len:
       if((self.items[i].tokenDto.address == contractAddress) and (self.items[i].tokenDto.chainId == chainId)):
-        self.items[i].tokenOwnersModel.setItems(owners.map(proc(owner: CollectibleOwner): TokenOwnersItem =
-          # TODO find member with the address - later when airdrop to member will be added
-          result = initTokenOwnersItem("", "", owner)
+        self.items[i].tokenOwnersModel.setItems(owners.map(proc(owner: CommunityCollectibleOwner): TokenOwnersItem =
+          # TODO: provide number of messages here
+          result = initTokenOwnersItem(owner.contactId, owner.name, owner.imageSource, 0, owner.collectibleOwner, self.items[i].remoteDestructedAddresses)
         ))
         let index = self.createIndex(i, 0, nil)
         defer: index.delete
@@ -103,6 +129,12 @@ QtObject:
     self.endResetModel()
     self.countChanged()
 
+
+  proc getOwnerToken*(self: TokenModel): TokenItem =
+    for i in 0 ..< self.items.len:
+      if(self.items[i].tokenDto.privilegesLevel == PrivilegesLevel.Owner):
+        return self.items[i]
+
   proc appendItem*(self: TokenModel, item: TokenItem) =
     let parentModelIndex = newQModelIndex()
     defer: parentModelIndex.delete
@@ -111,6 +143,18 @@ QtObject:
     self.items.add(item)
     self.endInsertRows()
     self.countChanged()
+
+  proc removeItemByChainIdAndAddress*(self: TokenModel, chainId: int, address: string) =
+    for i in 0 ..< self.items.len:
+      if((self.items[i].tokenDto.address == address) and (self.items[i].tokenDto.chainId == chainId)):
+        let parentModelIndex = newQModelIndex()
+        defer: parentModelIndex.delete
+
+        self.beginRemoveRows(parentModelIndex, i, i)
+        self.items.delete(i)
+        self.endRemoveRows()
+        self.countChanged()
+        return
 
   proc getCount*(self: TokenModel): int {.slot.} =
     self.items.len
@@ -141,9 +185,13 @@ QtObject:
       ModelRole.ChainIcon.int:"chainIcon",
       ModelRole.TokenOwnersModel.int:"tokenOwnersModel",
       ModelRole.AccountName.int:"accountName",
+      ModelRole.AccountAddress.int:"accountAddress",
       ModelRole.RemainingSupply.int:"remainingSupply",
       ModelRole.Decimals.int:"decimals",
       ModelRole.BurnState.int:"burnState",
+      ModelRole.RemotelyDestructState.int:"remotelyDestructState",
+      ModelRole.PrivilegesLevel.int:"privilegesLevel",
+      ModelRole.MultiplierIndex.int:"multiplierIndex"
     }.toTable
 
   method data(self: TokenModel, index: QModelIndex, role: int): QVariant =
@@ -167,7 +215,8 @@ QtObject:
       of ModelRole.Description:
         result = newQVariant(item.tokenDto.description)
       of ModelRole.Supply:
-        result = newQVariant(supplyByType(item.tokenDto.supply, item.tokenDto.tokenType))
+        # we need to present maxSupply - destructedAmount
+        result = newQVariant((item.tokenDto.supply - item.destructedAmount).toString(10))
       of ModelRole.InfiniteSupply:
         result = newQVariant(item.tokenDto.infiniteSupply)
       of ModelRole.Transferable:
@@ -188,12 +237,21 @@ QtObject:
         result = newQVariant(item.tokenOwnersModel)
       of ModelRole.AccountName:
         result = newQVariant(item.accountName)
+      of ModelRole.AccountAddress:
+        result = newQVariant(item.tokenDto.deployer)
       of ModelRole.RemainingSupply:
-        result = newQVariant(supplyByType(item.remainingSupply, item.tokenDto.tokenType))
+        result = newQVariant(item.remainingSupply.toString(10))
       of ModelRole.Decimals:
         result = newQVariant(item.tokenDto.decimals)
       of ModelRole.BurnState:
         result = newQVariant(item.burnState.int)
+      of ModelRole.RemotelyDestructState:
+        let destructStatus = if len(item.remoteDestructedAddresses) > 0: ContractTransactionStatus.InProgress.int else: ContractTransactionStatus.Completed.int
+        result = newQVariant(destructStatus)
+      of ModelRole.PrivilegesLevel:
+        result = newQVariant(item.tokenDto.privilegesLevel.int)
+      of ModelRole.MultiplierIndex:
+        result = newQVariant(if item.tokenDto.tokenType == TokenType.ERC20: 18 else: 0)
 
   proc `$`*(self: TokenModel): string =
       for i in 0 ..< self.items.len:

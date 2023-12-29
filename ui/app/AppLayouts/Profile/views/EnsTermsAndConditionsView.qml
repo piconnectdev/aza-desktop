@@ -6,6 +6,7 @@ import utils 1.0
 
 import shared.popups 1.0
 import shared.status 1.0
+import shared.popups.send 1.0
 
 import StatusQ.Core 0.1
 import StatusQ.Core.Theme 0.1
@@ -47,19 +48,20 @@ Item {
         sourceComponent: SendModal {
             id: buyEnsModal
             interactive: false
-            sendType: Constants.SendType.ENSRegister
+            preSelectedSendType: Constants.SendType.ENSRegister
             preSelectedRecipient: root.ensUsernamesStore.getEnsRegisteredAddress()
             preDefinedAmountToSend: LocaleUtils.numberToLocaleString(10)
-            preSelectedAsset: store.getAsset(buyEnsModal.store.assets, JSON.parse(root.stickersStore.getStatusToken()).symbol)
+            preSelectedHoldingID: JSON.parse(root.stickersStore.getStatusToken()).symbol
+            preSelectedHoldingType: Constants.TokenType.ERC20
             sendTransaction: function() {
-                if(bestRoutes.length === 1) {
-                    let path = bestRoutes[0]
+                if(bestRoutes.count === 1) {
+                    let path = bestRoutes.firstItem()
                     let eip1559Enabled = path.gasFees.eip1559Enabled
                     let maxFeePerGas = path.gasFees.maxFeePerGasM
                     root.ensUsernamesStore.authenticateAndRegisterEns(
                                 root.ensUsernamesStore.chainId,
                                 username,
-                                selectedAccount.address,
+                                store.selectedSenderAccount.address,
                                 path.gasAmount,
                                 eip1559Enabled ? "" : path.gasFees.gasPrice,
                                 eip1559Enabled ? path.gasFees.maxPriorityFeePerGas : "",
@@ -70,29 +72,22 @@ Item {
             }
             Connections {
                 target: root.ensUsernamesStore.ensUsernamesModule
-                function onTransactionWasSent(txResult: string) {
-                    try {
-                        let response = JSON.parse(txResult)
-                        if (!response.success) {
-                            if (response.result.includes(Constants.walletSection.cancelledMessage)) {
+                function onTransactionWasSent(chainId: int, txHash: string, error: string) {
+                        if (!!error) {
+                            if (error.includes(Constants.walletSection.cancelledMessage)) {
                                 return
                             }
-                            buyEnsModal.sendingError.text = response.result
+                            buyEnsModal.sendingError.text = error
                             return buyEnsModal.sendingError.open()
                         }
-                        for(var i=0; i<buyEnsModal.bestRoutes.length; i++) {
                             usernameRegistered(username)
-                            let url =  "%1/%2".arg(buyEnsModal.store.getEtherscanLink(buyEnsModal.bestRoutes[i].fromNetwork.chainId)).arg(response.result)
+                            let url =  "%1/%2".arg(buyEnsModal.store.getEtherscanLink(chainId)).arg(txHash)
                             Global.displayToastMessage(qsTr("Transaction pending..."),
                                                        qsTr("View on etherscan"),
                                                        "",
                                                        true,
                                                        Constants.ephemeralNotificationType.normal,
                                                        url)
-                        }
-                    } catch (e) {
-                        console.error('Error parsing the response', e)
-                    }
                 }
             }
         }

@@ -7,6 +7,8 @@ import StatusQ.Core.Utils 0.1
 import StatusQ.Components 0.1
 import StatusQ.Controls 0.1
 
+import AppLayouts.Wallet.helpers 1.0
+
 import utils 1.0
 
 import "../views"
@@ -17,9 +19,10 @@ StatusComboBox {
     required property var allNetworks
     required property var layer1Networks
     required property var layer2Networks
-    required property var testNetworks
     required property var enabledNetworks
     property bool multiSelection: true
+    property bool preferredNetworksMode: false
+    property var preferredSharingNetworks: []
 
     /// \c network is a network.model.nim entry
     /// It is called for every toggled network if \c multiSelection is \c true
@@ -28,30 +31,12 @@ StatusComboBox {
 
     function setChain(chainId) {
         if(!multiSelection && !!d.currentModel && d.currentModel.count > 0) {
-            // Find given chain id:
-            var chainIdExists = false
-            if(chainId) {
-                if(!!root.layer1Networks && ModelUtils.contains(root.layer1Networks, "chainId", chainId)) {
-                    d.currentModel = root.layer1Networks
-                    chainIdExists = true
-                } else if(!!root.layer2Networks && ModelUtils.contains(root.layer2Networks, "chainId", chainId)) {
-                    d.currentModel = root.layer2Networks
-                    chainIdExists = true
-                } else if(!!root.testNetworks && ModelUtils.contains(root.testNetworks, "chainId", chainId)) {
-                    d.currentModel = root.testNetworks
-                    chainIdExists = true
-                }
-            }
-
-            // Set chain:
-            if(chainIdExists) {
-                d.currentIndex = ModelUtils.indexOf(d.currentModel, "chainId", chainId)
-            }
-            else {
-                 // Default value if not specified
-                d.currentModel = root.layer1Networks
-                d.currentIndex = 0
-            }
+            d.currentModel = NetworkModelHelpers.getLayerNetworkModelByChainId(root.layer1Networks,
+                                                                               root.layer2Networks,
+                                                                               chainId) ?? root.layer2Networks
+            d.currentIndex = NetworkModelHelpers.getChainIndexByChainId(root.layer1Networks,
+                                                                        root.layer2Networks,
+                                                                        chainId)
 
             // Notify change:
             root.toggleNetwork(ModelUtils.get(d.currentModel, d.currentIndex))
@@ -61,13 +46,14 @@ StatusComboBox {
     QtObject {
         id: d
 
-        readonly property string selectedChainName: ModelUtils.get(d.currentModel, d.currentIndex, "chainName") ?? ""
-        readonly property string selectedIconUrl: ModelUtils.get(d.currentModel, d.currentIndex, "iconUrl") ?? ""
+        readonly property string selectedChainName: NetworkModelHelpers.getChainName(d.currentModel, d.currentIndex)
+        readonly property string selectedIconUrl: NetworkModelHelpers.getChainIconUrl(d.currentModel, d.currentIndex)
         readonly property bool allSelected: (!!root.enabledNetworks && !!root.allNetworks) ? root.enabledNetworks.count === root.allNetworks.count :
                                                                                              false
+        readonly property bool noneSelected: (!!root.enabledNetworks) ? root.enabledNetworks.count === 0 : false
 
         // Persist selection between selectPopupLoader reloads
-        property var currentModel: layer1Networks
+        property var currentModel: layer2Networks
         property int currentIndex: 0
     }
 
@@ -108,7 +94,7 @@ StatusComboBox {
             lineHeight: 24
             lineHeightMode: Text.FixedHeight
             verticalAlignment: Text.AlignVCenter
-            text: root.multiSelection ? (d.allSelected ? qsTr("All networks") : "") : d.selectedChainName
+            text: root.multiSelection ? (d.noneSelected ? qsTr("Select networks"): d.allSelected ? qsTr("All networks") : "") : d.selectedChainName
             color: Theme.palette.baseColor1
             visible: !!text
         }
@@ -117,13 +103,11 @@ StatusComboBox {
             visible: !d.allSelected && chainRepeater.count > 0
             Repeater {
                 id: chainRepeater
-                model: root.enabledNetworks
+                model: root.multiSelection ? root.enabledNetworks : []
                 delegate: StatusRoundedImage {
                     width: 24
                     height: 24
                     visible: image.source !== ""
-                    border.width: index === 0 ? 0 : 1
-                    border.color: Theme.palette.white
                     image.source: Style.svg(model.iconUrl)
                     z: index + 1
                 }
@@ -134,7 +118,8 @@ StatusComboBox {
     control.popup.contentItem: NetworkSelectionView {
         layer1Networks: root.layer1Networks
         layer2Networks: root.layer2Networks
-        testNetworks: root.testNetworks
+        preferredSharingNetworks: root.preferredSharingNetworks
+        preferredNetworksMode: root.preferredNetworksMode
 
         implicitWidth: contentWidth
         implicitHeight: contentHeight

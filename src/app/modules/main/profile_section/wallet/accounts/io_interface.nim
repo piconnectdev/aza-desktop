@@ -19,6 +19,9 @@ method syncKeycard*(self: AccessInterface) {.base.} =
 method deleteAccount*(self: AccessInterface, address: string) {.base.} =
   raise newException(ValueError, "No implementation available")
 
+method deleteKeypair*(self: AccessInterface, keyUid: string) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
 method refreshWalletAccounts*(self: AccessInterface) {.base.} =
   raise newException(ValueError, "No implementation available")
 
@@ -40,5 +43,14 @@ method viewDidLoad*(self: AccessInterface) {.base.} =
 method getModuleAsVariant*(self: AccessInterface): QVariant {.base.} =
   raise newException(ValueError, "No implementation available")
 
-method toggleIncludeWatchOnlyAccount*(self: AccessInterface) {.base.} =
+method getCollectiblesModel*(self: AccessInterface): QVariant {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method updateWalletAccountProdPreferredChains*(self: AccessInterface, address, preferredChainIds: string) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method updateWalletAccountTestPreferredChains*(self: AccessInterface, address, preferredChainIds: string) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method updateWatchAccountHiddenFromTotalBalance*(self: AccessInterface, address: string, hideFromTotalBalance: bool) {.base.} =
   raise newException(ValueError, "No implementation available")

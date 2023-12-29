@@ -1,4 +1,4 @@
-import Tables, NimQml
+import NimQml
 import ../io_interface as delegate_interface
 import io_interface, view, controller
 import ../../../../global/global_singleton
@@ -40,17 +40,17 @@ method delete*(self: Module) =
 
 method refreshNetworks*(self: Module) =
   self.view.setAreTestNetworksEnabled(self.controller.areTestNetworksEnabled())
-  self.view.setItems(self.controller.getNetworks())
+  self.view.setItems(self.controller.getFlatNetworks())
 
 method load*(self: Module) =
   self.controller.init()
-  self.view.setAreTestNetworksEnabled(self.controller.areTestNetworksEnabled())
-  self.view.load(self.controller.getNetworks())
+  self.view.load()
+  self.refreshNetworks()
 
 method isLoaded*(self: Module): bool =
   return self.moduleLoaded
 
-method areTestNetworksEnabled*(self: Module): bool =
+proc areTestNetworksEnabled*(self: Module): bool =
   return self.controller.areTestNetworksEnabled()
 
 proc checkIfModuleDidLoad(self: Module) =

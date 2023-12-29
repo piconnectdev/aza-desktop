@@ -6,6 +6,7 @@ import StatusQ.Core.Utils 0.1 as CoreUtils
 
 import mainui 1.0
 import AppLayouts.Profile.panels 1.0
+import shared.stores 1.0
 
 import utils 1.0
 
@@ -21,6 +22,7 @@ SplitView {
     Popups {
         popupParent: root
         rootStore: QtObject {}
+        communityTokensStore: CommunityTokensStore {}
     }
 
     ListModel {
@@ -140,3 +142,7 @@ SplitView {
         logsView.logText: logs.logText
     }
 }
+
+// category: Panels
+
+// https://www.figma.com/file/idUoxN7OIW2Jpp3PMJ1Rl8/%E2%9A%99%EF%B8%8F-Settings-%7C-Desktop?node-id=14588%3A308727&t=cwFGbBHsAGOP0T5R-0

@@ -1,4 +1,4 @@
-import json, strformat
+import json
 import core, ../app_service/common/utils
 import response_type
 
@@ -32,7 +32,11 @@ proc pinUnpinMessage*(chatId: string, messageId: string, pin: bool): RpcResponse
   }]
   result = callPrivateRPC("sendPinMessage".prefix, payload)
 
-proc fetchMessageByMessageId*(messageId: string): RpcResponse[JsonNode] {.raises: [Exception].} =
+proc markMessageAsUnread*(chatId: string, messageId: string): RpcResponse[JsonNode] {.raises: [Exception].} =
+  let payload = %*[chatId, messageId]
+  result = callPrivateRPC("markMessageAsUnread".prefix, payload)
+
+proc getMessageByMessageId*(messageId: string): RpcResponse[JsonNode] {.raises: [Exception].} =
   let payload = %* [messageId]
   result = callPrivateRPC("messageByMessageID".prefix, payload)
 
@@ -57,7 +61,7 @@ proc markAllMessagesFromChatWithIdAsRead*(chatId: string): RpcResponse[JsonNode]
 proc markCertainMessagesFromChatWithIdAsRead*(chatId: string, messageIds: seq[string]):
   RpcResponse[JsonNode] {.raises: [Exception].} =
   let payload = %* [chatId, messageIds]
-  result = callPrivateRPC("markMessagesSeen".prefix, payload)
+  result = callPrivateRPC("markMessagesRead".prefix, payload)
 
 proc deleteMessageAndSend*(messageID: string): RpcResponse[JsonNode] {.raises: [Exception].} =
   result = callPrivateRPC("deleteMessageAndSend".prefix, %* [messageID])
@@ -75,6 +79,10 @@ proc firstUnseenMessageID*(chatId: string): RpcResponse[JsonNode] {.raises: [Exc
 proc getTextUrls*(text: string): RpcResponse[JsonNode] {.raises: [Exception].} =
   let payload = %*[text]
   result = callPrivateRPC("getTextURLs".prefix, payload)
+
+proc getTextURLsToUnfurl*(text: string): RpcResponse[JsonNode] {.raises: [Exception].} =
+  let payload = %*[text]
+  result = callPrivateRPC("getTextURLsToUnfurl".prefix, payload)
 
 proc unfurlUrls*(urls: seq[string]): RpcResponse[JsonNode] {.raises: [Exception].} =
   let payload = %*[urls]

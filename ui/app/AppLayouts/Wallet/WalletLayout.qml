@@ -6,6 +6,7 @@ import StatusQ.Layout 0.1
 
 import utils 1.0
 import shared.controls 1.0
+import shared.popups.keypairimport 1.0
 
 import "popups"
 import "panels"
@@ -17,6 +18,7 @@ Item {
     id: root
 
     property bool hideSignPhraseModal: false
+    property bool showAllAccounts: true
     property var store
     property var contactsStore
     property var emojiPopup: null
@@ -25,6 +27,22 @@ Item {
 
     onVisibleChanged: resetView()
 
+    Connections {
+        target: walletSection
+
+        function onFilterChanged(address, allAddresses) {
+            root.showAllAccounts = allAddresses
+        }
+
+        function onDisplayKeypairImportPopup() {
+            keypairImport.active = true
+        }
+
+        function onDestroyKeypairImportPopup() {
+            keypairImport.active = false
+        }
+    }
+    
     function showSigningPhrasePopup(){
         if(!hideSignPhraseModal && !RootStore.hideSignPhraseModal){
             signPhrasePopup.open();
@@ -66,6 +84,7 @@ Item {
             contactsStore: root.contactsStore
             sendModal: root.sendModalPopup
             networkConnectionStore: root.networkConnectionStore
+            showAllAccounts: leftTab.showAllAccounts
             onLaunchShareAddressModal: Global.openPopup(receiveModalComponent);
         }
     }
@@ -83,25 +102,18 @@ Item {
             rightPanelStackView.currentItem.resetStack();
         }
 
-        Component.onCompleted: {
-            // Read in RootStore
-//            if(RootStore.firstTimeLogin){
-//                RootStore.firstTimeLogin = false
-//                RootStore.setInitialRange()
-//            }
-        }
-
         leftPanel: LeftTabView {
             id: leftTab
             anchors.fill: parent
             changeSelectedAccount: function(address) {
-                RootStore.setFilterAddress(address)
                 root.resetView()
+                RootStore.setFilterAddress(address)
             }
             selectAllAccounts: function() {
-                RootStore.setFillterAllAddresses()
                 root.resetView()
+                RootStore.setFillterAllAddresses()
             }
+            onCurrentAddressChanged: root.resetView()
             onShowSavedAddressesChanged: {
                 if(showSavedAddresses)
                     rightPanelStackView.replace(cmpSavedAddresses)
@@ -132,18 +144,75 @@ Item {
         }
 
         footer: WalletFooter {
-            sendModal: root.sendModalPopup
+            id: footer
+
+            readonly property bool isHoldingSelected: !!walletStore.currentViewedCollectible && walletStore.currentViewedHoldingID !== ""
+            readonly property bool isCommunityCollectible: !!walletStore.currentViewedCollectible ? walletStore.currentViewedCollectible.communityId !== "" : false
+            readonly property bool isOwnerCommunityCollectible: isCommunityCollectible ? (walletStore.currentViewedCollectible.communityPrivilegesLevel === Constants.TokenPrivilegesLevel.Owner) : false
+
+            visible: !root.showAllAccounts
             width: parent.width
+            height: root.showAllAccounts ? implicitHeight : 61
             walletStore: RootStore
             networkConnectionStore: root.networkConnectionStore
+            isCommunityOwnershipTransfer: footer.isHoldingSelected && footer.isOwnerCommunityCollectible
+            communityName: !!walletStore.currentViewedCollectible ? walletStore.currentViewedCollectible.communityName : ""
             onLaunchShareAddressModal: Global.openPopup(receiveModalComponent)
+            onLaunchSendModal: {
+                if(isCommunityOwnershipTransfer) {
+                    let tokenItem = walletStore.currentViewedCollectible
+                    Global.openTransferOwnershipPopup(walletStore.currentViewedCollectible.communityId,
+                                                      tokenItem.communityName,
+                                                      tokenItem.communityImage,
+                                                      {
+                                                          "key": walletStore.currentViewedHoldingID,
+                                                          "privilegesLevel": tokenItem.communityPrivilegesLevel,
+                                                          "chainId": tokenItem.chainId,
+                                                          "name": tokenItem.name,
+                                                          "artworkSource": tokenItem.artworkSource,
+                                                          "accountAddress": leftTab.currentAddress,
+                                                          "tokenAddress": tokenItem.contractAddress
+                                                      },
+                                                      walletStore.accounts,
+                                                      root.sendModalPopup)
+                } else {
+                    // Common send modal popup:
+                    root.sendModalPopup.preSelectedSendType = Constants.SendType.Transfer
+                    root.sendModalPopup.preSelectedHoldingID = walletStore.currentViewedHoldingID
+                    root.sendModalPopup.preSelectedHoldingType = walletStore.currentViewedHoldingType
+                    root.sendModalPopup.onlyAssets = false
+                    root.sendModalPopup.open()
+                }
+            }
+            onLaunchBridgeModal: {
+                root.sendModalPopup.preSelectedSendType = Constants.SendType.Bridge
+                root.sendModalPopup.preSelectedHoldingID = walletStore.currentViewedHoldingID
+                root.sendModalPopup.preSelectedHoldingType = walletStore.currentViewedHoldingType
+                root.sendModalPopup.onlyAssets = true
+                root.sendModalPopup.open()
+            }
         }
     }
 
     Component {
         id: receiveModalComponent
         ReceiveModal {
+            destroyOnClose: true
             anchors.centerIn: parent
+        }
+    }
+
+    Loader {
+        id: keypairImport
+        active: false
+        asynchronous: true
+
+        sourceComponent: KeypairImportPopup {
+            store.keypairImportModule: root.store.walletSectionInst.keypairImportModule
+        }
+
+        onLoaded: {
+            keypairImport.item.open()
         }
     }
 }

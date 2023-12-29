@@ -9,6 +9,7 @@ import utils 1.0
 
 import Storybook 1.0
 import Models 1.0
+import shared.stores 1.0
 
 SplitView {
     id: root
@@ -20,6 +21,7 @@ SplitView {
     Popups {
         popupParent: root
         rootStore: QtObject {}
+        communityTokensStore: CommunityTokensStore {}
     }
 
     ListModel {
@@ -153,7 +155,7 @@ SplitView {
             property var communitiesList: ctrlEmptyView.checked ? emptyModel : communitiesModel
         }
         rootStore: QtObject {
-            function isCommunityRequestPending(communityId) {
+            function isMyCommunityRequestPending(communityId) {
                 return communityId === "0x0006"
             }
             function cancelPendingRequest(communityId) {
@@ -179,3 +181,7 @@ SplitView {
         }
     }
 }
+
+// category: Views
+
+// https://www.figma.com/file/idUoxN7OIW2Jpp3PMJ1Rl8/%E2%9A%99%EF%B8%8F-Settings-%7C-Desktop?type=design&node-id=16089-387522&t=HRT9BmZXnl7Lt55Q-0

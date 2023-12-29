@@ -1,4 +1,4 @@
-import NimQml, os
+import NimQml, strutils, os
 
 import ../../constants
 
@@ -17,7 +17,9 @@ const LAS_KEY_CUSTOM_MOUSE_SCROLLING_ENABLED = "global/custom_mouse_scroll_enabl
 const DEFAULT_CUSTOM_MOUSE_SCROLLING_ENABLED = false
 const DEFAULT_VISIBILITY = 2 #windowed visibility, from qml
 const LAS_KEY_FAKE_LOADING_SCREEN_ENABLED = "global/fake_loading_screen"
-const DEFAULT_FAKE_LOADING_SCREEN_ENABLED = defined(production) and (not existsEnv(TEST_ENVIRONMENT_VAR)) #enabled in production, disabled in development and e2e tests
+let DEFAULT_FAKE_LOADING_SCREEN_ENABLED = defined(production) and not TEST_MODE_ENABLED #enabled in production, disabled in development and e2e tests
+const LAS_KEY_SHARDED_COMMUNITIES_ENABLED = "global/sharded_communities"
+const DEFAULT_LAS_KEY_SHARDED_COMMUNITIES_ENABLED = false
 
 QtObject:
   type LocalAppSettings* = ref object of QObject
@@ -142,7 +144,7 @@ QtObject:
 
 
   proc getTestEnvironment*(self: LocalAppSettings): bool {.slot.} =
-    return existsEnv(TEST_ENVIRONMENT_VAR)
+    return TEST_MODE_ENABLED
 
   QtProperty[bool] testEnvironment:
     read = getTestEnvironment
@@ -150,7 +152,7 @@ QtObject:
   proc fakeLoadingScreenEnabledChanged*(self: LocalAppSettings) {.signal.}
   proc getFakeLoadingScreenEnabled*(self: LocalAppSettings): bool {.slot.} =
     self.settings.value(LAS_KEY_FAKE_LOADING_SCREEN_ENABLED, newQVariant(DEFAULT_FAKE_LOADING_SCREEN_ENABLED)).boolVal
-    
+
   proc setFakeLoadingScreenEnabled*(self: LocalAppSettings, enabled: bool) {.slot.} =
     self.settings.setValue(LAS_KEY_FAKE_LOADING_SCREEN_ENABLED, newQVariant(enabled))
     self.fakeLoadingScreenEnabledChanged()
@@ -159,3 +161,16 @@ QtObject:
     read = getFakeLoadingScreenEnabled
     write = setFakeLoadingScreenEnabled
     notify = fakeLoadingScreenEnabledChanged
+
+  proc wakuV2ShardedCommunitiesEnabledChanged*(self: LocalAppSettings) {.signal.}
+  proc getWakuV2ShardedCommunitiesEnabled*(self: LocalAppSettings): bool {.slot.} =
+    self.settings.value(LAS_KEY_SHARDED_COMMUNITIES_ENABLED, newQVariant(DEFAULT_LAS_KEY_SHARDED_COMMUNITIES_ENABLED)).boolVal
+
+  proc setWakuV2ShardedCommunitiesEnabled*(self: LocalAppSettings, enabled: bool) {.slot.} =
+    self.settings.setValue(LAS_KEY_SHARDED_COMMUNITIES_ENABLED, newQVariant(enabled))
+    self.wakuV2ShardedCommunitiesEnabledChanged()
+
+  QtProperty[bool] wakuV2ShardedCommunitiesEnabled:
+    read = getWakuV2ShardedCommunitiesEnabled
+    write = setWakuV2ShardedCommunitiesEnabled
+    notify = wakuV2ShardedCommunitiesEnabledChanged

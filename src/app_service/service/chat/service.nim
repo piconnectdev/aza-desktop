@@ -97,6 +97,9 @@ type
     communityId*: string
     checkAllChannelsPermissionsResponse*: CheckAllChannelsPermissionsResponseDto
 
+  CheckChannelsPermissionsErrorArgs* = ref object of Args
+    communityId*: string
+    error*: string
 
 # Signals which may be emitted by this service:
 const SIGNAL_CHANNEL_GROUPS_LOADED* = "channelGroupsLoaded"
@@ -121,6 +124,7 @@ const SIGNAL_CHAT_CREATED* = "chatCreated"
 const SIGNAL_CHAT_REQUEST_UPDATE_AFTER_SEND* = "chatRequestUpdateAfterSend"
 const SIGNAL_CHECK_CHANNEL_PERMISSIONS_RESPONSE* = "checkChannelPermissionsResponse"
 const SIGNAL_CHECK_ALL_CHANNELS_PERMISSIONS_RESPONSE* = "checkAllChannelsPermissionsResponse"
+const SIGNAL_CHECK_ALL_CHANNELS_PERMISSIONS_FAILED* = "checkAllChannelsPermissionsFailed"
 
 QtObject:
   type Service* = ref object of QObject
@@ -163,10 +167,15 @@ QtObject:
           if (chatDto.active):
             chats.add(chatDto)
 
-            # Handling members update
-            if self.chats.hasKey(chatDto.id) and self.chats[chatDto.id].members != chatDto.members:
+            # Handling members update for non-community chats
+            let isCommunityChat = chatDto.chatType == ChatType.CommunityChat
+            if not isCommunityChat and self.chats.hasKey(chatDto.id) and self.chats[chatDto.id].members != chatDto.members:
               self.events.emit(SIGNAL_CHAT_MEMBERS_CHANGED, ChatMembersChangedArgs(chatId: chatDto.id, members: chatDto.members))
             self.updateOrAddChat(chatDto)
+
+          elif self.chats.hasKey(chatDto.id) and self.chats[chatDto.id].active:
+            # We left the chat
+            self.events.emit(SIGNAL_CHAT_LEFT, ChatArgs(chatId: chatDto.id))
 
         self.events.emit(SIGNAL_CHAT_UPDATE, ChatUpdateArgs(chats: chats))
 
@@ -354,6 +363,15 @@ QtObject:
     self.channelGroups[channelGroup.id] = newChannelGroup
     for chat in newChannelGroup.chats:
       self.updateOrAddChat(chat)
+  
+  proc updateChannelMembers*(self: Service, channel: ChatDto) =
+    if not self.chats.hasKey(channel.id):
+      return
+
+    var chat = self.chats[channel.id]
+    chat.members = channel.members
+    self.updateOrAddChat(chat)
+    self.events.emit(SIGNAL_CHAT_MEMBERS_CHANGED, ChatMembersChangedArgs(chatId: chat.id, members: chat.members))
 
   proc getChannelGroupById*(self: Service, channelGroupId: string): ChannelGroupDto =
     if not self.channelGroups.contains(channelGroupId):
@@ -414,7 +432,9 @@ QtObject:
 
     return self.chats[chatId]
 
-  proc getChatsByIds*(self: Service, chatIds: seq[string]): seq[ChatDto] = 
+  proc getChatsByIds*(self: Service, chatIds: seq[string]): seq[ChatDto] =
+    if chatIds.len == 0:
+      return
     return self.getAllChats().filterIt(it.id in chatIds)
 
   proc getOneToOneChatNameAndImage*(self: Service, chatId: string):
@@ -483,7 +503,13 @@ QtObject:
       error "Error deleting channel", chatId, msg = e.msg
       return
 
-  proc sendImages*(self: Service, chatId: string, imagePathsAndDataJson: string, msg: string, replyTo: string): string =
+  proc sendImages*(self: Service, 
+                   chatId: string, 
+                   imagePathsAndDataJson: string, 
+                   msg: string, 
+                   replyTo: string,
+                   preferredUsername: string = "",
+                   linkPreviews: seq[LinkPreview] = @[]): string =
     result = ""
     try:
       var images = Json.decode(imagePathsAndDataJson, seq[string])
@@ -495,7 +521,7 @@ QtObject:
         if imagePath != "":
           imagePaths.add(imagePath)
 
-      let response = status_chat.sendImages(chatId, imagePaths, msg, replyTo)
+      let response = status_chat.sendImages(chatId, imagePaths, msg, replyTo, preferredUsername, linkPreviews)
 
       for imagePath in imagePaths:
         removeFile(imagePath)
@@ -737,6 +763,15 @@ QtObject:
     except Exception as e:
       error "error while getting members", msg = e.msg, communityID, chatId
 
+  proc updateUnreadMessage*(self: Service, chatID: string, messagesCount:int, messagesWithMentionsCount:int) =
+    var chat = self.getChatById(chatID)
+    if chat.id == "":
+      return
+
+    chat.unviewedMessagesCount = messagesCount
+    chat.unviewedMentionsCount = messagesWithMentionsCount
+    self.updateOrAddChat(chat)
+
   proc updateUnreadMessagesAndMentions*(self: Service, chatID: string, markAllAsRead: bool, markAsReadCount: int, markAsReadMentionsCount: int) =
     var chat = self.getChatById(chatID)
     if chat.id == "":
@@ -776,28 +811,34 @@ QtObject:
       let errMsg = e.msg
       error "error checking all channel permissions: ", errMsg
 
-  proc asyncCheckAllChannelsPermissions*(self: Service, communityId: string) =
+  proc asyncCheckAllChannelsPermissions*(self: Service, communityId: string, addresses: seq[string]) =
     let arg = AsyncCheckAllChannelsPermissionsTaskArg(
       tptr: cast[ByteAddress](asyncCheckAllChannelsPermissionsTask),
       vptr: cast[ByteAddress](self.vptr),
       slot: "onAsyncCheckAllChannelsPermissionsDone",
-      communityId: communityId
+      communityId: communityId,
+      addresses: addresses,
     )
     self.threadpool.start(arg)
 
   proc onAsyncCheckAllChannelsPermissionsDone*(self: Service, rpcResponse: string) {.slot.} =
+    let rpcResponseObj = rpcResponse.parseJson
+    let communityId = rpcResponseObj{"communityId"}.getStr()
     try:
-      let rpcResponseObj = rpcResponse.parseJson
       if rpcResponseObj{"error"}.kind != JNull and rpcResponseObj{"error"}.getStr != "":
-        let error = Json.decode($rpcResponseObj["error"], RpcError)
-        error "Error checking all community channel permissions", msg = error.message
-        return
+        raise newException(CatchableError, rpcResponseObj["error"].getStr)
 
-      let communityId = rpcResponseObj{"communityId"}.getStr()
+      if rpcResponseObj["response"]{"error"}.kind != JNull:
+        let error = Json.decode(rpcResponseObj["response"]["error"].getStr, RpcError)
+        raise newException(RpcException, error.message)
+
       let checkAllChannelsPermissionsResponse = rpcResponseObj["response"]["result"].toCheckAllChannelsPermissionsResponseDto()
       self.channelGroups[communityId].channelPermissions = checkAllChannelsPermissionsResponse
       self.events.emit(SIGNAL_CHECK_ALL_CHANNELS_PERMISSIONS_RESPONSE, CheckAllChannelsPermissionsResponseArgs(communityId: communityId, checkAllChannelsPermissionsResponse: checkAllChannelsPermissionsResponse))
     except Exception as e:
       let errMsg = e.msg
       error "error checking all channels permissions: ", errMsg
-
+      self.events.emit(SIGNAL_CHECK_ALL_CHANNELS_PERMISSIONS_FAILED, CheckChannelsPermissionsErrorArgs(
+        communityId: communityId,
+        error: errMsg,
+      ))

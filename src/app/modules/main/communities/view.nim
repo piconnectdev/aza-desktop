@@ -1,7 +1,8 @@
 import NimQml, json, strutils, sequtils
 
 import ./io_interface
-import ../../shared_models/[section_model, section_item, section_details, token_list_model, token_list_item]
+import ../../shared_models/[section_model, section_item, token_list_model, token_list_item,
+  token_permissions_model, keypair_model]
 import ./models/curated_community_model
 import ./models/discord_file_list_model
 import ./models/discord_file_item
@@ -17,6 +18,8 @@ QtObject:
       delegate: io_interface.AccessInterface
       model: SectionModel
       modelVariant: QVariant
+      spectatedCommunityPermissionModel: TokenPermissionsModel
+      spectatedCommunityPermissionModelVariant: QVariant
       curatedCommunitiesModel: CuratedCommunityModel
       curatedCommunitiesModelVariant: QVariant
       curatedCommunitiesLoading: bool
@@ -44,13 +47,24 @@ QtObject:
       discordDataExtractionInProgress: bool
       discordImportCommunityId: string
       discordImportCommunityName: string
+      discordImportChannelId: string
+      discordImportChannelName: string
       discordImportCommunityImage: string
+      discordImportedChannelId: string
+      discordImportedChannelCommunityId: string
       discordImportHasCommunityImage: bool
       downloadingCommunityHistoryArchives: bool
+      checkingPermissionsInProgress: bool
+      myRevealedAddressesStringForCurrentCommunity: string
+      myRevealedAirdropAddressForCurrentCommunity: string
+      keypairsSigningModel: KeyPairModel
+      keypairsSigningModelVariant: QVariant
 
   proc delete*(self: View) =
     self.model.delete
     self.modelVariant.delete
+    self.spectatedCommunityPermissionModel.delete
+    self.spectatedCommunityPermissionModelVariant.delete
     self.curatedCommunitiesModel.delete
     self.curatedCommunitiesModelVariant.delete
     self.discordFileListModel.delete
@@ -65,6 +79,10 @@ QtObject:
     self.tokenListModelVariant.delete
     self.collectiblesListModel.delete
     self.collectiblesListModelVariant.delete
+    if not self.keypairsSigningModel.isNil:
+      self.keypairsSigningModel.delete
+    if not self.keypairsSigningModelVariant.isNil:
+      self.keypairsSigningModelVariant.delete
 
     self.QObject.delete
 
@@ -75,6 +93,8 @@ QtObject:
     result.delegate = delegate
     result.model = newModel()
     result.modelVariant = newQVariant(result.model)
+    result.spectatedCommunityPermissionModel = newTokenPermissionsModel()
+    result.spectatedCommunityPermissionModelVariant = newQVariant(result.spectatedCommunityPermissionModel)
     result.curatedCommunitiesModel = newCuratedCommunityModel()
     result.curatedCommunitiesModelVariant = newQVariant(result.curatedCommunitiesModel)
     result.curatedCommunitiesLoading = false
@@ -106,17 +126,15 @@ QtObject:
 
   proc communityAdded*(self: View, communityId: string) {.signal.}
   proc communityChanged*(self: View, communityId: string) {.signal.}
-  proc communityPrivateKeyRemoved*(self: View, communityId: string) {.signal.}
   proc discordOldestMessageTimestampChanged*(self: View) {.signal.}
   proc discordImportErrorsCountChanged*(self: View) {.signal.}
   proc communityAccessRequested*(self: View, communityId: string) {.signal.}
   proc communityAccessFailed*(self: View, communityId: string, error: string) {.signal.}
   proc communityEditSharedAddressesSucceeded*(self: View, communityId: string) {.signal.}
   proc communityEditSharedAddressesFailed*(self: View, communityId: string, error: string) {.signal.}
-  proc communityInfoAlreadyRequested*(self: View) {.signal.}
 
   proc communityTagsChanged*(self: View) {.signal.}
-  
+
   proc setCommunityTags*(self: View, communityTags: string) =
     self.communityTags = newQVariant(communityTags)
     self.communityTagsChanged()
@@ -135,7 +153,7 @@ QtObject:
 
   proc downloadingCommunityHistoryArchivesChanged*(self: View) {.signal.}
 
-  proc setDownloadingCommunityHistoryArchives*(self: View, flag: bool) {.slot.} =
+  proc setDownloadingCommunityHistoryArchives*(self: View, flag: bool) =
     if (self.downloadingCommunityHistoryArchives == flag): return
     self.downloadingCommunityHistoryArchives = flag
     self.downloadingCommunityHistoryArchivesChanged()
@@ -149,7 +167,7 @@ QtObject:
 
   proc discordImportHasCommunityImageChanged*(self: View) {.signal.}
 
-  proc setDiscordImportHasCommunityImage*(self: View, hasImage: bool) {.slot.} =
+  proc setDiscordImportHasCommunityImage*(self: View, hasImage: bool) =
     if (self.discordImportHasCommunityImage == hasImage): return
     self.discordImportHasCommunityImage = hasImage
     self.discordImportHasCommunityImageChanged()
@@ -163,7 +181,7 @@ QtObject:
 
   proc discordImportWarningsCountChanged*(self: View) {.signal.}
 
-  proc setDiscordImportWarningsCount*(self: View, count: int) {.slot.} =
+  proc setDiscordImportWarningsCount*(self: View, count: int) =
     if (self.discordImportWarningsCount == count): return
     self.discordImportWarningsCount = count
     self.discordImportWarningsCountChanged()
@@ -175,7 +193,21 @@ QtObject:
     read = getDiscordImportWarningsCount
     notify = discordImportWarningsCountChanged
 
-  proc setDiscordImportErrorsCount*(self: View, count: int) {.slot.} =
+  proc discordImportedChannelIdChanged*(self: View) {.signal.}
+
+  proc setDiscordImportedChannelId*(self: View, id: string) =
+    if (self.discordImportedChannelId == id): return
+    self.discordImportedChannelId = id
+    self.discordImportedChannelIdChanged()
+
+  proc getDiscordImportedChannelId*(self: View): string {.slot.} =
+    return self.discordImportedChannelId
+
+  QtProperty[int] discordImportedChannelId:
+    read = getDiscordImportedChannelIdCount
+    notify = discordImportedChannelIdChanged
+
+  proc setDiscordImportErrorsCount*(self: View, count: int) =
     if (self.discordImportErrorsCount == count): return
     self.discordImportErrorsCount = count
     self.discordImportErrorsCountChanged()
@@ -189,7 +221,7 @@ QtObject:
 
   proc discordImportProgressChanged*(self: View) {.signal.}
 
-  proc setDiscordImportProgress*(self: View, value: int) {.slot.} =
+  proc setDiscordImportProgress*(self: View, value: int) =
     if (self.discordImportProgress == value): return
     self.discordImportProgress = value
     self.discordImportProgressChanged()
@@ -203,7 +235,7 @@ QtObject:
 
   proc discordImportInProgressChanged*(self: View) {.signal.}
 
-  proc setDiscordImportInProgress*(self: View, value: bool) {.slot.} =
+  proc setDiscordImportInProgress*(self: View, value: bool) =
     if (self.discordImportInProgress == value): return
     self.discordImportInProgress = value
     self.discordImportInProgressChanged()
@@ -217,7 +249,7 @@ QtObject:
 
   proc discordImportCancelledChanged*(self: View) {.signal.}
 
-  proc setDiscordImportCancelled*(self: View, value: bool) {.slot.} =
+  proc setDiscordImportCancelled*(self: View, value: bool) =
     if (self.discordImportCancelled == value): return
     self.discordImportCancelled = value
     self.discordImportCancelledChanged()
@@ -231,7 +263,7 @@ QtObject:
 
   proc discordImportProgressStoppedChanged*(self: View) {.signal.}
 
-  proc setDiscordImportProgressStopped*(self: View, stopped: bool) {.slot.} =
+  proc setDiscordImportProgressStopped*(self: View, stopped: bool) =
     if (self.discordImportProgressStopped == stopped): return
     self.discordImportProgressStopped = stopped
     self.discordImportProgressStoppedChanged()
@@ -245,7 +277,7 @@ QtObject:
 
   proc discordImportProgressTotalChunksCountChanged*(self: View) {.signal.}
 
-  proc setDiscordImportProgressTotalChunksCount*(self: View, count: int) {.slot.} =
+  proc setDiscordImportProgressTotalChunksCount*(self: View, count: int) =
     if (self.discordImportProgressTotalChunksCount == count): return
     self.discordImportProgressTotalChunksCount = count
     self.discordImportProgressTotalChunksCountChanged()
@@ -259,7 +291,7 @@ QtObject:
 
   proc discordImportProgressCurrentChunkChanged*(self: View) {.signal.}
 
-  proc setDiscordImportProgressCurrentChunk*(self: View, count: int) {.slot.} =
+  proc setDiscordImportProgressCurrentChunk*(self: View, count: int) =
     if (self.discordImportProgressCurrentChunk == count): return
     self.discordImportProgressCurrentChunk = count
     self.discordImportProgressCurrentChunkChanged()
@@ -274,6 +306,16 @@ QtObject:
   proc addItem*(self: View, item: SectionItem) =
     self.model.addItem(item)
     self.communityAdded(item.id)
+
+  proc updateItem(self: View, item: SectionItem) =
+    self.model.editItem(item)
+    self.communityChanged(item.id)
+
+  proc addOrUpdateItem*(self: View, item: SectionItem) =
+    if self.model.itemExists(item.id):
+      self.updateItem(item)
+    else:
+      self.addItem(item)
 
   proc model*(self: View): SectionModel =
     result = self.model
@@ -290,6 +332,34 @@ QtObject:
 
   QtProperty[QVariant] model:
     read = getModel
+
+  proc spectatedCommunityPermissionModel*(self: View): TokenPermissionsModel =
+    result = self.spectatedCommunityPermissionModel
+
+  proc prepareTokenModelForCommunity(self: View, communityId: string) {.slot.} =
+    self.delegate.prepareTokenModelForCommunity(communityId)
+
+  proc signSharedAddressesForAllNonKeycardKeypairs*(self: View) {.slot.} =
+    self.delegate.signSharedAddressesForAllNonKeycardKeypairs()
+
+  proc signSharedAddressesForKeypair*(self: View, keyUid: string) {.slot.} =
+    self.delegate.signSharedAddressesForKeypair(keyUid, pin = "")
+
+  proc joinCommunityOrEditSharedAddresses*(self: View) {.slot.} =
+    self.delegate.joinCommunityOrEditSharedAddresses()
+
+  proc checkPermissions*(self: View, communityId: string, addressesToShare: string) {.slot.} =
+    try:
+      let sharedAddresses = map(parseJson(addressesToShare).getElems(), proc(x:JsonNode):string = x.getStr())
+      self.delegate.checkPermissions(communityId, sharedAddresses)
+    except Exception as e:
+      echo "Error updating token model with addresses: ", e.msg
+
+  proc getSpectatedCommunityPermissionModel(self: View): QVariant {.slot.} =
+    return self.spectatedCommunityPermissionModelVariant
+
+  QtProperty[QVariant] spectatedCommunityPermissionModel:
+    read = getSpectatedCommunityPermissionModel
 
   proc curatedCommunitiesModel*(self: View): CuratedCommunityModel =
     result = self.curatedCommunitiesModel
@@ -420,7 +490,7 @@ QtObject:
                         historyArchiveSupportEnabled: bool,
                         pinMessageAllMembersEnabled: bool, bannerJsonStr: string) {.slot.} =
     self.delegate.createCommunity(name, description, introMessage, outroMessage, access, color, tags,
-                                  imagePath, aX, aY, bX, bY, historyArchiveSupportEnabled, pinMessageAllMembersEnabled, 
+                                  imagePath, aX, aY, bX, bY, historyArchiveSupportEnabled, pinMessageAllMembersEnabled,
                                   bannerJsonStr)
 
   proc clearFileList*(self: View) {.slot.} =
@@ -442,6 +512,10 @@ QtObject:
     self.setDiscordImportWarningsCount(0)
     self.setDiscordImportCommunityId("")
     self.setDiscordImportCommunityName("")
+    self.discordImportChannelId = ""
+    self.discordImportChannelName = ""
+    self.discordImportedChannelId = ""
+    self.discordImportedChannelCommunityId = ""
     self.setDiscordImportCommunityImage("")
     self.setDiscordImportHasCommunityImage(false)
     self.setDiscordImportInProgress(false)
@@ -468,11 +542,32 @@ QtObject:
                                   imagePath, aX, aY, bX, bY, historyArchiveSupportEnabled, pinMessageAllMembersEnabled,
                                   filesToImport, fromTimestamp)
 
+  proc requestImportDiscordChannel*(self: View, name: string, discordChannelId: string, communityId: string,
+                        description: string, color: string, emoji: string,
+                        fromTimestamp: int) {.slot.} =
+    let selectedItems = self.discordChannelsModel.getSelectedItems()
+    var filesToImport: seq[string] = @[]
+
+    for i in 0 ..< selectedItems.len:
+      filesToImport.add(selectedItems[i].getFilePath())
+
+    self.resetDiscordImport(false)
+    self.setDiscordImportInProgress(true)
+    self.delegate.requestImportDiscordChannel(
+            name,
+            discordChannelId,
+            communityId,
+            description,
+            color,
+            emoji,
+            filesToImport,
+            fromTimestamp)
+
   proc cancelRequestToJoinCommunity*(self: View, communityId: string) {.slot.} =
     self.delegate.cancelRequestToJoinCommunity(communityId)
 
-  proc requestCommunityInfo*(self: View, communityId: string, importing: bool) {.slot.} =
-    self.delegate.requestCommunityInfo(communityId, importing)
+  proc requestCommunityInfo*(self: View, communityId: string, shardCluster: int, shardIndex: int, importing: bool) {.slot.} =
+    self.delegate.requestCommunityInfo(communityId, shardCluster, shardIndex, importing)
 
   proc getCommunityDetails*(self: View, communityId: string): string {.slot.} =
     let communityItem = self.model.getItemById(communityId)
@@ -484,6 +579,7 @@ QtObject:
       "name": communityItem.name,
       "image": communityItem.image,
       "color": communityItem.color,
+      "isControlNode": communityItem.isControlNode,
     }
     return $jsonObj
 
@@ -493,11 +589,8 @@ QtObject:
   proc userCanJoin*(self: View, communityId: string): bool {.slot.} =
     self.delegate.userCanJoin(communityId)
 
-  proc isCommunityRequestPending*(self: View, communityId: string): bool {.slot.} =
-    self.delegate.isCommunityRequestPending(communityId)
-
-  proc removePrivateKey*(self: View, communityId: string) {.slot.} =
-    self.delegate.removePrivateKey(communityId)
+  proc isMyCommunityRequestPending*(self: View, communityId: string): bool {.slot.} =
+    self.delegate.isMyCommunityRequestPending(communityId)
 
   proc importCommunity*(self: View, communityKey: string) {.slot.} =
     self.delegate.importCommunity(communityKey)
@@ -505,6 +598,10 @@ QtObject:
   proc importingCommunityStateChanged*(self:View, communityId: string, state: int, errorMsg: string) {.signal.}
   proc emitImportingCommunityStateChangedSignal*(self: View, communityId: string, state: int, errorMsg: string) =
     self.importingCommunityStateChanged(communityId, state, errorMsg)
+
+  proc communityInfoRequestCompleted*(self: View, communityId: string, errorMsg: string) {.signal.}
+  proc emitCommunityInfoRequestCompleted*(self: View, communityId: string, errorMsg: string) =
+    self.communityInfoRequestCompleted(communityId, errorMsg)
 
   proc isMemberOfCommunity*(self: View, communityId: string, pubKey: string): bool {.slot.} =
     let sectionItem = self.model.getItemById(communityId)
@@ -550,6 +647,14 @@ QtObject:
     self.delegate.requestCancelDiscordCommunityImport(id)
     self.resetDiscordImport(true)
 
+  proc requestCancelDiscordChannelImport*(self: View, discordChannelId: string) {.slot.} =
+    self.delegate.requestCancelDiscordChannelImport(discordChannelId)
+    self.resetDiscordImport(true)
+
+  proc removeImportedDiscordChannel*(self: View) {.slot.} =
+    self.delegate.removeCommunityChat(self.discordImportedChannelCommunityId, self.discordImportedChannelId)
+    self.resetDiscordImport(true)
+
   proc toggleDiscordCategory*(self: View, id: string, selected: bool) {.slot.} =
     if selected:
       self.discordCategoriesModel.selectItem(id)
@@ -568,6 +673,44 @@ QtObject:
       let item = self.discordChannelsModel.getItem(id)
       if self.discordChannelsModel.allChannelsByCategoryUnselected(item.getCategoryId()):
         self.discordCategoriesModel.unselectItem(item.getCategoryId())
+
+  proc discordImportChannelChanged*(self: View) {.signal.}
+
+  proc toggleOneDiscordChannel*(self: View, id: string) {.slot.} =
+    let item = self.discordChannelsModel.getItem(id)
+    self.discordChannelsModel.selectOneItem(id)
+    self.discordCategoriesModel.selectOneItem(item.getCategoryId())
+    self.discordImportChannelId = id
+    self.discordImportChannelName = item.getName()
+    self.discordImportChannelChanged()
+
+  proc setDiscordImportedChannelCommunityId*(self: View, id: string) =
+    if (self.discordImportedChannelCommunityId == id): return
+    self.discordImportedChannelCommunityId = id
+
+  proc setDiscordImportChannelId*(self: View, id: string) {.slot.} =
+    if (self.discordImportChannelId == id): return
+    self.discordImportChannelId = id
+    self.discordImportChannelChanged()
+
+  proc getDiscordImportChannelId*(self: View): string {.slot.} =
+    return self.discordImportChannelId
+
+  QtProperty[string] discordImportChannelId:
+    read = getDiscordImportChannelId
+    notify = discordImportChannelChanged
+
+  proc setDiscordImportChannelName*(self: View, name: string) {.slot.} =
+    if (self.discordImportChannelName == name): return
+    self.discordImportChannelName = name
+    self.discordImportChannelChanged()
+
+  proc getDiscordImportChannelName(self: View): string {.slot.} =
+    return self.discordImportChannelName
+
+  QtProperty[string] discordImportChannelName:
+    read = getDiscordImportChannelName
+    notify = discordImportChannelChanged
 
   proc tokenListModel*(self: View): TokenListModel =
     result = self.tokenListModel
@@ -604,3 +747,69 @@ QtObject:
 
   proc shareCommunityChannelUrlWithData*(self: View, communityId: string, chatId: string): string {.slot.} =
     return self.delegate.shareCommunityChannelUrlWithData(communityId, chatId)
+
+  proc prepareKeypairsForSigning*(self: View, communityId: string, ensName: string, addresses: string,
+    airdropAddress: string, editMode: bool) {.slot.} =
+    self.delegate.prepareKeypairsForSigning(communityId, ensName, addresses, airdropAddress, editMode)
+
+  proc getCommunityPublicKeyFromPrivateKey*(self: View, communityPrivateKey: string): string {.slot.} =
+    result = self.delegate.getCommunityPublicKeyFromPrivateKey(communityPrivateKey)
+
+  proc myRevealedAirdropAddressesForCurrentCommunityChanged*(self: View) {.signal.}
+
+  proc setMyRevealedAddressesForCurrentCommunity*(self: View, revealedAddress, airdropAddress: string) =
+    self.myRevealedAddressesStringForCurrentCommunity = revealedAddress
+    self.myRevealedAirdropAddressForCurrentCommunity = airdropAddress
+    self.myRevealedAirdropAddressesForCurrentCommunityChanged()
+
+  proc getMyRevealedAddressesStringForCurrentCommunity*(self: View): string {.slot.} =
+    return self.myRevealedAddressesStringForCurrentCommunity
+
+  QtProperty[string] myRevealedAddressesStringForCurrentCommunity:
+    read = getMyRevealedAddressesStringForCurrentCommunity
+    notify = myRevealedAirdropAddressesForCurrentCommunityChanged
+
+
+  proc getMyRevealedAirdropAddressStringForCurrentCommunity*(self: View): string {.slot.} =
+    return self.myRevealedAirdropAddressForCurrentCommunity
+
+  QtProperty[string] myRevealedAirdropAddressForCurrentCommunity:
+    read = getMyRevealedAirdropAddressStringForCurrentCommunity
+    notify = myRevealedAirdropAddressesForCurrentCommunityChanged
+
+  proc checkingPermissionsInProgressChanged*(self: View) {.signal.}
+
+  proc setCheckingPermissionsInProgress*(self: View, inProgress: bool) =
+    if (self.checkingPermissionsInProgress == inProgress): return
+    self.checkingPermissionsInProgress = inProgress
+    self.checkingPermissionsInProgressChanged()
+
+  proc getCheckingPermissionsInProgress*(self: View): bool {.slot.} =
+    return self.checkingPermissionsInProgress
+
+  QtProperty[bool] requirementsCheckPending:
+    read = getCheckingPermissionsInProgress
+    notify = checkingPermissionsInProgressChanged
+
+  proc keypairsSigningModel*(self: View): KeyPairModel =
+    return self.keypairsSigningModel
+
+  proc keypairsSigningModelChanged*(self: View) {.signal.}
+  proc getKeypairsSigningModel(self: View): QVariant {.slot.} =
+    return newQVariant(self.keypairsSigningModel)
+  QtProperty[QVariant] keypairsSigningModel:
+    read = getKeypairsSigningModel
+    notify = keypairsSigningModelChanged
+
+  proc setKeypairsSigningModelItems*(self: View, items: seq[KeyPairItem]) =
+    if self.keypairsSigningModel.isNil:
+      self.keypairsSigningModel = newKeyPairModel()
+    if self.keypairsSigningModelVariant.isNil:
+      self.keypairsSigningModelVariant = newQVariant(self.keypairsSigningModel)
+    self.keypairsSigningModel.setItems(items)
+    self.keypairsSigningModelChanged()
+
+  proc sharedAddressesForAllNonKeycardKeypairsSigned(self: View) {.signal.}
+  proc sendSharedAddressesForAllNonKeycardKeypairsSignedSignal*(self: View) =
+    self.sharedAddressesForAllNonKeycardKeypairsSigned()
+

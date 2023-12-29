@@ -21,17 +21,19 @@ Item {
         id: d
 
         property int counter: Constants.onboarding.profileFetching.timeout
+
+        readonly property string fetchingDataText: qsTr("Fetching data...")
+        readonly property string continueText: qsTr("Continue")
     }
 
     onStateChanged: {
-        if (root.startupStore.currentStartupState.stateType === Constants.startupState.profileFetching) {
+        if (root.state === Constants.startupState.profileFetching) {
             d.counter = Constants.onboarding.profileFetching.timeout
         }
     }
 
     ColumnLayout {
         anchors.centerIn: parent
-        height: Constants.onboarding.loginHeight
         spacing: Style.current.bigPadding
 
         ProfileFetchingAnimation {
@@ -74,7 +76,7 @@ Item {
                     icon: model.icon
                 }
 
-                Text {
+                StatusBaseText {
                     id: entity
                     anchors.left: icon.right
                     anchors.right: indicator.visible? indicator.left : loaded.left
@@ -95,7 +97,7 @@ Item {
                         case Constants.onboarding.profileFetching.entity.keypairs:
                             return qsTr("Keypairs")
                         case Constants.onboarding.profileFetching.entity.watchOnlyAccounts:
-                            return qsTr("Watch-only accounts")
+                            return qsTr("Watched addresses")
                         }
                     }
                 }
@@ -107,7 +109,7 @@ Item {
                     visible: model.totalMessages === 0
                 }
 
-                Text {
+                StatusBaseText {
                     id: loaded
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
@@ -144,14 +146,13 @@ Item {
         StatusButton {
             id: button
             Layout.alignment: Qt.AlignHCenter
-            Layout.preferredWidth: root.startupStore.currentStartupState.stateType === Constants.startupState.profileFetching? 80 : -1
             focus: true
-            enabled: root.startupStore.currentStartupState.stateType !== Constants.startupState.profileFetching
+            enabled: root.state !== Constants.startupState.profileFetching
 
             Timer {
                 id: timer
                 interval: 1000
-                running: root.startupStore.currentStartupState.stateType === Constants.startupState.profileFetching
+                running: root.state === Constants.startupState.profileFetching
                 repeat: true
                 onTriggered: {
                     d.counter = d.counter - 1000 // decrease 1000 ms
@@ -178,7 +179,7 @@ Item {
             when: root.startupStore.currentStartupState.stateType === Constants.startupState.profileFetching
             PropertyChanges {
                 target: title
-                text: qsTr("Fetching data...")
+                text: d.fetchingDataText
             }
             PropertyChanges {
                 target: button
@@ -198,11 +199,11 @@ Item {
             when: root.startupStore.currentStartupState.stateType === Constants.startupState.profileFetchingTimeout
             PropertyChanges {
                 target: title
-                text: qsTr("Fetching data...")
+                text: d.fetchingDataText
             }
             PropertyChanges {
                 target: button
-                text: qsTr("Continue")
+                text: d.continueText
             }
         },
         State {
@@ -210,11 +211,11 @@ Item {
             when: root.startupStore.currentStartupState.stateType === Constants.startupState.profileFetchingSuccess
             PropertyChanges {
                 target: title
-                text: qsTr("Fetching data...")
+                text: d.fetchingDataText
             }
             PropertyChanges {
                 target: button
-                text: qsTr("Continue")
+                text: d.continueText
             }
         }
     ]

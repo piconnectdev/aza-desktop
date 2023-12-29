@@ -19,6 +19,9 @@ type
 method delete*(self: AccessInterface) {.base.} =
   raise newException(ValueError, "No implementation available")
 
+method onAppLoaded*(self: AccessInterface) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
 method load*(self: AccessInterface) {.base.} =
   raise newException(ValueError, "No implementation available")
 
@@ -115,6 +118,9 @@ method setSelectedLoginAccount*(self: AccessInterface, item: login_acc_item.Item
 method onNodeLogin*(self: AccessInterface, error: string) {.base.} =
   raise newException(ValueError, "No implementation available")
 
+method onProfileConverted*(self: AccessInterface, success: bool) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
 method emitAccountLoginError*(self: AccessInterface, error: string) {.base.} =
   raise newException(ValueError, "No implementation available")
 
@@ -168,7 +174,7 @@ method onFetchingFromWakuMessageReceived*(self: AccessInterface, backedUpMsgCloc
 method finishAppLoading*(self: AccessInterface) {.base.} =
   raise newException(ValueError, "No implementation available")
 
-method checkFetchingStatusAndProceedWithAppLoading*(self: AccessInterface) {.base.} =
+method checkFetchingStatusAndProceed*(self: AccessInterface) {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method startAppAfterDelay*(self: AccessInterface) {.base.} =
@@ -192,12 +198,30 @@ method onReencryptionProcessStarted*(self: AccessInterface) {.base.} =
 method onReencryptionProcessFinished*(self: AccessInterface) {.base.} =
   raise newException(ValueError, "No implementation available")
 
+## Used in test env only, for testing keycard flows
+method registerMockedKeycard*(self: AccessInterface, cardIndex: int, readerState: int, keycardState: int,
+  mockedKeycard: string, mockedKeycardHelper: string) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method pluginMockedReaderAction*(self: AccessInterface) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method unplugMockedReaderAction*(self: AccessInterface) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method insertMockedKeycardAction*(self: AccessInterface, cardIndex: int) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method removeMockedKeycardAction*(self: AccessInterface) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
 # This way (using concepts) is used only for the modules managed by AppController
 type
   DelegateInterface* = concept c
     c.startupDidLoad()
-    c.userLoggedIn(bool)
+    c.userLoggedIn()
     c.finishAppLoading()
+    c.appReady()
     c.storeDefaultKeyPairForNewKeycardUser()
     c.syncKeycardBasedOnAppWalletStateAfterLogin()
     c.applyKeycardReplacementAfterLogin()

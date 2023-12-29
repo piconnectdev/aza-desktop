@@ -1,4 +1,4 @@
-import times, os, chronicles
+import times, chronicles
 import uuids
 import io_interface
 
@@ -131,7 +131,7 @@ proc authenticateOrigin*(self: Controller, keyUid = "") =
     keyUid: keyUid)
   self.events.emit(SIGNAL_SHARED_KEYCARD_MODULE_AUTHENTICATE_USER, data)
 
-method fetchDerivedAddresses*(self: Controller, derivedFrom: string, paths: seq[string])=
+proc fetchDerivedAddresses*(self: Controller, derivedFrom: string, paths: seq[string])=
   var hashPassword = true
   if self.getPin().len > 0:
     hashPassword = false
@@ -145,7 +145,7 @@ proc fetchDetailsForAddresses*(self: Controller, addresses: seq[string]) =
   self.walletAccountService.fetchDetailsForAddresses(self.uniqueFetchingDetailsId, addresses)
 
 proc addWalletAccount*(self: Controller, createKeystoreFile, doPasswordHashing: bool, name, address, path, publicKey,
-  keyUid, accountType, colorId, emoji: string): bool =
+  keyUid, accountType, colorId, emoji: string, hideFromTotalBalance: bool): bool =
   var password: string
   if createKeystoreFile:
     password = self.getPassword()
@@ -153,7 +153,7 @@ proc addWalletAccount*(self: Controller, createKeystoreFile, doPasswordHashing: 
       info "cannot create keystore file if provided password is empty", name=name, address=address
       return false
   let err = self.walletAccountService.addWalletAccount(password, doPasswordHashing, name, address, path, publicKey,
-    keyUid, accountType, colorId, emoji)
+    keyUid, accountType, colorId, emoji, hideFromTotalBalance)
   if err.len > 0:
     info "adding wallet account failed", name=name, address=address
     return false
@@ -224,9 +224,6 @@ proc connectKeycardReponseSignal(self: Controller) =
 
 proc cancelCurrentFlow*(self: Controller) =
   self.keycardService.cancelCurrentFlow()
-  # in most cases we're running another flow after canceling the current one,
-  # this way we're giving to the keycard some time to cancel the current flow
-  sleep(200)
 
 proc fetchAddressesFromKeycard*(self: Controller, bip44Paths: seq[string]) =
   self.cancelCurrentFlow()

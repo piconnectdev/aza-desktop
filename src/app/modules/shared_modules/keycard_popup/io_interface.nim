@@ -1,8 +1,45 @@
 import NimQml, tables
 import app/core/eventemitter
 from app_service/service/keycard/service import KeycardEvent, CardMetadata, KeyDetails
-from app_service/service/wallet_account/service as wallet_account_service import WalletTokenDto
+
+from backend/helpers/token import WalletTokenDto
+
 import app/modules/shared_models/keypair_item
+
+type FlowType* {.pure.} = enum
+  General = "General"
+  FactoryReset = "FactoryReset"
+  SetupNewKeycard = "SetupNewKeycard"
+  SetupNewKeycardNewSeedPhrase = "SetupNewKeycardNewSeedPhrase"
+  SetupNewKeycardOldSeedPhrase = "SetupNewKeycardOldSeedPhrase"
+  ImportFromKeycard = "ImportFromKeycard"
+  Authentication = "Authentication"
+  UnlockKeycard = "UnlockKeycard"
+  DisplayKeycardContent = "DisplayKeycardContent"
+  RenameKeycard = "RenameKeycard"
+  ChangeKeycardPin = "ChangeKeycardPin"
+  ChangeKeycardPuk = "ChangeKeycardPuk"
+  ChangePairingCode = "ChangePairingCode"
+  CreateCopyOfAKeycard = "CreateCopyOfAKeycard"
+  MigrateFromKeycardToApp = "MigrateFromKeycardToApp"
+  MigrateFromAppToKeycard = "MigrateFromAppToKeycard"
+  Sign = "Sign"
+
+# For the following flows we don't run card syncing.
+const FlowsWeShouldNotTryAKeycardSyncFor* = @[
+  FlowType.General,
+  FlowType.FactoryReset,
+  FlowType.UnlockKeycard,
+  FlowType.SetupNewKeycard,
+  FlowType.SetupNewKeycardNewSeedPhrase,
+  FlowType.SetupNewKeycardOldSeedPhrase,
+  FlowType.ImportFromKeycard,
+  FlowType.Authentication,
+  FlowType.CreateCopyOfAKeycard,
+  FlowType.MigrateFromKeycardToApp,
+  FlowType.MigrateFromAppToKeycard,
+  FlowType.Sign,
+]
 
 const SIGNAL_SHARED_KEYCARD_MODULE_DISPLAY_POPUP* = "sharedKeycarModuleDisplayPopup"
 const SIGNAL_SHARED_KEYCARD_MODULE_FLOW_TERMINATED* = "sharedKeycarModuleFlowTerminated"
@@ -10,6 +47,8 @@ const SIGNAL_SHARED_KEYCARD_MODULE_AUTHENTICATE_USER* = "sharedKeycarModuleAuthe
 const SIGNAL_SHARED_KEYCARD_MODULE_USER_AUTHENTICATED* = "sharedKeycarModuleUserAuthenticated"
 const SIGNAL_SHARED_KEYCARD_MODULE_TRY_KEYCARD_SYNC* = "sharedKeycarModuleTryKeycardSync"
 const SIGNAL_SHARED_KEYCARD_MODULE_KEYCARD_SYNC_TERMINATED* = "sharedKeycarModuleKeycardSyncTerminated"
+const SIGNAL_SHARED_KEYCARD_MODULE_SIGN_DATA* = "sharedKeycarModuleSignData"
+const SIGNAL_SHARED_KEYCARD_MODULE_DATA_SIGNED* = "sharedKeycarModuleDataSigned"
 
 ## Authentication in the app is a global thing and may be used from any part of the app. How to achieve that... it's enough just to send
 ## `SIGNAL_SHARED_KEYCARD_MODULE_AUTHENTICATE_USER` signal with properly set `SharedKeycarModuleAuthenticationArgs` and props there:
@@ -39,44 +78,29 @@ type
     keyUid*: string
     keycardUid*: string
     additinalPathsDetails*: Table[string, KeyDetails] # [path, KeyDetails]
+    path*: string
+    r*: string
+    s*: string
+    v*: string
 
 type
   SharedKeycarModuleFlowTerminatedArgs* = ref object of SharedKeycarModuleArgs
     lastStepInTheCurrentFlow*: bool
+    continueWithNextFlow*: FlowType
+    forceFlow*: bool
+    continueWithKeyUid*: string
+    returnToFlow*: FlowType
 
 type
   SharedKeycarModuleAuthenticationArgs* = ref object of SharedKeycarModuleBaseArgs
     keyUid*: string
     additionalBip44Paths*: seq[string] # can be used in authentication flow to export additinal paths if needed except encryption path
 
-type FlowType* {.pure.} = enum
-  General = "General"
-  FactoryReset = "FactoryReset"
-  SetupNewKeycard = "SetupNewKeycard"
-  SetupNewKeycardNewSeedPhrase = "SetupNewKeycardNewSeedPhrase"
-  SetupNewKeycardOldSeedPhrase = "SetupNewKeycardOldSeedPhrase"
-  ImportFromKeycard = "ImportFromKeycard"
-  Authentication = "Authentication"
-  UnlockKeycard = "UnlockKeycard"
-  DisplayKeycardContent = "DisplayKeycardContent"
-  RenameKeycard = "RenameKeycard"
-  ChangeKeycardPin = "ChangeKeycardPin"
-  ChangeKeycardPuk = "ChangeKeycardPuk"
-  ChangePairingCode = "ChangePairingCode"
-  CreateCopyOfAKeycard = "CreateCopyOfAKeycard"
-
-# For the following flows we don't run card syncing.
-const FlowsWeShouldNotTryAKeycardSyncFor* = @[
-  FlowType.General,
-  FlowType.FactoryReset,
-  FlowType.UnlockKeycard,
-  FlowType.SetupNewKeycard,
-  FlowType.SetupNewKeycardNewSeedPhrase,
-  FlowType.SetupNewKeycardOldSeedPhrase,
-  FlowType.ImportFromKeycard,
-  FlowType.Authentication,
-  FlowType.CreateCopyOfAKeycard
-]
+type
+  SharedKeycarModuleSigningArgs* = ref object of SharedKeycarModuleBaseArgs
+    keyUid*: string
+    path*: string
+    dataToSign*: string
 
 type
   AccessInterface* {.pure inheritable.} = ref object of RootObj
@@ -84,10 +108,19 @@ type
 method delete*(self: AccessInterface) {.base.} =
   raise newException(ValueError, "No implementation available")
 
+method keycardReady*(self: AccessInterface) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
 method getModuleAsVariant*(self: AccessInterface): QVariant {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method getCurrentFlowType*(self: AccessInterface): FlowType {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method getReturnToFlow*(self: AccessInterface): FlowType {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method getForceFlow*(self: AccessInterface): bool {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method getKeycardData*(self: AccessInterface): string {.base.} =
@@ -108,14 +141,18 @@ method onPrimaryActionClicked*(self: AccessInterface) {.base.} =
 method onSecondaryActionClicked*(self: AccessInterface) {.base.} =
   raise newException(ValueError, "No implementation available")
 
+method onTertiaryActionClicked*(self: AccessInterface) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
 method onCancelActionClicked*(self: AccessInterface) {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method onKeycardResponse*(self: AccessInterface, keycardFlowType: string, keycardEvent: KeycardEvent) {.base.} =
   raise newException(ValueError, "No implementation available")
 
-method runFlow*(self: AccessInterface, flowToRun: FlowType, keyUid = "", bip44Paths: seq[string] = @[], txHash = "") {.base.} =
-  raise newException(ValueError, "No implementation available")
+method runFlow*(self: AccessInterface, flowToRun: FlowType, keyUid = "", bip44Paths: seq[string] = @[], txHash = "",
+  forceFlow = false, returnToFlow = FlowType.General) {.base.} =
+    raise newException(ValueError, "No implementation available")
 
 method setPin*(self: AccessInterface, value: string) {.base.} =
   raise newException(ValueError, "No implementation available")
@@ -124,6 +161,12 @@ method setPuk*(self: AccessInterface, value: string) {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method setPassword*(self: AccessInterface, value: string) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method setNewPassword*(self: AccessInterface, value: string) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method getNewPassword*(self: AccessInterface): string {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method setKeycardName*(self: AccessInterface, value: string) {.base.} =

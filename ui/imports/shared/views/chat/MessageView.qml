@@ -8,6 +8,7 @@ import shared.controls 1.0
 import shared.popups 1.0
 import shared.views.chat 1.0
 import shared.controls.chat 1.0
+import shared.stores 1.0
 
 import StatusQ.Core 0.1
 import StatusQ.Core.Theme 0.1
@@ -60,10 +61,19 @@ Loader {
     property bool pinnedMessage: false
     property string messagePinnedBy: ""
     property var reactionsModel: []
-    property string linkUrls: ""
     property var linkPreviewModel
     property string messageAttachments: ""
     property var transactionParams
+    property var emojiReactionsModel
+
+    // These 2 properties can be dropped when the new unfurling flow supports GIFs
+    property var links
+    readonly property var gifLinks: {
+        if (!links)
+            return []
+        const arr = links.split(" ")
+        return arr.filter(value => value.toLowerCase().endsWith('.gif'))
+    }
 
     property string responseToMessageWithId: ""
     property string quotedMessageText: ""
@@ -81,6 +91,9 @@ Loader {
     property var album: []
     property int albumCount: 0
 
+    property var quotedMessageAlbumMessageImages: []
+    property var quotedMessageAlbumImagesCount: 0
+
     // External behavior changers
     property bool isInPinnedPopup: false // The pinned popup limits the number of buttons shown
     property bool disableHover: false // Used to force the HoverHandler to be active (useful for messages in popups)
@@ -91,6 +104,7 @@ Loader {
 
     property int prevMessageIndex: -1
     property int prevMessageContentType: prevMessageAsJsonObj ? prevMessageAsJsonObj.contentType : Constants.messageContentType.unknownContentType
+    property bool prevMessageDeleted: false
     property double prevMessageTimestamp: prevMessageAsJsonObj ? prevMessageAsJsonObj.timestamp : 0
     property string prevMessageSenderId: prevMessageAsJsonObj ? prevMessageAsJsonObj.senderId : ""
     property var prevMessageAsJsonObj
@@ -100,6 +114,12 @@ Loader {
 
     property bool editModeOn: false
     property bool isEdited: false
+
+    property bool deleted: false
+    property string deletedBy: ""
+    property string deletedByContactDisplayName: ""
+    property string deletedByContactIcon: ""
+    property string deletedByContactColorHash: ""
 
     property bool shouldRepeatHeader: d.getShouldRepeatHeader(messageTimestamp, prevMessageTimestamp, messageOutgoingStatus)
 
@@ -190,6 +210,9 @@ Loader {
     asynchronous: true
 
     sourceComponent: {
+        if (root.deleted) {
+            return deletedMessageComponent
+        }
         switch(messageContentType) {
         case Constants.messageContentType.chatIdentifier:
             return channelIdentifierComponent
@@ -300,13 +323,13 @@ Loader {
             Global.openMenu(addReactionContextMenu, root, {}, point)
         }
 
-        function onImageClicked(image, mouse, imageSource) {
+        function onImageClicked(image, mouse, imageSource, url = "") {
             switch (mouse.button) {
             case Qt.LeftButton:
-                Global.openImagePopup(image)
+                Global.openImagePopup(image, url)
                 break;
             case Qt.RightButton:
-                Global.openMenu(imageContextMenuComponent, image, { imageSource })
+                Global.openMenu(imageContextMenuComponent, image, { imageSource, url })
                 break;
             }
         }
@@ -437,6 +460,87 @@ Loader {
     }
 
     Component {
+        id: deletedMessageComponent
+
+        ColumnLayout {
+
+            RowLayout {
+                id: deletedMessage
+                height: 40
+                Layout.fillWidth: true
+                Layout.topMargin: 8
+                Layout.bottomMargin: 8
+                Layout.leftMargin: 16
+                spacing: 8
+
+                readonly property int smartIconSize: 20
+                readonly property int colorId: Utils.colorIdForPubkey(root.deletedBy)
+                readonly property var messageDetails: StatusMessageDetails {
+                    sender.profileImage {
+                        width: deletedMessage.smartIconSize
+                        height: deletedMessage.smartIconSize
+                        assetSettings: StatusAssetSettings {
+                            width: deletedMessage.smartIconSize
+                            height: deletedMessage.smartIconSize
+                            name: root.deletedByContactIcon || ""
+                            isLetterIdenticon: name === ""
+                            imgIsIdenticon: false
+                            charactersLen: 1
+                            color: Theme.palette.userCustomizationColors[deletedMessage.colorId]
+                            letterSize: 14
+                        }
+
+                        name: root.deletedByContactIcon || ""
+                        pubkey: root.deletedBy
+                        colorId: deletedMessage.colorId
+                        colorHash: root.deletedByContactColorHash
+                        showRing: true
+                    }
+                }
+
+                Rectangle {
+                    Layout.preferredWidth: deletedMessage.height
+                    Layout.preferredHeight: deletedMessage.height
+
+                    radius: width / 2
+                    color: Theme.palette.dangerColor3
+                    Layout.alignment: Qt.AlignVCenter
+
+                    StatusIcon {
+                        anchors.centerIn: parent
+                        width: 24
+                        height: 24
+                        icon: "delete"
+                        color: Theme.palette.dangerColor1
+                    }
+                }
+
+                StatusSmartIdenticon {
+                    id: profileImage
+                    Layout.preferredWidth: deletedMessage.smartIconSize
+                    Layout.preferredHeight: deletedMessage.smartIconSize
+                    Layout.alignment: Qt.AlignVCenter
+                    visible: true
+                    name: root.deletedByContactDisplayName
+                    asset: deletedMessage.messageDetails.sender.profileImage.assetSettings
+                    ringSettings: deletedMessage.messageDetails.sender.profileImage.ringSettings
+                }
+
+                StatusBaseText {
+                    text: qsTr("<b>%1</b> deleted this message").arg(root.deletedByContactDisplayName)
+                    Layout.alignment: Qt.AlignVCenter
+                }
+
+                StatusTimeStampLabel {
+                    Layout.alignment: Qt.AlignVCenter
+                    timestamp: root.messageTimestamp
+                    showFullTimestamp: false
+                }
+            }
+        }
+    }
+
+    Component {
         id: messageComponent
 
         ColumnLayout {
@@ -518,6 +622,8 @@ Loader {
                 isSending: root.isSending
                 resendError: root.resendError
                 reactionsModel: root.reactionsModel
+                linkPreviewModel: root.linkPreviewModel
+                gifLinks: root.gifLinks
 
                 showHeader: root.shouldRepeatHeader || dateGroupLabel.visible || isAReply ||
                             root.prevMessageContentType === Constants.messageContentType.systemMessagePrivateGroupType ||
@@ -525,7 +631,7 @@ Loader {
                             root.prevMessageContentType === Constants.messageContentType.systemMessageMutualEventSent ||
                             root.prevMessageContentType === Constants.messageContentType.systemMessageMutualEventAccepted ||
                             root.prevMessageContentType === Constants.messageContentType.systemMessageMutualEventRemoved ||
-                            root.senderId !== root.prevMessageSenderId
+                            root.senderId !== root.prevMessageSenderId || root.prevMessageDeleted
                 isActiveMessage: d.isMessageActive
                 topPadding: showHeader ? Style.current.halfPadding : 0
                 bottomPadding: showHeader && d.nextMessageHasHeader() ? Style.current.halfPadding : 2
@@ -560,7 +666,7 @@ Loader {
                         rootStore.chatCommunitySectionModule.switchToChannel(link.replace("#", ""))
                         return
                     } else if (Utils.isStatusDeepLink(link)) {
-                        rootStore.activateStatusDeepLink(link)
+                        Global.activateDeepLink(link)
                         return
                     }
 
@@ -576,8 +682,7 @@ Loader {
                 }
 
                 onReplyMessageClicked: {
-                    if (!root.quotedMessageDeleted && root.quotedMessageFrom)
-                        root.messageStore.messageModule.jumpToMessage(root.responseToMessageWithId)
+                    root.messageStore.messageModule.jumpToMessage(root.responseToMessageWithId)
                 }
 
                 onSenderNameClicked: {
@@ -679,14 +784,15 @@ Loader {
                     }
 
                     messageText: {
-                        if (root.quotedMessageDeleted) {
+                        if (messageDeleted)
                             return qsTr("Message deleted")
-                        }
-                        if (!root.quotedMessageText && !root.quotedMessageFrom) {
+                        if (!root.quotedMessageText && !root.quotedMessageFrom)
                             return qsTr("Unknown message. Try fetching more messages")
-                        }
                         return root.quotedMessageText
                     }
+                    album: root.quotedMessageAlbumMessageImages
+                    albumCount: root.quotedMessageAlbumImagesCount
+                    messageDeleted: root.quotedMessageDeleted
                     contentType: d.convertContentType(root.quotedMessageContentType)
                     amISender: root.quotedMessageFrom === userProfile.pubKey
                     sender.id: root.quotedMessageFrom
@@ -746,11 +852,23 @@ Loader {
                     LinksMessageView {
                         id: linksMessageView
                         linkPreviewModel: root.linkPreviewModel
-                        messageStore: root.messageStore
-                        store: root.rootStore
-                        isCurrentUser: root.amISender
-                        onImageClicked: (image, mouse, imageSource) => {
-                            d.onImageClicked(image, mouse, imageSource)
+                        gifLinks: root.gifLinks
+                        playAnimations: root.messageStore.playAnimation
+                        isOnline: root.rootStore.mainModuleInst.isOnline
+                        highlightLink: delegate.hoveredLink
+                        onImageClicked: (image, mouse, imageSource, url) => {
+                            d.onImageClicked(image, mouse, imageSource, url)
+                        }
+                        onOpenContextMenu: (item, url, domain) => {
+                            Global.openMenu(imageContextMenuComponent, item, { url: url, domain: domain, requireConfirmationOnOpen: true })
+                        }
+                        onHoveredLinkChanged: delegate.highlightedLink = linksMessageView.hoveredLink
+                        gifUnfurlingEnabled: RootStore.gifUnfurlingEnabled
+                        canAskToUnfurlGifs: !RootStore.neverAskAboutUnfurlingAgain
+                        onSetNeverAskAboutUnfurlingAgain: RootStore.setNeverAskAboutUnfurlingAgain(neverAskAgain)
+
+                        Component.onCompleted: {
+                            root.messageStore.messageModule.forceLinkPreviewsLocalData(root.messageId)
                         }
                     }
                 }
@@ -864,6 +982,21 @@ Loader {
                         }
                     },
                     Loader {
+                        active: !root.editModeOn && delegate.hovered && !delegate.hideQuickActions
+                        visible: active
+                        sourceComponent: StatusFlatRoundButton {
+                            objectName: "markAsUnreadButton"
+                            width: d.chatButtonSize
+                            height: d.chatButtonSize
+                            icon.name: "hide"
+                            type: StatusFlatRoundButton.Type.Tertiary
+                            tooltip.text: qsTr("Mark as unread")
+                            onClicked: {
+                                root.messageStore.markMessageAsUnread(root.messageId)
+                            }
+                        }
+                    },
+                    Loader {
                         active: {
                             if(!delegate.hovered)
                                 return false;
@@ -911,7 +1044,8 @@ Loader {
         id: addReactionContextMenu
 
         MessageAddReactionContextMenu {
-            reactionsModel: root.rootStore.emojiReactionsModel
+            reactionsModel: root.emojiReactionsModel
+            
             onToggleReaction: (emojiId) => {
                 root.messageStore.toggleReaction(root.messageId, emojiId)
             }
@@ -962,7 +1096,7 @@ Loader {
 
         MessageContextMenuView {
             store: root.rootStore
-            reactionModel: root.rootStore.emojiReactionsModel
+            reactionModel: root.emojiReactionsModel
             disabledForChat: !root.rootStore.isUserAllowedToSendMessage
 
             onPinMessage: (messageId) => {
@@ -983,6 +1117,10 @@ Loader {
                                                         root.chatContentModule.pinnedMessagesModel,
                                                         messageId,
                                                         root.chatId)
+            }
+
+            onMarkMessageAsUnread: (messageId) => {
+                root.messageStore.markMessageAsUnread(messageId)
             }
 
             onToggleReaction: (messageId, emojiId) => {

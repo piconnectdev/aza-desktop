@@ -3,6 +3,7 @@ import QtQuick.Controls 2.13
 import QtQuick.Layouts 1.13
 import QtMultimedia 5.13
 import Qt.labs.platform 1.1
+import Qt.labs.settings 1.1
 import QtQml.Models 2.14
 import QtQml 2.15
 
@@ -23,6 +24,8 @@ import shared.popups 1.0
 import shared.popups.keycard 1.0
 import shared.status 1.0
 import shared.stores 1.0
+import shared.popups.send 1.0
+import shared.popups.send.views 1.0
 
 import StatusQ.Core.Theme 0.1
 import StatusQ.Components 0.1
@@ -36,6 +39,8 @@ import AppLayouts.Browser.stores 1.0 as BrowserStores
 import AppLayouts.stores 1.0
 import AppLayouts.Chat.stores 1.0 as ChatStores
 import AppLayouts.Communities.stores 1.0
+import AppLayouts.Wallet.stores 1.0 as WalletStore
+import AppLayouts.Wallet.views.walletconnect 1.0
 
 import mainui.activitycenter.stores 1.0
 import mainui.activitycenter.popups 1.0
@@ -61,14 +66,35 @@ Item {
     property NetworkConnectionStore networkConnectionStore: NetworkConnectionStore {}
     property CommunityTokensStore communityTokensStore: CommunityTokensStore {}
     property CommunitiesStore communitiesStore: CommunitiesStore {}
+    readonly property WalletStore.TokensStore tokensStore: WalletStore.RootStore.tokensStore
+
     // set from main.qml
     property var sysPalette
+
+    // Central UI point for managing app toasts:
+    ToastsManager {
+        id: toastsManager
+
+        rootStore: appMain.rootStore
+        rootChatStore: appMain.rootChatStore
+        communityTokensStore: appMain.communityTokensStore
+
+        sendModalPopup: sendModal
+    }
 
     Connections {
         target: rootStore.mainModuleInst
 
         function onDisplayUserProfile(publicKey: string) {
             popups.openProfilePopup(publicKey)
+        }
+
+        function onDisplayKeycardSharedModuleForAuthenticationOrSigning() {
+            keycardPopupForAuthenticationOrSigning.active = true
+        }
+
+        function onDestroyKeycardSharedModuleForAuthenticationOrSigning() {
+            keycardPopupForAuthenticationOrSigning.active = false
         }
 
         function onDisplayKeycardSharedModuleFlow() {
@@ -89,6 +115,7 @@ Item {
 
         function onActiveSectionChanged() {
             createChatView.opened = false
+            Global.settingsSubSubsection = -1
         }
 
         function onOpenActivityCenter() {
@@ -97,24 +124,94 @@ Item {
 
         function onShowToastAccountAdded(name: string) {
             Global.displayToastMessage(
-                qsTr("\"%1\" successfuly added").arg(name),
+                qsTr("\"%1\" successfully added").arg(name),
                 "",
-                "check-circle",
+                "checkmark-circle",
                 false,
                 Constants.ephemeralNotificationType.success,
                 ""
             )
         }
 
+        function onShowToastAccountRemoved(name: string) {
+            Global.displayToastMessage(
+                        qsTr("\"%1\" successfully removed").arg(name),
+                        "",
+                        "checkmark-circle",
+                        false,
+                        Constants.ephemeralNotificationType.success,
+                        ""
+                        )
+        }
+
         function onShowToastKeypairRenamed(oldName: string, newName: string) {
             Global.displayToastMessage(
                 qsTr("You successfully renamed your keypair\nfrom \"%1\" to \"%2\"").arg(oldName).arg(newName),
                 "",
-                "check-circle",
+                "checkmark-circle",
                 false,
                 Constants.ephemeralNotificationType.success,
                 ""
             )
+        }
+
+        function onShowNetworkEndpointUpdated(name: string, isTest: bool, revertToDefault: bool) {
+            let mainText = revertToDefault ?
+                    (isTest ? qsTr("Test network settings for %1 reverted to default").arg(name): qsTr("Live network settings for %1 reverted to default").arg(name)):
+                    (isTest ? qsTr("Test network settings for %1 updated").arg(name): qsTr("Live network settings for %1 updated").arg(name))
+            Global.displayToastMessage(
+                mainText,
+                "",
+                "checkmark-circle",
+                false,
+                Constants.ephemeralNotificationType.success,
+                ""
+            )
+        }
+
+        function onShowToastKeypairRemoved(keypairName: string) {
+            Global.displayToastMessage(
+                qsTr("“%1” keypair and its derived accounts were successfully removed from all devices").arg(keypairName),
+                "",
+                "checkmark-circle",
+                false,
+                Constants.ephemeralNotificationType.success,
+                ""
+            )
+        }
+
+        function onShowToastKeypairsImported(keypairName: string, keypairsCount: int, error: string) {
+            let notification = qsTr("Please re-generate QR code and try importing again")
+            if (error !== "") {
+                if (error.startsWith("one or more expected keystore files are not found among the sent files")) {
+                    notification = qsTr("Make sure you're importing the exported keypair on paired device")
+                }
+            }
+            else {
+                notification = qsTr("%1 keypair successfully imported").arg(keypairName)
+                if (keypairsCount > 1) {
+                    notification = qsTr("%n keypair(s) successfully imported", "", keypairsCount)
+                }
+            }
+            Global.displayToastMessage(
+                notification,
+                "",
+                error!==""? "info" : "checkmark-circle",
+                false,
+                error!==""? Constants.ephemeralNotificationType.normal : Constants.ephemeralNotificationType.success,
+                ""
+            )
+        }
+
+        function onShowToastTransactionSent(chainId: int, txHash: string, uuid: string, error: string) {
+            if (!error) {
+                Global.displayToastMessage(qsTr("Transaction pending..."),
+                                           qsTr("View on etherscan"),
+                                           "",
+                                           true,
+                                           Constants.ephemeralNotificationType.normal,
+                                           "%1/%2".arg(appMain.rootStore.getEtherscanLink(chainId)).arg(txHash))
+            }
         }
     }
 
@@ -136,12 +233,28 @@ Item {
         }
     }
 
+    Settings {
+        id: appMainLocalSettings
+        property var whitelistedUnfurledDomains: []
+    }
+
     Popups {
         id: popups
         popupParent: appMain
         rootStore: appMain.rootStore
+        communityTokensStore: appMain.communityTokensStore
         communitiesStore: appMain.communitiesStore
+        devicesStore: appMain.rootStore.profileSectionStore.devicesStore
         isDevBuild: !production
+
+        onOpenExternalLink: globalConns.onOpenLink(link)
+        onSaveDomainToUnfurledWhitelist: {
+            const whitelistedHostnames = appMainLocalSettings.whitelistedUnfurledDomains || []
+            if (!whitelistedHostnames.includes(domain)) {
+                whitelistedHostnames.push(domain)
+                appMainLocalSettings.whitelistedUnfurledDomains = whitelistedHostnames
+            }
+        }
     }
 
     Connections {
@@ -165,13 +278,7 @@ Item {
             d.openActivityCenterPopup()
         }
 
-        function onDisplayToastMessage(title: string, subTitle: string, icon: string, loading: bool, ephNotifType: int, url: string) {
-            appMain.rootStore.mainModuleInst.displayEphemeralNotification(title, subTitle, icon, loading, ephNotifType, url)
-        }
-
         function onOpenLink(link: string) {
-            console.warn("opening external url without asking user")
-
             // Qt sometimes inserts random HTML tags; and this will break on invalid URL inside QDesktopServices::openUrl(link)
             link = appMain.rootStore.plainText(link)
 
@@ -185,6 +292,17 @@ Item {
                     Qt.openUrlExternally(link)
                 }
             }
+        }
+
+        function onOpenLinkWithConfirmation(link: string, domain: string) {
+            if (appMainLocalSettings.whitelistedUnfurledDomains.includes(domain))
+                globalConns.onOpenLink(link)
+            else
+                popups.openConfirmExternalLinkPopup(link, domain)
+        }
+
+        function onActivateDeepLink(link: string) {
+            appMain.rootStore.mainModuleInst.activateStatusDeepLink(link)
         }
 
         function onPlaySendMessageSound() {
@@ -208,13 +326,14 @@ Item {
             appMain.rootStore.mainModuleInst.setNthEnabledSectionActive(nthSection)
         }
 
-        function onAppSectionBySectionTypeChanged(sectionType: int, subsection: int) {
+        function onAppSectionBySectionTypeChanged(sectionType, subsection, settingsSubsection = -1) {
             if(!appMain.rootStore.mainModuleInst)
                 return
 
             appMain.rootStore.mainModuleInst.setActiveSectionBySectionType(sectionType)
             if (sectionType === Constants.appSection.profile) {
                 Global.settingsSubsection = subsection;
+                Global.settingsSubSubsection = settingsSubsection;
             }
         }
 
@@ -224,6 +343,53 @@ Item {
 
         function onSwitchToCommunity(communityId: string) {
             appMain.communitiesStore.setActiveCommunity(communityId)
+        }
+    }
+
+    Connections {
+        target: appMain.communitiesStore
+
+        function onImportingCommunityStateChanged(communityId, state, errorMsg) {
+            let title = ""
+            let subTitle = ""
+            let loading = false
+            let notificationType = Constants.ephemeralNotificationType.normal
+            let icon = ""
+
+            switch (state)
+            {
+            case Constants.communityImported:
+                const community = appMain.communitiesStore.getCommunityDetailsAsJson(communityId)
+                if(community.isControlNode) {
+                    title = qsTr("This device is now the control node for the %1 Community").arg(community.name)
+                    notificationType = Constants.ephemeralNotificationType.success
+                    icon = "checkmark-circle"
+                } else {
+                    title = qsTr("'%1' community imported").arg(community.name)
+                }
+                break
+            case Constants.communityImportingInProgress:
+                title = qsTr("Importing community is in progress")
+                loading = true
+                break
+            case Constants.communityImportingError:
+                title = qsTr("Failed to import community '%1'").arg(communityId)
+                subTitle = errorMsg
+                break
+            case Constants.communityImportingCanceled:
+                title = qsTr("Import community '%1' was canceled").arg(community.name)
+                break;
+            default:
+                console.error("unknown state while importing community: %1").arg(state)
+                return
+            }
+
+            Global.displayToastMessage(title,
+                                       subTitle,
+                                       icon,
+                                       loading,
+                                       notificationType,
+                                       "")
         }
     }
 
@@ -354,8 +520,9 @@ Item {
                 popupMenu: Component {
                     StatusMenu {
                         id: communityContextMenu
-                        width: 180
                         property var chatCommunitySectionModule
+
+                        readonly property bool isSpectator: model.spectated && !model.joined
 
                         openHandler: function () {
                             // we cannot return QVariant if we pass another parameter in a function call
@@ -368,6 +535,7 @@ Item {
                             text: qsTr("Invite People")
                             icon.name: "share-ios"
                             enabled: model.canManageUsers
+                            objectName: "invitePeople"
                             onTriggered: {
                                 popups.openInviteFriendsToCommunityPopup(model,
                                                                          communityContextMenu.chatCommunitySectionModule,
@@ -401,20 +569,37 @@ Item {
                             }
                         }
 
+                        StatusAction {
+                            text: qsTr("Edit Shared Addresses")
+                            icon.name: "wallet"
+                            enabled: {
+                                if (model.memberRole === Constants.memberRole.owner)
+                                    return false
+                                if (communityContextMenu.isSpectator && !appMain.rootStore.isMyCommunityRequestPending(model.id))
+                                    return false
+                                return true
+                            }
+                            onTriggered: {
+                                communityContextMenu.close()
+                                Global.openEditSharedAddressesFlow(model.id)
+                            }
+                        }
+
                         StatusMenuSeparator { visible: leaveCommunityMenuItem.enabled }
 
                         StatusAction {
                             id: leaveCommunityMenuItem
-                            enabled: model.memberRole !== Constants.memberRole.owner
+                            // allow to leave community for the owner in non-production builds
+                            enabled: model.memberRole !== Constants.memberRole.owner || !production
                             text: {
-                                if (model.spectated)
+                                if (communityContextMenu.isSpectator)
                                     return qsTr("Close Community")
                                 return qsTr("Leave Community")
                             }
-                            icon.name: model.spectated ? "close-circle" : "arrow-left"
+                            icon.name: communityContextMenu.isSpectator ? "close-circle" : "arrow-left"
                             type: StatusAction.Type.Danger
-                            onTriggered: model.spectated ? communityContextMenu.chatCommunitySectionModule.leaveCommunity()
-                                                         : popups.openLeaveCommunityPopup(model.name, model.id, model.outroMessage)
+                            onTriggered: communityContextMenu.isSpectator ? communityContextMenu.chatCommunitySectionModule.leaveCommunity()
+                                                                          : popups.openLeaveCommunityPopup(model.name, model.id, model.outroMessage)
                         }
                     }
                 }
@@ -565,9 +750,9 @@ Item {
                     type: ModuleWarning.Warning
                     iconName: "warning"
                     active: appMain.rootStore.profileSectionStore.walletStore.areTestNetworksEnabled
-
+                    delay: false
                     onClicked: Global.openTestnetPopup()
-                    onCloseClicked: Global.openTestnetPopup()
+                    closeBtnVisible: false
                 }
 
                 ModuleWarning {
@@ -579,7 +764,7 @@ Item {
                     type: ModuleWarning.Danger
                     text: qsTr("Secure your seed phrase")
                     buttonText: qsTr("Back up now")
-
+                    delay: false
                     onClicked: popups.openBackUpSeedPopup()
 
                     onCloseClicked: {
@@ -599,15 +784,18 @@ Item {
                     readonly property int warnings: appMain.communitiesStore.discordImportWarningsCount
                     readonly property string communityId: appMain.communitiesStore.discordImportCommunityId
                     readonly property string communityName: appMain.communitiesStore.discordImportCommunityName
-
+                    readonly property string channelId: appMain.communitiesStore.discordImportChannelId
+                    readonly property string channelName: appMain.communitiesStore.discordImportChannelName
+                    readonly property string channelOrCommunityName: channelName || communityName
+                    delay: false
                     active: !cancelled && (inProgress || finished || stopped)
                     type: errors ? ModuleWarning.Type.Danger : ModuleWarning.Type.Success
                     text: {
                         if (finished || stopped) {
                             if (errors)
-                                return qsTr("The import of ‘%1’ from Discord to Status was stopped: <a href='#'>Critical issues found</a>").arg(communityName)
+                                return qsTr("The import of ‘%1’ from Discord to Status was stopped: <a href='#'>Critical issues found</a>").arg(channelOrCommunityName)
 
-                            let result = qsTr("‘%1’ was successfully imported from Discord to Status").arg(communityName) + "  <a href='#'>"
+                            let result = qsTr("‘%1’ was successfully imported from Discord to Status").arg(channelOrCommunityName) + "  <a href='#'>"
                             if (warnings)
                                 result += qsTr("Details (%1)").arg(qsTr("%n issue(s)", "", warnings))
                             else
@@ -616,7 +804,7 @@ Item {
                             return result
                         }
                         if (inProgress) {
-                            let result = qsTr("Importing ‘%1’ from Discord to Status").arg(communityName) + "  <a href='#'>"
+                            let result = qsTr("Importing ‘%1’ from Discord to Status").arg(channelOrCommunityName) + "  <a href='#'>"
                             if (warnings)
                                 result += qsTr("Check progress (%1)").arg(qsTr("%n issue(s)", "", warnings))
                             else
@@ -627,16 +815,17 @@ Item {
 
                         return ""
                     }
-                    onLinkActivated: popups.openDiscordImportProgressPopup()
+                    onLinkActivated: popups.openDiscordImportProgressPopup(!!channelId)
                     progressValue: progress
                     closeBtnVisible: finished || stopped
-                    buttonText: finished && !errors ? qsTr("Visit your Community") : ""
+                    buttonText: finished && !errors ? !!channelId ? qsTr("Visit your new channel") : qsTr("Visit your Community") : ""
                     onClicked: function() {
-                        appMain.communitiesStore.setActiveCommunity(communityId)
+                        if (!!channelId)
+                            rootStore.setActiveSectionChat(communityId, channelId)
+                        else
+                            appMain.communitiesStore.setActiveCommunity(communityId)
                     }
-                    onCloseClicked: {
-                        hide();
-                    }
+                    onCloseClicked: hide()
                 }
 
                 ModuleWarning {
@@ -646,6 +835,7 @@ Item {
                     type: ModuleWarning.Danger
                     text: qsTr("Downloading message history archives, DO NOT CLOSE THE APP until this banner disappears.")
                     closeBtnVisible: false
+                    delay: false
                 }
 
                 ModuleWarning {
@@ -701,6 +891,7 @@ Item {
                         objectName: "appVersionUpdateBanner"
                         Layout.fillWidth: true
                         type: ModuleWarning.Success
+                        delay: false
                         text: updateAvailable ? qsTr("A new version of Status (%1) is available").arg(version)
                                               : qsTr("Your version is up to date")
 
@@ -785,21 +976,49 @@ Item {
                     objectName: "walletCollectiblesConnectionBanner"
                     Layout.fillWidth: true
                     websiteDown: Constants.walletConnections.collectibles
-                    withCache: networkConnectionStore.collectiblesCache
+                    withCache: lastCheckedAtUnix > 0
                     networkConnectionStore: appMain.networkConnectionStore
+                    tooltipMessage: {
+                        if(withCache)
+                            return qsTr("Collectibles providers are currently unavailable for %1. Collectibles for those chains are as of %2.").arg(jointChainIdString).arg(lastCheckedAt)
+                        else
+                            return qsTr("Collectibles providers are currently unavailable for %1.").arg(jointChainIdString)
+                    }
                     toastText: {
                         switch(connectionState) {
                         case Constants.ConnectionStatus.Success:
-                            return qsTr("Opensea connection successful")
+                            return qsTr("Collectibles providers connection successful")
                         case Constants.ConnectionStatus.Failure:
-                            if(withCache){
-                                return qsTr("Opensea down. Collectibles are as of %1.").arg(lastCheckedAt)
+                            if(completelyDown) {
+                                if(withCache)
+                                    return qsTr("Collectibles providers down. Collectibles are as of %1.").arg(lastCheckedAt)
+                                else
+                                    return qsTr("Collectibles providers down. Collectibles cannot be retrieved.")
                             }
-                            else {
-                                return qsTr("Opensea down.")
+                            else if(chainIdsDown.length > 0) {
+                                if(chainIdsDown.length > 2) {
+                                    if(withCache)
+                                        return qsTr("Collectibles providers down for <a href='#'>multiple chains</a>. Collectibles for these chains are as of %1.".arg(lastCheckedAt))
+                                    else
+                                        return qsTr("Collectibles providers down for <a href='#'>multiple chains</a>. Collectibles for these chains cannot be retrieved.")
+                                }
+                                else if(chainIdsDown.length === 1) {
+                                    if(withCache)
+                                        return qsTr("Collectibles providers down for %1. Collectibles for this chain are as of %2.").arg(jointChainIdString).arg(lastCheckedAt)
+                                    else
+                                        return qsTr("Collectibles providers down for %1. Collectibles for this chain cannot be retrieved.").arg(jointChainIdString)
+                                }
+                                else {
+                                    if(withCache)
+                                        return qsTr("Collectibles providers down for %1. Collectibles for these chains are as of %2.").arg(jointChainIdString).arg(lastCheckedAt)
+                                    else
+                                        return qsTr("Collectibles providers down for %1. Collectibles for these chains cannot be retrieved.").arg(jointChainIdString)
+                                }
                             }
+                            else
+                                return ""
                         case Constants.ConnectionStatus.Retrying:
-                            return qsTr("Retrying connection to Opensea...")
+                            return qsTr("Retrying connection to collectibles providers...")
                         default:
                             return ""
                         }
@@ -953,6 +1172,7 @@ Item {
                                     networkConnectionStore: appMain.networkConnectionStore
                                 }
                                 createChatPropertiesStore: appMain.createChatPropertiesStore
+                                tokensStore: appMain.tokensStore
                                 emojiPopup: statusEmojiPopup.item
                                 stickersPopup: statusStickersPopupLoader.item
 
@@ -1041,6 +1261,7 @@ Item {
                             systemPalette: appMain.sysPalette
                             emojiPopup: statusEmojiPopup.item
                             networkConnectionStore: appMain.networkConnectionStore
+                            tokensStore: appMain.tokensStore
                         }
                     }
 
@@ -1083,6 +1304,8 @@ Item {
                             sourceComponent: ChatLayout {
                                 id: chatLayoutComponent
 
+                                readonly property bool isManageCommunityEnabledInAdvanced: appMain.rootStore.profileSectionStore.advancedStore.isManageCommunityOnTestModeEnabled
+
                                 Binding {
                                     target: rootDropAreaPanel
                                     property: "enabled"
@@ -1100,11 +1323,14 @@ Item {
                                     }
                                 }
 
+                                sendModalPopup: sendModal
                                 emojiPopup: statusEmojiPopup.item
                                 stickersPopup: statusStickersPopupLoader.item
                                 sectionItemModel: model
-                                communitySettingsDisabled: production && appMain.rootStore.profileSectionStore.walletStore.areTestNetworksEnabled
-
+                                createChatPropertiesStore: appMain.createChatPropertiesStore
+                                communitiesStore: appMain.communitiesStore
+                                communitySettingsDisabled: !chatLayoutComponent.isManageCommunityEnabledInAdvanced &&
+                                                           (production && appMain.rootStore.profileSectionStore.walletStore.areTestNetworksEnabled)
                                 rootStore: ChatStores.RootStore {
                                     contactsStore: appMain.rootStore.contactStore
                                     communityTokensStore: appMain.communityTokensStore
@@ -1115,6 +1341,7 @@ Item {
                                         return appMain.rootStore.mainModuleInst.getCommunitySectionModule()
                                     }
                                 }
+                                tokensStore: appMain.tokensStore
 
                                 onProfileButtonClicked: {
                                     Global.changeAppSectionBySectionType(Constants.appSection.profile);
@@ -1186,28 +1413,58 @@ Item {
             active: false
 
             function open(address = "") {
+                if (!!address) {
+                    preSelectedRecipient = address
+                    preSelectedRecipientType = TabAddressSelectorView.Type.Address
+                }
                 this.active = true
-                this.item.addressText = address;
                 this.item.open()
             }
+
             function closed() {
                 // this.sourceComponent = undefined // kill an opened instance
                 this.active = false
             }
-            property var selectedAccount
-            property bool isBridgeTx
+
+            property var preSelectedAccount
+            property var preSelectedRecipient
+            property int preSelectedRecipientType
+            property string preSelectedHoldingID
+            property int preSelectedHoldingType: Constants.TokenType.Unknown
+            property int preSelectedSendType: Constants.SendType.Unknown
+            property string preDefinedAmountToSend
+            property bool onlyAssets: false
+
             sourceComponent: SendModal {
+                onlyAssets: sendModal.onlyAssets
                 onClosed: {
                     sendModal.closed()
-                    sendModal.isBridgeTx = false
+                    sendModal.preSelectedSendType = Constants.SendType.Unknown
+                    sendModal.preSelectedHoldingID = ""
+                    sendModal.preSelectedHoldingType = Constants.TokenType.Unknown
+                    sendModal.preSelectedAccount = undefined
+                    sendModal.preSelectedRecipient = undefined
+                    sendModal.preDefinedAmountToSend = ""
                 }
             }
             onLoaded: {
-                if (!!sendModal.selectedAccount) {
-                    item.selectedAccount = sendModal.selectedAccount
+                if (!!sendModal.preSelectedAccount) {
+                    item.preSelectedAccount = sendModal.preSelectedAccount
                 }
-                if(isBridgeTx)
-                    item.isBridgeTx = sendModal.isBridgeTx
+                if (!!sendModal.preSelectedRecipient) {
+                    item.preSelectedRecipient = sendModal.preSelectedRecipient
+                    item.preSelectedRecipientType = sendModal.preSelectedRecipientType
+                }
+                if(sendModal.preSelectedSendType !== Constants.SendType.Unknown) {
+                    item.preSelectedSendType = sendModal.preSelectedSendType
+                }
+                if(preSelectedHoldingType !== Constants.TokenType.Unknown) {
+                    item.preSelectedHoldingID = sendModal.preSelectedHoldingID
+                    item.preSelectedHoldingType = sendModal.preSelectedHoldingType
+                }
+                if(preDefinedAmountToSend != "") {
+                    item.preDefinedAmountToSend = preDefinedAmountToSend
+                }
             }
         }
 
@@ -1341,7 +1598,7 @@ Item {
         anchors.rightMargin: 8
         anchors.bottom: parent.bottom
         anchors.bottomMargin: 60
-        width: 343
+        width: 374
         height: Math.min(parent.height - 120, toastArea.contentHeight)
         spacing: 8
         verticalLayoutDirection: ListView.BottomToTop
@@ -1349,77 +1606,54 @@ Item {
         clip: false
 
         delegate: StatusToastMessage {
+            objectName: "statusToastMessage"
+            width: ListView.view.width
             primaryText: model.title
             secondaryText: model.subTitle
             icon.name: model.icon
+            iconColor: model.iconColor
             loading: model.loading
             type: model.ephNotifType
             linkUrl: model.url
+            actionRequired: model.actionType !== ToastsManager.ActionType.None
             duration: model.durationInMs
             onClicked: {
                 appMain.rootStore.mainModuleInst.ephemeralNotificationClicked(model.timestamp)
                 this.open = false
             }
             onLinkActivated: {
-                if (link.startsWith("#")) // internal link to section
-                    globalConns.onAppSectionBySectionTypeChanged(link.substring(1))
+                this.open = false
+                if(actionRequired) {
+                    toastsManager.doAction(model.actionType, model.actionData)
+                    return
+                }
+
+                if (link.startsWith("#") && link !== "#") { // internal link to section
+                    const sectionArgs = link.substring(1).split("/")
+                    const section = sectionArgs[0]
+                    let subsection = sectionArgs.length > 1 ? sectionArgs[1] : 0
+                    let subsubsection = sectionArgs.length > 2 ? sectionArgs[2] : -1
+                    Global.changeAppSectionBySectionType(section, subsection, subsubsection)
+                }
                 else
                     Global.openLink(link)
             }
-
             onClose: {
                 appMain.rootStore.mainModuleInst.removeEphemeralNotification(model.timestamp)
             }
         }
     }
 
-    Component.onCompleted: {
-        const whitelist = appMain.rootStore.messagingStore.getLinkPreviewWhitelist()
-        try {
-            const whiteListedSites = JSON.parse(whitelist)
-            let settingsUpdated = false
-
-            // Add Status links to whitelist
-            whiteListedSites.push({title: "Status", address: Constants.deepLinkPrefix, imageSite: false})
-            whiteListedSites.push({title: "Status", address: Constants.externalStatusLink, imageSite: false})
-            let settings = localAccountSensitiveSettings.whitelistedUnfurlingSites
-
-            if (!settings) {
-                settings = {}
-            }
-
-            // Set Status links as true. We intercept those URLs so it is privacy-safe
-            if (!settings[Constants.deepLinkPrefix] || !settings[Constants.externalStatusLink]) {
-                settings[Constants.deepLinkPrefix] = true
-                settings[Constants.externalStatusLink] = true
-                settingsUpdated = true
-            }
-
-            const whitelistedHostnames = []
-
-            // Add whitelisted sites in to app settings that are not already there
-            whiteListedSites.forEach(site => {
-                                        if (!settings.hasOwnProperty(site.address))  {
-                                            settings[site.address] = false
-                                            settingsUpdated = true
-                                        }
-                                        whitelistedHostnames.push(site.address)
-                                    })
-            // Remove any whitelisted sites from app settings that don't exist in the
-            // whitelist from status-go
-            Object.keys(settings).forEach(settingsHostname => {
-                if (!whitelistedHostnames.includes(settingsHostname)) {
-                    delete settings[settingsHostname]
-                    settingsUpdated = true
-                }
-            })
-            if (settingsUpdated) {
-                localAccountSensitiveSettings.whitelistedUnfurlingSites = settings
-            }
-        } catch (e) {
-            console.error('Could not parse the whitelist for sites', e)
+    Loader {
+        id: keycardPopupForAuthenticationOrSigning
+        active: false
+        sourceComponent: KeycardPopup {
+            sharedKeycardModule: appMain.rootStore.mainModuleInst.keycardSharedModuleForAuthenticationOrSigning
         }
-        Global.settingsLoaded()
+
+        onLoaded: {
+            keycardPopupForAuthenticationOrSigning.item.open()
+        }
     }
 
     Loader {
@@ -1447,6 +1681,22 @@ Item {
         sourceComponent: UserAgreementPopup {
             visible: appMain.visible
             onClosed: userAgreementLoader.active = false
+        }
+    }
+
+    WalletConnect {
+        id: walletConnect
+        anchors.top: parent.bottom
+        width: 100
+        height: 100
+
+        controller: WalletStore.RootStore.walletConnectController
+
+        Connections {
+            target: Global
+            function onPopupWalletConnect() {
+                walletConnect.modal.open()
+            }
         }
     }
 }

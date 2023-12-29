@@ -40,7 +40,7 @@ SplitView {
                 text: "Update"
                 onClicked: {
                     holdingsDropdown.close()
-                    holdingsDropdown.setActiveTab(HoldingTypes.Type.Ens)
+                    holdingsDropdown.setActiveTab(Constants.TokenType.ENS)
                     holdingsDropdown.openUpdateFlow()
                 }
             }
@@ -51,6 +51,8 @@ SplitView {
 
             parent: container
             anchors.centerIn: container
+
+            allTokensMode: ctrlAllTokensMode.checked
 
             CollectiblesModel {
                 id: collectiblesModel
@@ -64,11 +66,15 @@ SplitView {
                 proxyRoles: [
                     ExpressionRole {
                         name: "supply"
-                        expression: (model.index + 1) * 115
+                        expression: (model.index === 1 ? 1 : (model.index + 1) * 115).toString()
+                    },
+                    ExpressionRole {
+                        name: "multiplierIndex"
+                        expression: 0
                     },
                     ExpressionRole {
                         name: "infiniteSupply"
-                        expression: !(model.index % 4)
+                        expression: !((model.index + 1) % 4)
                     },
                     ExpressionRole {
                         name: "chainName"
@@ -83,11 +89,6 @@ SplitView {
                         expression: model.index ? icon1 : icon2
                     }
                 ]
-
-                filters: ValueFilter {
-                    roleName: "category"
-                    value: TokenCategories.Category.Community
-                }
             }
 
             AssetsModel {
@@ -102,7 +103,12 @@ SplitView {
                 proxyRoles: [
                     ExpressionRole {
                         name: "supply"
-                        expression: (model.index + 1) * 584
+                        expression: ((model.index + 1) * 584).toString()
+                                    + "0".repeat(18)
+                    },
+                    ExpressionRole {
+                        name: "multiplierIndex"
+                        expression: 18
                     },
                     ExpressionRole {
                         name: "infiniteSupply"
@@ -128,13 +134,9 @@ SplitView {
                 }
             }
 
-            collectiblesModel: isAirdropMode.checked
-                               ? collectiblesModelWithSupply
-                               : collectiblesModel
+            collectiblesModel: collectiblesModelWithSupply
 
-            assetsModel: isAirdropMode.checked
-                         ? assetsModelWithSupply
-                         : assetsModel
+            assetsModel: assetsModelWithSupply
             isENSTab: isEnsTabChecker.checked
 
             onOpened: contentItem.parent.parent = container
@@ -162,6 +164,20 @@ SplitView {
                 text: "Airdrop mode"
                 checked: false
             }
+
+            CheckBox {
+                id: ctrlAllTokensMode
+                text: "All tokens mode"
+            }
         }
     }
 }
+
+// category: Popups
+
+// https://www.figma.com/file/17fc13UBFvInrLgNUKJJg5/Kuba%E2%8E%9CDesktop?node-id=22721%3A499660&t=F5yiYQV2YGPBdrJ8-0
+// https://www.figma.com/file/17fc13UBFvInrLgNUKJJg5/Kuba%E2%8E%9CDesktop?node-id=22827%3A501381&t=7gqqAFbdG5KrPOmn-0
+// https://www.figma.com/file/17fc13UBFvInrLgNUKJJg5/Kuba%E2%8E%9CDesktop?node-id=22733%3A502088&t=5QSRGGAhrksqBs8e-0
+// https://www.figma.com/file/17fc13UBFvInrLgNUKJJg5/Kuba%E2%8E%9CDesktop?node-id=22772%3A496580&t=7gqqAFbdG5KrPOmn-0
+// https://www.figma.com/file/17fc13UBFvInrLgNUKJJg5/Kuba%E2%8E%9CDesktop?node-id=22772%3A496653&t=7gqqAFbdG5KrPOmn-0
+// https://www.figma.com/file/17fc13UBFvInrLgNUKJJg5/Kuba%E2%8E%9CDesktop?node-id=22734%3A502737&t=7gqqAFbdG5KrPOmn-0

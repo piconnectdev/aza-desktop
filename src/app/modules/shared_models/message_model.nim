@@ -12,6 +12,7 @@ type
     PrevMsgIndex
     PrevMsgSenderId
     PrevMsgContentType
+    PrevMsgDeleted
     NextMsgIndex
     NextMsgTimestamp
     CommunityId
@@ -42,8 +43,14 @@ type
     Reactions
     EditMode
     IsEdited
+    Deleted
+    DeletedBy
+    DeletedByContactDisplayName
+    DeletedByContactIcon
+    DeletedByContactColorHash
     Links
     LinkPreviewModel
+    EmojiReactionsModel
     TransactionParameters
     MentionedUsersPks
     SenderTrustStatus
@@ -62,6 +69,8 @@ type
     QuotedMessageAuthorEnsVerified
     QuotedMessageAuthorIsContact
     QuotedMessageAuthorColorHash
+    QuotedMessageAlbumMessageImages
+    QuotedMessageAlbumImagesCount
     AlbumMessageImages
     AlbumImagesCount
 
@@ -69,7 +78,6 @@ QtObject:
   type
     Model* = ref object of QAbstractListModel
       items*: seq[Item]
-      allKeys: seq[int]
       firstUnseenMessageId: string
 
   proc delete(self: Model) =
@@ -82,12 +90,6 @@ QtObject:
   proc newModel*(): Model =
     new(result, delete)
     result.setup
-
-    # This is just a clean way to have all roles in a seq, without typing long seq manualy, and this way we're sure that
-    # all new added roles will be included here as well.
-    for i in result.roleNames().keys:
-      result.allKeys.add(i)
-
     result.firstUnseenMessageId = ""
 
   proc `$`*(self: Model): string =
@@ -116,6 +118,7 @@ QtObject:
       ModelRole.PrevMsgIndex.int:"prevMsgIndex",
       ModelRole.PrevMsgSenderId.int:"prevMsgSenderId",
       ModelRole.PrevMsgContentType.int:"prevMsgContentType",
+      ModelRole.PrevMsgDeleted.int:"prevMsgDeleted",
       ModelRole.NextMsgIndex.int:"nextMsgIndex",
       ModelRole.NextMsgTimestamp.int:"nextMsgTimestamp",
       ModelRole.CommunityId.int:"communityId",
@@ -147,8 +150,14 @@ QtObject:
       ModelRole.Reactions.int:"reactions",
       ModelRole.EditMode.int: "editMode",
       ModelRole.IsEdited.int: "isEdited",
+      ModelRole.Deleted.int: "deleted",
+      ModelRole.DeletedBy.int: "deletedBy",
+      ModelRole.DeletedByContactDisplayName.int: "deletedByContactDisplayName",
+      ModelRole.DeletedByContactIcon.int: "deletedByContactIcon",
+      ModelRole.DeletedByContactColorHash.int: "deletedByContactColorHash",
       ModelRole.Links.int: "links",
       ModelRole.LinkPreviewModel.int: "linkPreviewModel",
+      ModelRole.EmojiReactionsModel.int: "emojiReactionsModel",
       ModelRole.TransactionParameters.int: "transactionParameters",
       ModelRole.MentionedUsersPks.int: "mentionedUsersPks",
       ModelRole.SenderTrustStatus.int: "senderTrustStatus",
@@ -165,6 +174,8 @@ QtObject:
       ModelRole.QuotedMessageAuthorEnsVerified.int: "quotedMessageAuthorEnsVerified",
       ModelRole.QuotedMessageAuthorIsContact.int: "quotedMessageAuthorIsContact",
       ModelRole.QuotedMessageAuthorColorHash.int: "quotedMessageAuthorColorHash",
+      ModelRole.QuotedMessageAlbumMessageImages.int: "quotedMessageAlbumMessageImages",
+      ModelRole.QuotedMessageAlbumImagesCount.int: "quotedMessageAlbumImagesCount",
       ModelRole.AlbumMessageImages.int: "albumMessageImages",
       ModelRole.AlbumImagesCount.int: "albumImagesCount",
     }.toTable
@@ -200,6 +211,12 @@ QtObject:
         result = newQVariant(prevItem.contentType.int)
       else:
         result = newQVariant(ContentType.Unknown.int)
+    of ModelRole.PrevMsgDeleted:
+      if (index.row + 1 < self.items.len):
+        let prevItem = self.items[index.row + 1]
+        result = newQVariant(prevItem.deleted)
+      else:
+        result = newQVariant(false)
     of ModelRole.PrevMsgIndex:
       result = newQVariant(index.row + 1)
     of ModelRole.NextMsgIndex:
@@ -260,6 +277,10 @@ QtObject:
       result = newQVariant(item.quotedMessageAuthorDetails.dto.isContact())
     of ModelRole.QuotedMessageAuthorColorHash:
       result = newQVariant(item.quotedMessageAuthorDetails.colorHash)
+    of ModelRole.QuotedMessageAlbumMessageImages:
+      result = newQVariant(item.quotedMessageAlbumMessageImages.join(" "))
+    of ModelRole.QuotedMessageAlbumImagesCount:
+      result = newQVariant(item.quotedMessageAlbumImagesCount)
     of ModelRole.MessageText:
       result = newQVariant(item.messageText)
     of ModelRole.UnparsedText:
@@ -292,10 +313,22 @@ QtObject:
       result = newQVariant(item.editMode)
     of ModelRole.IsEdited:
       result = newQVariant(item.isEdited)
+    of ModelRole.Deleted:
+      result = newQVariant(item.deleted)
+    of ModelRole.DeletedBy:
+      result = newQVariant(item.deletedBy)
+    of ModelRole.DeletedByContactDisplayName:
+      result = newQVariant(item.deletedByContactDetails.dto.userDefaultDisplayName())
+    of ModelRole.DeletedByContactIcon:
+      result = newQVariant(item.deletedByContactDetails.dto.image.thumbnail)
+    of ModelRole.DeletedByContactColorHash:
+      result = newQVariant(item.deletedByContactDetails.colorHash)
     of ModelRole.Links:
       result = newQVariant(item.links.join(" "))
     of ModelRole.LinkPreviewModel:
       result = newQVariant(item.linkPreviewModel)
+    of ModelRole.EmojiReactionsModel:
+      result = newQVariant(item.emojiReactionsModel)
     of ModelRole.TransactionParameters:
       result = newQVariant($(%*{
         "id": item.transactionParameters.id,
@@ -320,7 +353,8 @@ QtObject:
 
   proc updateItemAtIndex(self: Model, index: int) =
     let ind = self.createIndex(index, 0, nil)
-    self.dataChanged(ind, ind, self.allKeys)
+    defer: ind.delete
+    self.dataChanged(ind, ind)
 
   proc findIndexForMessageId*(self: Model, messageId: string): int =
     result = -1
@@ -366,6 +400,7 @@ QtObject:
           oldItem.quotedMessageText = newItem.unparsedText
           oldItem.quotedMessageContentType = newItem.contentType
           let index = self.createIndex(i, 0, nil)
+          defer: index.delete
           self.dataChanged(index, index, @[
             ModelRole.QuotedMessageFrom.int,
             ModelRole.QuotedMessageAuthorDisplayName.int,
@@ -422,27 +457,19 @@ QtObject:
     self.insertItemsBasedOnClock(@[item])
 
   # Replied message was deleted
-  proc updateMessagesWithResponseTo(self: Model, messageId: string) =
+  proc updateMessagesWhenQuotedMessageDeleted(self: Model, messageId: string) =
     for i in 0 ..< self.items.len:
       if(self.items[i].responseToMessageWithId == messageId):
         let ind = self.createIndex(i, 0, nil)
+        defer: ind.delete
         var item = self.items[i]
         item.quotedMessageText = ""
         item.quotedMessageParsedText = ""
-        item.quotedMessageFrom = ""
         item.quotedMessageDeleted = true
-        item.quotedMessageAuthorDetails = ContactDetails()
         self.dataChanged(ind, ind, @[
-          ModelRole.QuotedMessageFrom.int,
+          ModelRole.QuotedMessageText.int,
           ModelRole.QuotedMessageParsedText.int,
-          ModelRole.QuotedMessageContentType.int,
           ModelRole.QuotedMessageDeleted.int,
-          ModelRole.QuotedMessageAuthorName.int,
-          ModelRole.QuotedMessageAuthorDisplayName.int,
-          ModelRole.QuotedMessageAuthorThumbnailImage.int,
-          ModelRole.QuotedMessageAuthorEnsVerified.int,
-          ModelRole.QuotedMessageAuthorIsContact.int,
-          ModelRole.QuotedMessageAuthorColorHash.int
         ])
 
   proc removeItem*(self: Model, messageId: string) =
@@ -465,7 +492,33 @@ QtObject:
       self.updateItemAtIndex(ind + 1)
 
     self.countChanged()
-    self.updateMessagesWithResponseTo(messageId)
+    self.updateMessagesWhenQuotedMessageDeleted(messageId)
+
+  proc messageDeleted*(self: Model, messageId: string, deletedBy: string, deletedByContactDetails: ContactDetails) =
+    let i = self.findIndexForMessageId(messageId)
+    if(i == -1):
+      return
+
+    let ind = self.createIndex(i, 0, nil)
+    defer: ind.delete
+
+    var item = self.items[i]
+    item.messageText = ""
+    item.unparsedText = ""
+    item.deleted = true
+    item.deletedBy = deletedBy
+    item.deletedByContactDetails = deletedByContactDetails
+    self.dataChanged(ind, ind, @[
+      ModelRole.MessageText.int,
+      ModelRole.UnparsedText.int,
+      ModelRole.Deleted.int,
+      ModelRole.DeletedBy.int,
+      ModelRole.DeletedByContactDisplayName.int,
+      ModelRole.DeletedByContactIcon.int,
+      ModelRole.DeletedByContactColorHash.int,
+    ])
+
+    self.updateMessagesWhenQuotedMessageDeleted(messageId)
 
   proc getLastItemFrom*(self: Model, pubkey: string): Item =
     # last item == first time since we process messages in reverse order
@@ -487,6 +540,7 @@ QtObject:
       return
     self.items[ind].outgoingStatus = status
     let index = self.createIndex(ind, 0, nil)
+    defer: index.delete
     self.dataChanged(index, index, @[ModelRole.OutgoingStatus.int])
 
   proc itemSending*(self: Model, messageId: string) =
@@ -507,6 +561,7 @@ QtObject:
       return
     self.items[ind].resendError = error
     let index = self.createIndex(ind, 0, nil)
+    defer: index.delete
     self.dataChanged(index, index, @[ModelRole.ResendError.int])
 
   proc addReaction*(self: Model, messageId: string, emojiId: EmojiId, didIReactWithThisEmoji: bool,
@@ -518,6 +573,7 @@ QtObject:
     self.items[ind].addReaction(emojiId, didIReactWithThisEmoji, userPublicKey, userDisplayName, reactionId)
 
     let index = self.createIndex(ind, 0, nil)
+    defer: index.delete
     self.dataChanged(index, index, @[ModelRole.Reactions.int])
 
   proc removeReaction*(self: Model, messageId: string, emojiId: EmojiId, reactionId: string, didIRemoveThisReaction: bool) =
@@ -528,6 +584,7 @@ QtObject:
     self.items[ind].removeReaction(emojiId, reactionId, didIRemoveThisReaction)
 
     let index = self.createIndex(ind, 0, nil)
+    defer: index.delete
     self.dataChanged(index, index, @[ModelRole.Reactions.int])
 
   proc pinUnpinMessage*(self: Model, messageId: string, pin: bool, pinnedBy: string) =
@@ -539,6 +596,7 @@ QtObject:
     self.items[ind].pinnedBy = pinnedBy
 
     let index = self.createIndex(ind, 0, nil)
+    defer: index.delete
     self.dataChanged(index, index, @[ModelRole.Pinned.int, ModelRole.PinnedBy.int])
 
   proc getMessageByIdAsJson*(self: Model, messageId: string): JsonNode =
@@ -550,6 +608,10 @@ QtObject:
     if(index < 0 or index >= self.items.len):
       return
     self.items[index].toJsonNode()
+
+  iterator items*(self: Model): Item =
+    for i in 0 ..< self.items.len:
+      yield self.items[i]
 
   iterator modelContactUpdateIterator*(self: Model, contactId: string): Item =
     for i in 0 ..< self.items.len:
@@ -579,6 +641,7 @@ QtObject:
 
       if(roles.len > 0):
         let index = self.createIndex(i, 0, nil)
+        defer: index.delete
         self.dataChanged(index, index, roles)
 
   proc setEditModeOn*(self: Model, messageId: string)  =
@@ -589,6 +652,7 @@ QtObject:
     self.items[ind].editMode = true
 
     let index = self.createIndex(ind, 0, nil)
+    defer: index.delete
     self.dataChanged(index, index, @[ModelRole.EditMode.int])
 
   proc setEditModeOff*(self: Model, messageId: string)  =
@@ -599,6 +663,7 @@ QtObject:
     self.items[ind].editMode = false
 
     let index = self.createIndex(ind, 0, nil)
+    defer: index.delete
     self.dataChanged(index, index, @[ModelRole.EditMode.int])
 
   proc updateEditedMsg*(
@@ -626,6 +691,7 @@ QtObject:
     self.items[ind].parsedText = updatedParsedText
 
     let index = self.createIndex(ind, 0, nil)
+    defer: index.delete
     self.dataChanged(index, index, @[
       ModelRole.MessageText.int,
       ModelRole.UnparsedText.int,
@@ -643,6 +709,7 @@ QtObject:
         self.items[i].quotedMessageText = updatedRawMsg
         self.items[i].quotedMessageContentType = contentType
         let index = self.createIndex(i, 0, nil)
+        defer: index.delete
         self.dataChanged(index, index, @[
           ModelRole.QuotedMessageText.int,
           ModelRole.QuotedMessageParsedText.int,
@@ -718,7 +785,26 @@ QtObject:
       if not item.seen:
         item.seen = true
         let index = self.createIndex(i, 0, nil)
+        defer: index.delete
         self.dataChanged(index, index, @[ModelRole.Seen.int])
+
+  proc setMessageMarker*(self: Model, messageId: string) =
+    self.firstUnseenMessageId = messageId
+    self.resetNewMessagesMarker()
+
+  proc markMessageAsUnread*(self: Model, messageId: string) =
+    self.setMessageMarker(messageId)
+
+    for i in 0 ..< self.items.len:
+      let item = self.items[i]
+
+      if item.id == messageId and item.seen:
+        item.seen = false
+        let index = self.createIndex(i, 0, nil)
+        defer: index.delete
+        self.dataChanged(index, index, @[ModelRole.Seen.int])
+        break
+
 
   proc markAsSeen*(self: Model, messages: seq[string]) =
     var messagesSet = toHashSet(messages)
@@ -729,6 +815,7 @@ QtObject:
       if messagesSet.contains(currentItemID):
         self.items[i].seen = true
         let index = self.createIndex(i, 0, nil)
+        defer: index.delete
         self.dataChanged(index, index, @[ModelRole.Seen.int])
         messagesSet.excl(currentItemID)
 
@@ -757,6 +844,7 @@ QtObject:
         item.albumMessageIds = albumMessagesIds
         
         let index = self.createIndex(i, 0, nil)
+        defer: index.delete
         self.dataChanged(index, index, @[ModelRole.AlbumMessageImages.int])
         return true
     return false

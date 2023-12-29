@@ -4,10 +4,12 @@ import ../../../app/global/global_singleton
 import ../../../app/core/eventemitter
 import ../../../app/core/signals/types
 
-import ../wallet_account/service as wallet_service
-import ../network/service as network_service
-import ../node/service as node_service
-import ../collectible/service as collectible_service
+import app_service/service/wallet_account/service as wallet_service
+import app_service/service/network/service as network_service
+import app_service/service/node/service as node_service
+import backend/connection_status as connection_status_backend
+import app_service/service/token/service as token_service
+import backend/collectibles as collectibles_backend
 
 logScope:
   topics = "network-connection-service"
@@ -24,7 +26,6 @@ type ConnectionStatus* = ref object of RootObj
     lastCheckedAt*: int
 
 const SIGNAL_CONNECTION_UPDATE* = "signalConnectionUpdate"
-const SIGNAL_REFRESH_COLLECTIBLES* = "signalRefreshCollectibles"
 
 type NetworkConnectionsArgs* = ref object of Args
   website*: string
@@ -44,7 +45,7 @@ proc newConnectionStatus(): ConnectionStatus =
     connectionState: ConnectionState.Successful,
     completelyDown: false,
     chainIds: @[],
-    lastCheckedAt: 0,
+    lastCheckedAt: connection_status_backend.INVALID_TIMESTAMP,
   )
 
 QtObject:
@@ -54,13 +55,15 @@ QtObject:
     walletService: wallet_service.Service
     networkService: network_service.Service
     nodeService: node_service.Service
+    tokenService: token_service.Service
     connectionStatus: Table[string, ConnectionStatus]
 
   # Forward declaration
-  proc updateBlockchainsStatus(self: Service, completelyDown: bool, chaindIdsDown: seq[int], at: int)
-  proc updateMarketOrCollectibleStatus(self: Service, website: string, isDown: bool, at: int)
-  proc getChainIdsDown(self: Service, message: string): (bool, seq[int])
-  proc getIsDown(self: Service,message: string): bool
+  proc updateSimpleStatus(self: Service, website: string, isDown: bool, at: int)
+  proc updateMultichainStatus(self: Service, website: string, completelyDown: bool, chaindIdsDown: seq[int], at: int)
+  proc getChainIdsDown(self: Service, chainStatusTable: ConnectionStatusNotification): (bool, bool, seq[int], int)
+  proc getIsDown(message: string): bool
+  proc getChainStatusTable(message: string): ConnectionStatusNotification
 
   proc delete*(self: Service) =
     self.closingApp = true
@@ -71,6 +74,7 @@ QtObject:
     walletService: wallet_service.Service,
     networkService: network_service.Service,
     nodeService: node_service.Service,
+    tokenService: token_service.Service
   ): Service =
     new(result, delete)
     result.QObject.setup
@@ -79,6 +83,7 @@ QtObject:
     result.walletService = walletService
     result.networkService = networkService
     result.nodeService = nodeService
+    result.tokenService = tokenService
     result.connectionStatus = {BLOCKCHAINS: newConnectionStatus(),
                                 MARKET: newConnectionStatus(),
                                 COLLECTIBLES: newConnectionStatus()}.toTable
@@ -89,47 +94,67 @@ QtObject:
       case data.eventType:
         of "wallet-blockchain-status-changed":
           if self.nodeService.isConnected():
-            let (allDown, chainsDown) =  self.getChainIdsDown(data.message)
-            self.updateBlockchainsStatus(allDown, chainsDown, data.at)
+            let chainStateTable = getChainStatusTable(data.message)
+            let (allKnown, allDown, chainsDown, at) =  self.getChainIdsDown(chainStateTable)
+            self.updateMultichainStatus(BLOCKCHAINS, allDown, chainsDown, data.at)
         of "wallet-market-status-changed":
           if self.nodeService.isConnected():
-            self.updateMarketOrCollectibleStatus(MARKET, self.getIsDown(data.message), data.at)
+            self.updateSimpleStatus(MARKET, getIsDown(data.message), data.at)
         of "wallet-collectible-status-changed":
           if self.nodeService.isConnected():
-            self.updateMarketOrCollectibleStatus(COLLECTIBLES, self.getIsDown(data.message), data.at)
+            let chainStateTable = fromJson(parseJson(data.message), ConnectionStatusNotification)
+            let (allKnown, allDown, chainsDown, at) = self.getChainIdsDown(chainStateTable)
+            if allKnown:
+              self.updateMultichainStatus(COLLECTIBLES, allDown, chainsDown, at)
 
     self.events.on(SIGNAL_WALLET_ACCOUNT_TOKENS_REBUILT) do(e:Args):
       if self.connectionStatus.hasKey(MARKET):
         let connectionStatus = self.connectionStatus[MARKET]
-        self.updateMarketOrCollectibleStatus(MARKET, connectionStatus.completelyDown, connectionStatus.lastCheckedAt)
+        self.updateSimpleStatus(MARKET, connectionStatus.completelyDown, connectionStatus.lastCheckedAt)
 
       if self.connectionStatus.hasKey(BLOCKCHAINS):
         let connectionStatus = self.connectionStatus[BLOCKCHAINS]
-        self.updateBlockchainsStatus(connectionStatus.completelyDown, connectionStatus.chainIds, connectionStatus.lastCheckedAt)
+        self.updateMultichainStatus(BLOCKCHAINS, connectionStatus.completelyDown, connectionStatus.chainIds, connectionStatus.lastCheckedAt)
 
-    self.events.on(SIGNAL_OWNED_COLLECTIBLES_UPDATE_ERROR) do(e:Args):
-      if self.connectionStatus.hasKey(COLLECTIBLES):
-        let connectionStatus = self.connectionStatus[COLLECTIBLES]
-        self.updateMarketOrCollectibleStatus(COLLECTIBLES, connectionStatus.completelyDown, connectionStatus.lastCheckedAt)
-
-  proc getIsDown(self: Service, message: string): bool =
+  proc getIsDown(message: string): bool =
     result = message == "down"
 
-  proc getChainIdsDown(self: Service, message: string): (bool, seq[int]) =
-    let chainStatusTable =  parseJson(message)
+  proc getStateValue(message: string): connection_status_backend.StateValue =
+    if message == "down":
+      return connection_status_backend.StateValue.Disconnected
+    elif message == "up":
+      return connection_status_backend.StateValue.Connected
+    else:
+      return connection_status_backend.StateValue.Unknown
+
+  proc getChainStatusTable(message: string): ConnectionStatusNotification =
+    result = initCustomStatusNotification()
+
+    let chainStatusTable = parseJson(message)
+    if chainStatusTable.kind != JNull:
+      for k, v in chainStatusTable.pairs:
+        result[k] = connection_status_backend.initConnectionState(
+          value = getStateValue(v.getStr)
+        )
+
+  proc getChainIdsDown(self: Service, chainStatusTable: ConnectionStatusNotification): (bool, bool, seq[int], int) =
+    var allKnown: bool = true
     var allDown: bool = true
     var chaindIdsDown: seq[int] = @[]
+    var lastSuccessAt: int = connection_status_backend.INVALID_TIMESTAMP # latest succesful connectinon between the down chains
 
     let allChainIds = self.networkService.getNetworks().map(a => a.chainId)
-    if chainStatusTable.kind != JNull:
-      for id in allChainIds:
-        if chainStatusTable[$id].kind != JNull:
-          let isDown = self.getIsDown(chainStatusTable[$id].getStr)
-          if isDown:
-            chaindIdsDown.add(id)
-          else:
-            allDown = false
-    return (allDown, chaindIdsDown)
+    for id in allChainIds:
+      if chainStatusTable.hasKey($id) and chainStatusTable[$id].value != connection_status_backend.StateValue.Unknown:
+        if chainStatusTable[$id].value == connection_status_backend.StateValue.Connected:
+          allDown = false
+        else:
+          chaindIdsDown.add(id)
+          lastSuccessAt = max(lastSuccessAt, chainStatusTable[$id].lastSuccessAt)
+      else:
+        allKnown = false
+
+    return (allKnown, allDown, chaindIdsDown, lastSuccessAt)
 
   proc getFormattedStringForChainIds(self: Service, chainIds: seq[int]): string =
     for chainId in chainIds:
@@ -148,6 +173,9 @@ QtObject:
       lastCheckedAt: connectionStatus.lastCheckedAt
       )
 
+  proc resetConnectionStatus(self: Service, website: string) =
+    self.connectionStatus[website] = newConnectionStatus()
+
   proc updateConnectionStatus(self: Service,
     website: string,
     connectionState: ConnectionState,
@@ -161,7 +189,7 @@ QtObject:
         self.connectionStatus[website].chainIds = chainIds
         self.connectionStatus[website].lastCheckedAt = lastCheckedAt
 
-  proc updateMarketOrCollectibleStatus(self: Service, website: string, isDown: bool, at: int) =
+  proc updateSimpleStatus(self: Service, website: string, isDown: bool, at: int) =
     if self.connectionStatus.hasKey(website):
       if isDown:
         # trigger event
@@ -173,24 +201,23 @@ QtObject:
           self.connectionStatus[website] = newConnectionStatus()
           self.events.emit(SIGNAL_CONNECTION_UPDATE, self.convertConnectionStatusToNetworkConnectionsArgs(website, self.connectionStatus[website]))
 
-  proc updateBlockchainsStatus(self: Service, completelyDown: bool, chaindIdsDown: seq[int], at: int) =
-    if self.connectionStatus.hasKey(BLOCKCHAINS):
-      # if all the networks are down for the BLOCKCHAINS, trigger event
+  proc updateMultichainStatus(self: Service, website: string, completelyDown: bool, chaindIdsDown: seq[int], at: int) =
+    if self.connectionStatus.hasKey(website):
+      # if all the networks are down for the website, trigger event
       if completelyDown:
-        self.updateConnectionStatus(BLOCKCHAINS, ConnectionState.Failed, true, chaindIdsDown, at)
-        self.events.emit(SIGNAL_CONNECTION_UPDATE, self.convertConnectionStatusToNetworkConnectionsArgs(BLOCKCHAINS, self.connectionStatus[BLOCKCHAINS]))
-
+        self.updateConnectionStatus(website, ConnectionState.Failed, true, chaindIdsDown, at)
+        self.events.emit(SIGNAL_CONNECTION_UPDATE, self.convertConnectionStatusToNetworkConnectionsArgs(website, self.connectionStatus[website]))
       # if all the networks are not down for the website
       else:
         # case where a down website is back up
-        if self.connectionStatus[BLOCKCHAINS].completelyDown or (chaindIdsDown.len == 0 and self.connectionStatus[BLOCKCHAINS].chainIds.len != 0):
-          self.connectionStatus[BLOCKCHAINS] = newConnectionStatus()
-          self.events.emit(SIGNAL_CONNECTION_UPDATE, self.convertConnectionStatusToNetworkConnectionsArgs(BLOCKCHAINS, self.connectionStatus[BLOCKCHAINS]))
+        if self.connectionStatus[website].completelyDown or (chaindIdsDown.len == 0 and self.connectionStatus[website].chainIds.len != 0):
+          self.resetConnectionStatus(website)
+          self.events.emit(SIGNAL_CONNECTION_UPDATE, self.convertConnectionStatusToNetworkConnectionsArgs(website, self.connectionStatus[website]))
 
         # case where a some of networks on the website are down, trigger event
         if chaindIdsDown.len > 0:
-          self.updateConnectionStatus(BLOCKCHAINS, ConnectionState.Failed, false, chaindIdsDown, at)
-          self.events.emit(SIGNAL_CONNECTION_UPDATE, self.convertConnectionStatusToNetworkConnectionsArgs(BLOCKCHAINS, self.connectionStatus[BLOCKCHAINS]))
+          self.updateConnectionStatus(website, ConnectionState.Failed, false, chaindIdsDown, at)
+          self.events.emit(SIGNAL_CONNECTION_UPDATE, self.convertConnectionStatusToNetworkConnectionsArgs(website, self.connectionStatus[website]))
 
   proc blockchainsRetry*(self: Service) {.slot.} =
     if(self.connectionStatus.hasKey(BLOCKCHAINS)):
@@ -202,18 +229,21 @@ QtObject:
     if(self.connectionStatus.hasKey(MARKET)):
       self.connectionStatus[MARKET].connectionState = ConnectionState.Retrying
       self.events.emit(SIGNAL_CONNECTION_UPDATE, self.convertConnectionStatusToNetworkConnectionsArgs(MARKET, self.connectionStatus[MARKET]))
+      # TODO: remove once market values are removed from tokenService
       self.walletService.reloadAccountTokens()
+      self.tokenService.rebuildMarketData()
 
   proc collectiblesRetry*(self: Service) {.slot.} =
     if(self.connectionStatus.hasKey(COLLECTIBLES)):
       self.connectionStatus[COLLECTIBLES].connectionState = ConnectionState.Retrying
       self.events.emit(SIGNAL_CONNECTION_UPDATE, self.convertConnectionStatusToNetworkConnectionsArgs(COLLECTIBLES, self.connectionStatus[COLLECTIBLES]))
-      self.events.emit(SIGNAL_REFRESH_COLLECTIBLES, Args())
+      discard collectibles_backend.refetchOwnedCollectibles()
 
   proc networkConnected*(self: Service, connected: bool) =
     if connected:
       self.walletService.reloadAccountTokens()
-      self.events.emit(SIGNAL_REFRESH_COLLECTIBLES, Args())
+      self.tokenService.rebuildMarketData()
+      discard collectibles_backend.refetchOwnedCollectibles()
     else:
       if(self.connectionStatus.hasKey(BLOCKCHAINS)):
         self.connectionStatus[BLOCKCHAINS] = newConnectionStatus()
@@ -226,4 +256,3 @@ QtObject:
     if self.connectionStatus.hasKey(website) and self.connectionStatus[website].completelyDown:
       return false
     return true
-

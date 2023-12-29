@@ -1,9 +1,8 @@
-import NimQml, chronicles
+import NimQml
 
 import ./io_interface, ./view, ./controller
 import ../io_interface as delegate_interface
 
-import ../../../../core/eventemitter
 import ../../../../../app_service/service/community/service as community_service
 
 export io_interface
@@ -42,8 +41,8 @@ method viewDidLoad*(self: Module) =
 method getModuleAsVariant*(self: Module): QVariant =
   return self.viewVariant
 
-method inviteUsersToCommunity*(self: Module, communityID: string, pubKeysJSON: string, inviteMessage: string): string =
-  result = self.controller.inviteUsersToCommunity(communityID, pubKeysJSON, inviteMessage)
+method shareCommunityToUsers*(self: Module, communityID: string, pubKeysJSON: string, inviteMessage: string): string =
+  result = self.controller.shareCommunityToUsers(communityID, pubKeysJSON, inviteMessage)
 
 method leaveCommunity*(self: Module, communityID: string) =
   self.controller.leaveCommunity(communityID)

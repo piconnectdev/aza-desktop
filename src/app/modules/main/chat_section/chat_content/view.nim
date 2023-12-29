@@ -15,6 +15,7 @@ QtObject:
       chatDetailsVariant: QVariant
       viewOnlyPermissionsSatisfied: bool
       viewAndPostPermissionsSatisfied: bool
+      permissionsCheckOngoing: bool
 
   proc chatDetailsChanged*(self:View) {.signal.}
 
@@ -38,10 +39,10 @@ QtObject:
 
   proc load*(self: View, id: string, `type`: int, belongsToCommunity, isUsersListAvailable: bool,
       name, icon: string, color, description, emoji: string, hasUnreadMessages: bool,
-      notificationsCount: int, muted: bool, position: int, isUntrustworthy: bool,
+      notificationsCount: int, highlight, muted: bool, position: int, isUntrustworthy: bool,
       isContact: bool, blocked: bool) =
     self.chatDetails.setChatDetails(id, `type`, belongsToCommunity, isUsersListAvailable, name,
-      icon, color, description, emoji, hasUnreadMessages, notificationsCount, muted, position,
+      icon, color, description, emoji, hasUnreadMessages, notificationsCount, highlight, muted, position,
       isUntrustworthy, isContact, blocked)
     self.delegate.viewDidLoad()
     self.chatDetailsChanged()
@@ -90,6 +91,9 @@ QtObject:
   proc markAllMessagesRead*(self: View) {.slot.} =
     self.delegate.markAllMessagesRead()
 
+  proc requestMoreMessages*(self: View) {.slot.} =
+    self.delegate.requestMoreMessages()
+
   proc markMessageRead*(self: View, msgID: string) {.slot.} =
     self.delegate.markMessageRead(msgID)
 
@@ -122,6 +126,8 @@ QtObject:
   proc updateChatDetailsNotifications*(self: View, hasUnreadMessages: bool, notificationCount: int) =
     self.chatDetails.setHasUnreadMessages(hasUnreadMessages)
     self.chatDetails.setNotificationCount(notificationCount)
+    if self.chatDetails.getHighlight and not hasUnreadMessages:
+      self.chatDetails.setHighlight(false)
 
   proc getChatDetails(self: View): QVariant {.slot.} =
     return self.chatDetailsVariant
@@ -179,3 +185,17 @@ QtObject:
     read = getViewAndPostPermissionsSatisfied
     notify = viewAndPostPermissionsSatisfiedChanged
 
+  proc getPermissionsCheckOngoing*(self: View): bool {.slot.} =
+    return self.permissionsCheckOngoing
+
+  proc permissionsCheckOngoingChanged*(self: View) {.signal.}
+
+  QtProperty[bool] permissionsCheckOngoing:
+    read = getPermissionsCheckOngoing
+    notify = permissionsCheckOngoingChanged
+
+  proc setPermissionsCheckOngoing*(self: View, value: bool) =
+    if (value == self.permissionsCheckOngoing):
+      return
+    self.permissionsCheckOngoing = value
+    self.permissionsCheckOngoingChanged()

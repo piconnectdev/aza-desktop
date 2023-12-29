@@ -26,13 +26,17 @@ SplitView {
             loginType: ctrlLoginType.currentIndex
             walletAccountsModel: WalletAccountsModel {}
             permissionsModel: {
-                if (ctrlPermissions.checked && ctrlTokenGatedChannels.checked)
+                if (ctrlPermissions.checked && ctrlTokenGatedChannels.checked) {
+                    return PermissionsModel.complexCombinedPermissionsModel
+                }
+                if (ctrlPermissions.checked) {
                     return PermissionsModel.complexPermissionsModel
-                if (ctrlPermissions.checked)
-                    return PermissionsModel.permissionsModel
-                if (ctrlTokenGatedChannels.checked)
+                }
+                if (ctrlTokenGatedChannels.checked) {
                     return PermissionsModel.channelsOnlyPermissionsModel
+                }
 
+                console.warn("!!! EMPTY MODEL !!!")
                 return emptyModel
             }
 
@@ -41,6 +45,11 @@ SplitView {
             visible: true
 
             onShareSelectedAddressesClicked: logs.logEvent("::shareSelectedAddressesClicked", ["airdropAddress", "sharedAddresses"], arguments)
+            onSharedAddressesChanged: logs.logEvent("::sharedAddressesChanged", ["airdropAddress", "sharedAddresses"], arguments)
+            onPrepareForSigning: logs.logEvent("::onPrepareForSigning", ["airdropAddress", "sharedAddresses"], arguments)
+            onEditRevealedAddresses: logs.logEvent("::onEditRevealedAddresses")
+            onSignSharedAddressesForAllNonKeycardKeypairs: logs.logEvent("::onSignSharedAddressesForAllNonKeycardKeypairs")
+            onSignSharedAddressesForKeypair: logs.logEvent("::onSignSharedAddressesForKeypair", ["keyUid"], arguments)
             onClosed: destroy()
         }
     }
@@ -153,3 +162,9 @@ SplitView {
         }
     }
 }
+
+// category: Popups
+
+// https://www.figma.com/file/17fc13UBFvInrLgNUKJJg5/Kuba%E2%8E%9CDesktop?node-id=31461%3A564367&mode=dev
+// https://www.figma.com/file/17fc13UBFvInrLgNUKJJg5/Kuba%E2%8E%9CDesktop?node-id=31461%3A563905&mode=dev
+// https://www.figma.com/file/17fc13UBFvInrLgNUKJJg5/Kuba%E2%8E%9CDesktop?node-id=31461%3A579875&mode=dev

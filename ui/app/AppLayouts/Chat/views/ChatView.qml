@@ -30,6 +30,7 @@ StatusSectionLayout {
 
     property RootStore rootStore
     property var createChatPropertiesStore
+    property var communitiesStore
     property var sectionItemModel
 
     property var emojiPopup
@@ -72,6 +73,10 @@ StatusSectionLayout {
         }
         return false
     }
+
+    // Community transfer ownership related props:
+    required property bool isPendingOwnershipRequest
+    signal finaliseOwnershipClicked
 
     signal communityInfoButtonClicked()
     signal communityManageButtonClicked()
@@ -144,14 +149,7 @@ StatusSectionLayout {
             anchors.fill: parent
             store: root.rootStore
             label: qsTr("Members")
-            usersModel: {
-                let chatContentModule = root.rootStore.currentChatContentModule()
-                if (!chatContentModule || !chatContentModule.usersModule) {
-                    // New communities have no chats, so no chatContentModule
-                    return null
-                }
-                return chatContentModule.usersModule.model
-            }
+            usersModel: root.chatContentModule && root.chatContentModule.usersModule ? root.chatContentModule.usersModule.model : null
         }
     }
 
@@ -211,6 +209,7 @@ StatusSectionLayout {
             requiresRequest: !root.amIMember
             requirementsMet: (viewOnlyPermissionsSatisfied && viewOnlyPermissionsModel.count > 0) ||
                              (viewAndPostPermissionsSatisfied && viewAndPostPermissionsModel.count > 0)
+            requirementsCheckPending: root.chatContentModule.permissionsCheckOngoing
             onRevealAddressClicked: root.revealAddressClicked()
             onInvitationPendingClicked: root.invitationPendingClicked()
         }
@@ -244,10 +243,13 @@ StatusSectionLayout {
             communitySectionModule: root.rootStore.chatCommunitySectionModule
             communityData: sectionItemModel
             store: root.rootStore
+            communitiesStore: root.communitiesStore
             emojiPopup: root.emojiPopup
             hasAddedContacts: root.hasAddedContacts
+            isPendingOwnershipRequest: root.isPendingOwnershipRequest
             onInfoButtonClicked: root.communityInfoButtonClicked()
             onManageButtonClicked: root.communityManageButtonClicked()
+            onFinaliseOwnershipClicked: root.finaliseOwnershipClicked()
         }
     }
 

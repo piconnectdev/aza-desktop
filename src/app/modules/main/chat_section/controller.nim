@@ -1,4 +1,4 @@
-import Tables, sugar, sequtils, strutils
+import Tables
 
 import io_interface
 
@@ -13,16 +13,14 @@ import ../../../../app_service/service/mailservers/service as mailservers_servic
 import ../../../../app_service/service/wallet_account/service as wallet_account_service
 import ../../../../app_service/service/token/service as token_service
 import ../../../../app_service/service/community_tokens/service as community_tokens_service
-import ../../../../app_service/service/collectible/service as collectible_service
 import ../../../../app_service/service/visual_identity/service as procs_from_visual_identity_service
-import ../../shared_modules/keycard_popup/io_interface as keycard_shared_module
+import ../../../../app_service/service/shared_urls/service as shared_urls_service
+import backend/collectibles as backend_collectibles
 
 import ../../../core/signals/types
 import ../../../global/app_signals
 import ../../../core/eventemitter
 import ../../../core/unique_event_emitter
-
-const UNIQUE_MAIN_MODULE_AUTH_IDENTIFIER* = "MainModule-Action-Authentication"
 
 type
   Controller* = ref object of RootObj
@@ -42,24 +40,18 @@ type
     mailserversService: mailservers_service.Service
     walletAccountService: wallet_account_service.Service
     tokenService: token_service.Service
-    collectibleService: collectible_service.Service
     communityTokensService: community_tokens_service.Service
-    tmpAuthenticationForJoinInProgress: bool
-    tmpAuthenticationForEditSharedAddresses: bool
-    tmpRequestToJoinEnsName: string
-    tmpAddressesToShare: seq[string]
-    tmpAirdropAddress: string
-    tmpAuthenticationWithCallbackInProgress: bool
+    sharedUrlsService: shared_urls_service.Service
+
 
 proc newController*(delegate: io_interface.AccessInterface, sectionId: string, isCommunity: bool, events: EventEmitter,
-  settingsService: settings_service.Service, nodeConfigurationService: node_configuration_service.Service, 
-  contactService: contact_service.Service, chatService: chat_service.Service, communityService: community_service.Service,
-  messageService: message_service.Service, gifService: gif_service.Service,
-  mailserversService: mailservers_service.Service,
-  walletAccountService: wallet_account_service.Service,
-  tokenService: token_service.Service,
-  collectibleService: collectible_service.Service,
-  communityTokensService: community_tokens_service.Service): Controller =
+    settingsService: settings_service.Service, nodeConfigurationService: node_configuration_service.Service,
+    contactService: contact_service.Service, chatService: chat_service.Service,
+    communityService: community_service.Service, messageService: message_service.Service,
+    gifService: gif_service.Service, mailserversService: mailservers_service.Service,
+    walletAccountService: wallet_account_service.Service, tokenService: token_service.Service,
+    communityTokensService: community_tokens_service.Service,
+    sharedUrlsService: shared_urls_service.Service): Controller =
   result = Controller()
   result.delegate = delegate
   result.sectionId = sectionId
@@ -76,15 +68,9 @@ proc newController*(delegate: io_interface.AccessInterface, sectionId: string, i
   result.mailserversService = mailserversService
   result.walletAccountService = walletAccountService
   result.tokenService = tokenService
-  result.collectibleService = collectibleService
   result.communityTokensService = communityTokensService
-  result.tmpAuthenticationForJoinInProgress = false
-  result.tmpAuthenticationForEditSharedAddresses = false
-  result.tmpRequestToJoinEnsName = ""
-  result.tmpAirdropAddress = ""
-  result.tmpAddressesToShare = @[]
-  result.tmpAuthenticationWithCallbackInProgress = true
-  
+  result.sharedUrlsService = sharedUrlsService
+
 proc delete*(self: Controller) =
   self.events.disconnect()
 
@@ -97,64 +83,20 @@ proc getIsCurrentSectionActive*(self: Controller): bool =
 proc setIsCurrentSectionActive*(self: Controller, active: bool) =
   self.isCurrentSectionActive = active
 
-proc userAuthenticationCanceled*(self: Controller) =
-  self.tmpAuthenticationForJoinInProgress = false
-  self.tmpAuthenticationForEditSharedAddresses = false
-  self.tmpRequestToJoinEnsName = ""
-  self.tmpAirdropAddress = ""
-  self.tmpAddressesToShare = @[]
-
-proc requestToJoinCommunityAuthenticated*(self: Controller, password: string) =
-  self.communityService.asyncRequestToJoinCommunity(self.sectionId, self.tmpRequestToJoinEnsName,
-    password, self.tmpAddressesToShare, self.tmpAirdropAddress)
-  self.tmpAuthenticationForJoinInProgress = false
-  self.tmpRequestToJoinEnsName = ""
-  self.tmpAirdropAddress = ""
-  self.tmpAddressesToShare = @[]
-
-proc editSharedAddressesAuthenticated*(self: Controller, password: string) =
-  self.communityService.asyncEditSharedAddresses(
-    self.sectionId,
-    password,
-    self.tmpAddressesToShare,
-    self.tmpAirdropAddress,
-  )
-  self.tmpAuthenticationForEditSharedAddresses = false
-  self.tmpAirdropAddress = ""
-  self.tmpAddressesToShare = @[]
-
-proc userAuthenticated*(self: Controller, password: string) =
-  if self.tmpAuthenticationForJoinInProgress:
-    self.requestToJoinCommunityAuthenticated(password)
-  elif self.tmpAuthenticationForEditSharedAddresses:
-    self.editSharedAddressesAuthenticated(password)
-
-proc authenticate*(self: Controller, keyUid = "") =
-  let data = SharedKeycarModuleAuthenticationArgs(uniqueIdentifier: UNIQUE_MAIN_MODULE_AUTH_IDENTIFIER,
-    keyUid: keyUid)
-  self.events.emit(SIGNAL_SHARED_KEYCARD_MODULE_AUTHENTICATE_USER, data)
-
-proc authenticateToRequestToJoinCommunity*(self: Controller, ensName: string, addressesToShare: seq[string], airdropAddress: string) =
-  self.tmpAuthenticationForJoinInProgress = true
-  self.tmpRequestToJoinEnsName = ensName
-  self.tmpAirdropAddress = airdropAddress
-  self.tmpAddressesToShare = addressesToShare
-  self.authenticate()
-
-proc authenticateToEditSharedAddresses*(self: Controller, addressesToShare: seq[string], airdropAddress: string) =
-  self.tmpAuthenticationForEditSharedAddresses = true
-  self.tmpAirdropAddress = airdropAddress
-  self.tmpAddressesToShare = addressesToShare
-  self.authenticate()
-
 proc getMySectionId*(self: Controller): string =
   return self.sectionId
 
 proc asyncCheckPermissionsToJoin*(self: Controller) =
-  self.communityService.asyncCheckPermissionsToJoin(self.getMySectionId())
+  if self.delegate.getPermissionsToJoinCheckOngoing():
+    return
+  self.communityService.asyncCheckPermissionsToJoin(self.getMySectionId(), addresses = @[])
+  self.delegate.setPermissionsToJoinCheckOngoing(true)
 
 proc asyncCheckAllChannelsPermissions*(self: Controller) =
-  self.chatService.asyncCheckAllChannelsPermissions(self.getMySectionId())
+  if self.delegate.getPermissionsToJoinCheckOngoing():
+    return
+  self.chatService.asyncCheckAllChannelsPermissions(self.getMySectionId(), addresses = @[])
+  self.delegate.setChannelsPermissionsCheckOngoing(true)
 
 proc asyncCheckChannelPermissions*(self: Controller, communityId: string, chatId: string) =
   self.chatService.asyncCheckChannelPermissions(communityId, chatId)
@@ -193,6 +135,12 @@ proc init*(self: Controller) =
     self.chatService.updateUnreadMessagesAndMentions(args.chatId, args.allMessagesMarked, args.messagesCount, args.messagesWithMentionsCount)
     self.delegate.onMarkAllMessagesRead(chat)
 
+  self.events.on(message_service.SIGNAL_MESSAGE_MARKED_AS_UNREAD) do(e:Args):
+    let args = message_service.MessageMarkMessageAsUnreadArgs(e)
+    let chat = self.chatService.getChatById(args.chatId)
+    self.delegate.onMarkMessageAsUnread(chat)
+
+
   self.events.on(chat_service.SIGNAL_CHAT_LEFT) do(e: Args):
     let args = chat_service.ChatArgs(e)
     self.delegate.onCommunityChannelDeletedOrChatLeft(args.chatId)
@@ -219,25 +167,14 @@ proc init*(self: Controller) =
       let belongsToCommunity = chat.communityId.len > 0
       discard self.delegate.addOrUpdateChat(chat, belongsToCommunity, self.events, self.settingsService, self.nodeConfigurationService,
         self.contactService, self.chatService, self.communityService, self.messageService, self.gifService,
-        self.mailserversService, setChatAsActive = false)
+        self.mailserversService, self.sharedUrlsService, setChatAsActive = false)
 
   self.events.on(SIGNAL_CHAT_CREATED) do(e: Args):
     var args = CreatedChatArgs(e)
     let belongsToCommunity = args.chat.communityId.len > 0
     discard self.delegate.addOrUpdateChat(args.chat, belongsToCommunity, self.events, self.settingsService, self.nodeConfigurationService,
       self.contactService, self.chatService, self.communityService, self.messageService, self.gifService,
-      self.mailserversService, setChatAsActive = true)
-
-  self.events.on(SIGNAL_SHARED_KEYCARD_MODULE_USER_AUTHENTICATED) do(e: Args):
-    let args = SharedKeycarModuleArgs(e)
-    if args.uniqueIdentifier != UNIQUE_MAIN_MODULE_AUTH_IDENTIFIER:
-      return
-    if self.tmpAuthenticationForJoinInProgress or self.tmpAuthenticationForEditSharedAddresses:
-      self.delegate.onUserAuthenticated(args.pin, args.password, args.keyUid)
-    if self.tmpAuthenticationWithCallbackInProgress:
-      let authenticated = not (args.password == "" and args.pin == "")
-      self.delegate.callbackFromAuthentication(authenticated)
-      self.tmpAuthenticationWithCallbackInProgress = false
+      self.mailserversService, self.sharedUrlsService, setChatAsActive = true)
 
   if (self.isCommunitySection):
     self.events.on(SIGNAL_COMMUNITY_CHANNEL_CREATED) do(e:Args):
@@ -245,7 +182,13 @@ proc init*(self: Controller) =
       let belongsToCommunity = args.chat.communityId.len > 0
       discard self.delegate.addOrUpdateChat(args.chat, belongsToCommunity, self.events, self.settingsService,
         self.nodeConfigurationService, self.contactService, self.chatService, self.communityService,
-        self.messageService, self.gifService, self.mailserversService, setChatAsActive = true)
+        self.messageService, self.gifService, self.mailserversService, self.sharedUrlsService, setChatAsActive = true)
+
+    self.events.on(SIGNAL_COMMUNITY_METRICS_UPDATED) do(e: Args):
+      let args = CommunityMetricsArgs(e)
+      if args.communityId == self.sectionId:
+        let metrics = self.communityService.getCommunityMetrics(args.communityId, args.metricsType)
+        self.delegate.setCommunityMetrics(metrics)
 
     self.events.on(SIGNAL_COMMUNITY_CHANNEL_DELETED) do(e:Args):
       let args = CommunityChatIdArgs(e)
@@ -301,12 +244,12 @@ proc init*(self: Controller) =
       let args = ReloadMessagesArgs(e)
       if (args.communityId == self.sectionId):
         self.messageService.asyncLoadInitialMessagesForChat(self.getActiveChatId())
-    
+
     self.events.on(SIGNAL_CATEGORY_MUTED) do(e: Args):
       let args = CategoryArgs(e)
       if (args.communityId == self.sectionId):
         self.delegate.onCategoryMuted(args.categoryId)
-    
+
     self.events.on(SIGNAL_CATEGORY_UNMUTED) do(e: Args):
       let args = CategoryArgs(e)
       if (args.communityId == self.sectionId):
@@ -329,7 +272,6 @@ proc init*(self: Controller) =
         self.delegate.onCommunityTokenPermissionUpdated(args.communityId, args.tokenPermission)
         self.asyncCheckPermissions()
 
-
     self.events.on(SIGNAL_COMMUNITY_TOKEN_PERMISSION_UPDATE_FAILED) do(e: Args):
       let args = CommunityTokenPermissionArgs(e)
       if (args.communityId == self.sectionId):
@@ -351,6 +293,11 @@ proc init*(self: Controller) =
       if (args.communityId == self.sectionId):
         self.delegate.onCommunityCheckPermissionsToJoinResponse(args.checkPermissionsToJoinResponse)
 
+    self.events.on(SIGNAL_CHECK_PERMISSIONS_TO_JOIN_FAILED) do(e: Args):
+      let args = CheckPermissionsToJoinFailedArgs(e)
+      if (args.communityId == self.sectionId):
+        self.delegate.setPermissionsToJoinCheckOngoing(false)
+
     self.events.on(SIGNAL_CHECK_CHANNEL_PERMISSIONS_RESPONSE) do(e: Args):
       let args = CheckChannelPermissionsResponseArgs(e)
       if args.communityId == self.sectionId:
@@ -361,8 +308,21 @@ proc init*(self: Controller) =
       if args.communityId == self.sectionId:
         self.delegate.onCommunityCheckAllChannelsPermissionsResponse(args.checkAllChannelsPermissionsResponse)
 
-    self.events.on(SIGNAL_OWNED_COLLECTIBLES_UPDATE_FINISHED) do(e: Args):
-      self.asyncCheckPermissions()
+    self.events.on(SIGNAL_CHECK_ALL_CHANNELS_PERMISSIONS_FAILED) do(e: Args):
+      let args = CheckChannelsPermissionsErrorArgs(e)
+      if args.communityId == self.sectionId:
+       self.delegate.setPermissionsToJoinCheckOngoing(false)
+
+    self.events.on(SIGNAL_WAITING_ON_NEW_COMMUNITY_OWNER_TO_CONFIRM_REQUEST_TO_REJOIN) do(e: Args):
+      let args = CommunityIdArgs(e)
+      if args.communityId == self.sectionId:
+        self.delegate.onWaitingOnNewCommunityOwnerToConfirmRequestToRejoin()
+
+    self.events.on(SignalType.Wallet.event, proc(e: Args) =
+      var data = WalletSignal(e)
+      if data.eventType == backend_collectibles.eventCollectiblesOwnershipUpdateFinished:
+        self.asyncCheckPermissions()
+    )
 
     self.events.on(SIGNAL_WALLET_ACCOUNT_TOKENS_REBUILT) do(e: Args):
       self.asyncCheckPermissions()
@@ -379,7 +339,18 @@ proc init*(self: Controller) =
 
     self.events.on(SIGNAL_ACCEPT_REQUEST_TO_JOIN_FAILED_NO_PERMISSION) do(e: Args):
       var args = CommunityMemberArgs(e)
-      self.delegate.onAcceptRequestToJoinFailedNoPermission(args.communityId, args.pubKey, args.requestId)
+      if (args.communityId == self.sectionId):
+        self.delegate.onAcceptRequestToJoinFailedNoPermission(args.communityId, args.pubKey, args.requestId)
+
+    self.events.on(SIGNAL_COMMUNITY_SHARD_SET) do(e: Args):
+      let args = CommunityShardSetArgs(e)
+      if args.communityId == self.sectionId:
+       self.delegate.setShardingInProgress(false)
+
+    self.events.on(SIGNAL_COMMUNITY_SHARD_SET_FAILED) do(e: Args):
+      let args = CommunityShardSetArgs(e)
+      if args.communityId == self.sectionId:
+       self.delegate.setShardingInProgress(false)
 
   self.events.on(SIGNAL_CONTACT_NICKNAME_CHANGED) do(e: Args):
     var args = ContactArgs(e)
@@ -409,12 +380,6 @@ proc init*(self: Controller) =
     var args = ChatUpdateDetailsArgs(e)
     self.delegate.onGroupChatDetailsUpdated(args.id, args.newName, args.newColor, args.newImage)
 
-  self.events.on(SIGNAL_MAKE_SECTION_CHAT_ACTIVE) do(e: Args):
-    var args = ActiveSectionChatArgs(e)
-    if (self.sectionId != args.sectionId):
-      return
-    self.delegate.makeChatWithIdActive(args.chatId)
-    
   if (not self.isCommunitySection):
     self.events.on(SIGNAL_CHAT_SWITCH_TO_OR_CREATE_1_1_CHAT) do(e:Args):
       let args = ChatExtArgs(e)
@@ -433,11 +398,8 @@ proc init*(self: Controller) =
 proc isCommunity*(self: Controller): bool =
   return self.isCommunitySection
 
-proc getCommunityById*(self: Controller, communityId: string): CommunityDto =
-  return self.communityService.getCommunityById(communityId)
-
 proc getMyCommunity*(self: Controller): CommunityDto =
-  return self.getCommunityById(self.sectionId)
+  return self.communityService.getCommunityById(self.sectionId)
 
 proc getCategories*(self: Controller, communityId: string): seq[Category] =
   return self.communityService.getCategories(communityId)
@@ -461,6 +423,7 @@ proc getChatsAndBuildUI*(self: Controller) =
         self.messageService,
         self.gifService,
         self.mailserversService,
+        self.sharedUrlsService,
       )
 
 proc sectionUnreadMessagesAndMentionsCount*(self: Controller, communityId: string):
@@ -505,7 +468,7 @@ proc createOneToOneChat*(self: Controller, communityID: string, chatId: string, 
   if(response.success):
     discard self.delegate.addOrUpdateChat(response.chatDto, false, self.events, self.settingsService, self.nodeConfigurationService,
       self.contactService, self.chatService, self.communityService, self.messageService,
-      self.gifService, self.mailserversService)
+      self.gifService, self.mailserversService, self.sharedUrlsService)
 
 proc switchToOrCreateOneToOneChat*(self: Controller, chatId: string, ensName: string) =
   self.chatService.switchToOrCreateOneToOneChat(chatId, ensName)
@@ -521,6 +484,9 @@ proc unmuteChat*(self: Controller, chatId: string) =
 
 proc markAllMessagesRead*(self: Controller, chatId: string) =
   self.messageService.markAllMessagesRead(chatId)
+
+proc requestMoreMessages*(self: Controller, chatId: string) =
+  self.mailserversService.requestMoreMessages(chatId)
 
 proc clearChatHistory*(self: Controller, chatId: string) =
   self.chatService.clearChatHistory(chatId)
@@ -575,14 +541,14 @@ proc createGroupChat*(self: Controller, communityID: string, groupName: string, 
   if(response.success):
     discard self.delegate.addOrUpdateChat(response.chatDto, false, self.events, self.settingsService, self.nodeConfigurationService,
       self.contactService, self.chatService, self.communityService, self.messageService,
-      self.gifService, self.mailserversService)
+      self.gifService, self.mailserversService, self.sharedUrlsService)
 
 proc joinGroupChatFromInvitation*(self: Controller, groupName: string, chatId: string, adminPK: string) =
   let response = self.chatService.createGroupChatFromInvitation(groupName, chatId, adminPK)
   if(response.success):
     discard self.delegate.addOrUpdateChat(response.chatDto, false, self.events, self.settingsService, self.nodeConfigurationService,
       self.contactService, self.chatService, self.communityService, self.messageService,
-      self.gifService, self.mailserversService)
+      self.gifService, self.mailserversService, self.sharedUrlsService)
 
 proc acceptRequestToJoinCommunity*(self: Controller, requestId: string, communityId: string) =
   self.communityService.asyncAcceptRequestToJoinCommunity(communityId, requestId)
@@ -632,13 +598,13 @@ proc leaveCommunity*(self: Controller) =
   self.communityService.leaveCommunity(self.sectionId)
 
 proc removeUserFromCommunity*(self: Controller, pubKey: string) =
-  self.communityService.removeUserFromCommunity(self.sectionId, pubKey)
+  self.communityService.asyncRemoveUserFromCommunity(self.sectionId, pubKey)
 
 proc banUserFromCommunity*(self: Controller, pubKey: string) =
-  self.communityService.banUserFromCommunity(self.sectionId, pubKey)
+  self.communityService.asyncBanUserFromCommunity(self.sectionId, pubKey)
 
 proc unbanUserFromCommunity*(self: Controller, pubKey: string) =
-  self.communityService.unbanUserFromCommunity(self.sectionId, pubKey)
+  self.communityService.asyncUnbanUserFromCommunity(self.sectionId, pubKey)
 
 proc editCommunity*(
     self: Controller,
@@ -679,8 +645,8 @@ proc unmuteCategory*(self: Controller, categoryId: string) =
 proc setCommunityMuted*(self: Controller, mutedType: int) =
   self.communityService.setCommunityMuted(self.sectionId, mutedType)
 
-proc inviteUsersToCommunity*(self: Controller, pubKeys: string, inviteMessage: string): string =
-  result = self.communityService.inviteUsersToCommunityById(self.sectionId, pubKeys, inviteMessage)
+proc shareCommunityToUsers*(self: Controller, pubKeys: string, inviteMessage: string): string =
+  result = self.communityService.shareCommunityToUsers(self.sectionId, pubKeys, inviteMessage)
 
 proc reorderCommunityCategories*(self: Controller, categoryId: string, position: int) =
   self.communityService.reorderCommunityCategories(self.sectionId, categoryId, position)
@@ -712,18 +678,6 @@ proc deleteCommunityTokenPermission*(self: Controller, communityId: string, perm
 proc allAccountsTokenBalance*(self: Controller, symbol: string): float64 =
   return self.walletAccountService.allAccountsTokenBalance(symbol)
 
-proc ownsCollectible*(self: Controller, chainId: int, contractAddress: string, tokenIds: seq[string]): bool =
-  let addresses = self.walletAccountService.getWalletAccounts().filter(a => a.walletType != WalletTypeWatch).map(a => a.address)
-
-  for address in addresses:
-    let data = self.collectibleService.getOwnedCollectibles(chainId, @[address])
-    
-    for collectible in data[0].collectibles:
-      if collectible.id.contractAddress == contractAddress.toLowerAscii:
-        return true
-
-  return false
-
 proc getTokenList*(self: Controller): seq[TokenDto] =
   return self.tokenService.getTokenList()
 
@@ -740,6 +694,15 @@ proc getContractAddressesForToken*(self: Controller, symbol: string): Table[int,
 proc getCommunityTokenList*(self: Controller): seq[CommunityTokenDto] =
   return self.communityTokensService.getCommunityTokens(self.getMySectionId())
 
-proc authenticateWithCallback*(self: Controller) =
-  self.tmpAuthenticationWithCallbackInProgress = true
-  self.authenticate()
+proc collectCommunityMetricsMessagesTimestamps*(self: Controller, intervals: string) =
+  self.communityService.collectCommunityMetricsMessagesTimestamps(self.getMySectionId(), intervals)
+
+proc collectCommunityMetricsMessagesCount*(self: Controller, intervals: string) =
+  self.communityService.collectCommunityMetricsMessagesCount(self.getMySectionId(), intervals)
+
+proc waitingOnNewCommunityOwnerToConfirmRequestToRejoin*(self: Controller, communityId: string): bool =
+  self.communityService.waitingOnNewCommunityOwnerToConfirmRequestToRejoin(communityId)
+
+proc setCommunityShard*(self: Controller, shardIndex: int) =
+  self.communityService.asyncSetCommunityShard(self.getMySectionId(), shardIndex)
+

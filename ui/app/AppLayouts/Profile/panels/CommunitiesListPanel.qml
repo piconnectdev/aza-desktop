@@ -51,7 +51,7 @@ StatusListView {
         readonly property bool isOwner: model.memberRole === Constants.memberRole.owner
         readonly property bool isAdmin: model.memberRole === Constants.memberRole.admin
         readonly property bool isTokenMaster: model.memberRole === Constants.memberRole.tokenMaster
-        readonly property bool isInvitationPending: root.rootStore.isCommunityRequestPending(model.id)
+        readonly property bool isInvitationPending: root.rootStore.isMyCommunityRequestPending(model.id)
 
         components: [
             StatusFlatButton {
@@ -114,6 +114,7 @@ StatusListView {
                             moreMenu.close()
                             root.inviteFriends(model)
                         }
+                        objectName: "invitePeople"
                     }
                     StatusAction {
                         text: qsTr("Edit Shared Addresses")
@@ -128,7 +129,6 @@ StatusListView {
                         onTriggered: {
                             moreMenu.close()
                             Global.openEditSharedAddressesFlow(model.id)
-                            // TODO shared addresses flow, cf https://github.com/status-im/status-desktop/issues/11138
                         }
                     }
                     StatusMenuSeparator {

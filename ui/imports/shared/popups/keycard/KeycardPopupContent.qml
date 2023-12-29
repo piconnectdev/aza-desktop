@@ -23,6 +23,7 @@ Item {
         anchors.fill: parent
         sourceComponent: {
             switch (root.sharedKeycardModule.currentState.stateType) {
+            case Constants.keycardSharedState.biometrics:
             case Constants.keycardSharedState.noPCSCService:
             case Constants.keycardSharedState.pluginReader:
             case Constants.keycardSharedState.insertKeycard:
@@ -30,7 +31,10 @@ Item {
             case Constants.keycardSharedState.readingKeycard:
             case Constants.keycardSharedState.keyPairMigrateSuccess:
             case Constants.keycardSharedState.keyPairMigrateFailure:
-            case Constants.keycardSharedState.migratingKeyPair:
+            case Constants.keycardSharedState.migrateKeypairToApp:
+            case Constants.keycardSharedState.migrateKeypairToKeycard:
+            case Constants.keycardSharedState.migratingKeypairToApp:
+            case Constants.keycardSharedState.migratingKeypairToKeycard:
             case Constants.keycardSharedState.creatingAccountNewSeedPhraseSuccess:
             case Constants.keycardSharedState.creatingAccountNewSeedPhraseFailure:
             case Constants.keycardSharedState.creatingAccountNewSeedPhrase:
@@ -118,6 +122,12 @@ Item {
             case Constants.keycardSharedState.wrongBiometricsPassword:
             case Constants.keycardSharedState.wrongPassword:
                 return passwordComponent
+
+            case Constants.keycardSharedState.createPassword:
+                return createPasswordComponent
+
+            case Constants.keycardSharedState.confirmPassword:
+                return confirmPasswordComponent
 
             case Constants.keycardSharedState.enterKeycardName:
                 return enterNameComponent
@@ -260,6 +270,36 @@ Item {
 
             onPasswordValid: {
                 d.primaryButtonEnabled = valid
+            }
+        }
+    }
+
+    Component {
+        id: createPasswordComponent
+        CreatePassword {
+            sharedKeycardModule: root.sharedKeycardModule
+
+            Component.onCompleted: {
+                d.primaryButtonEnabled = false
+            }
+
+            onPasswordValid: {
+                d.primaryButtonEnabled = valid
+            }
+        }
+    }
+
+    Component {
+        id: confirmPasswordComponent
+        ConfirmPassword {
+            sharedKeycardModule: root.sharedKeycardModule
+
+            Component.onCompleted: {
+                d.primaryButtonEnabled = false
+            }
+
+            onPasswordMatch: {
+                d.primaryButtonEnabled = result
             }
         }
     }

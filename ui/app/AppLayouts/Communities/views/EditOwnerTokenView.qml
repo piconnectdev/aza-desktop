@@ -1,19 +1,18 @@
 import QtQuick 2.15
 import QtQuick.Layouts 1.14
 
+import StatusQ.Components 0.1
+import StatusQ.Controls 0.1
 import StatusQ.Core 0.1
 import StatusQ.Core.Theme 0.1
-import StatusQ.Controls 0.1
-import StatusQ.Components 0.1
 import StatusQ.Core.Utils 0.1 as SQUtils
 import StatusQ.Popups 0.1
 
-import utils 1.0
-
-import AppLayouts.Communities.panels 1.0
+import AppLayouts.Communities.controls 1.0
 import AppLayouts.Communities.helpers 1.0
-
+import AppLayouts.Communities.panels 1.0
 import AppLayouts.Wallet.controls 1.0
+import utils 1.0
 
 import SortFilterProxyModel 0.2
 
@@ -30,36 +29,44 @@ StatusScrollView {
     // Network related properties:
     property var layer1Networks
     property var layer2Networks
-    property var testNetworks
     property var enabledNetworks
     property var allNetworks
 
     // Wallet account expected roles: address, name, color, emoji, walletType
     property var accounts
 
+    property string feeText
+    property string feeErrorText
+    property bool isFeeLoading
+
     // Privileged tokens:
     readonly property TokenObject ownerToken: TokenObject {
+        name: PermissionsHelpers.ownerTokenNameTag + root.communityName
         type: Constants.TokenType.ERC721
-        isPrivilegedToken: true
-        isOwner: true
+        privilegesLevel: Constants.TokenPrivilegesLevel.Owner
         artworkSource: root.communityLogo
         color: root.communityColor
-        symbol: PermissionsHelpers.communityNameToSymbol(isOwner, root.communityName)
+        symbol: PermissionsHelpers.communityNameToSymbol(true, root.communityName)
         transferable: true
         remotelyDestruct: false
-        supply: 1
+        supply: "1"
         infiniteSupply: false
         description: qsTr("This is the %1 Owner token. The hodler of this collectible has ultimate control over %1 Community token administration.").arg(root.communityName)
     }
     readonly property TokenObject tMasterToken: TokenObject {
+        name: PermissionsHelpers.tMasterTokenNameTag + root.communityName
         type: Constants.TokenType.ERC721
-        isPrivilegedToken: true
+        privilegesLevel: Constants.TokenPrivilegesLevel.TMaster
         artworkSource: root.communityLogo
         color: root.communityColor
-        symbol: PermissionsHelpers.communityNameToSymbol(isOwner, root.communityName)
+        symbol: PermissionsHelpers.communityNameToSymbol(false, root.communityName)
         remotelyDestruct: true
         description: qsTr("This is the %1 TokenMaster token. The hodler of this collectible has full admin rights for the %1 Community in Status and can mint and airdrop %1 Community tokens.").arg(root.communityName)
     }
+
+    readonly property string feeLabel:
+        qsTr("Mint %1 Owner and TokenMaster tokens on %2")
+        .arg(communityName).arg(ownerToken.chainName)
 
     signal mintClicked
 
@@ -90,7 +97,7 @@ StatusScrollView {
             font.pixelSize: d.titleSize
             font.bold: true
 
-            text: PermissionsHelpers.ownerTokenNameTag + root.communityName
+            text: ownerToken.name
         }
 
         TokenInfoPanel {
@@ -116,7 +123,7 @@ StatusScrollView {
             font.pixelSize: d.titleSize
             font.bold: true
 
-            text: PermissionsHelpers.tMasterTokenNameTag + root.communityName
+            text: tMasterToken.name
         }
 
         TokenInfoPanel {
@@ -134,58 +141,54 @@ StatusScrollView {
             bottomPadding: Style.current.padding
         }
 
-        // TO BE REMOVED: It will be removed with the new fees panel
         CustomLabelDescriptionComponent {
-
             label: qsTr("Select account")
             description: qsTr("This account will be where you receive your Owner token and will also be the account that pays the token minting gas fees.")
         }
 
-        // TO BE REMOVED: It will be removed with the new fees panel
-        StatusEmojiAndColorComboBox {
-            id: accountBox
+        ColumnLayout {
+            spacing: 11
 
-            readonly property string address: SQUtils.ModelUtils.get(root.accounts, currentIndex, "address")
-            readonly property string initAccountName: ownerToken.accountName
-            readonly property int initIndex: SQUtils.ModelUtils.indexOf(root.accounts, "name", initAccountName)
+            AccountSelector {
+                id: accountBox
 
-            Layout.fillWidth: true
-            Layout.topMargin: -Style.current.halfPadding
+                readonly property string address: {
+                    root.accounts.count
+                    return SQUtils.ModelUtils.get(root.accounts, currentIndex, "address")
+                }
 
-            currentIndex: (initIndex !== -1) ? initIndex : 0
-            model: SortFilterProxyModel {
-                sourceModel: root.accounts
-                proxyRoles: [
-                    ExpressionRole {
-                        name: "color"
+                readonly property string initAccountName: ownerToken.accountName
+                readonly property int initIndex: {
+                    root.accounts.count
+                    return SQUtils.ModelUtils.indexOf(root.accounts, "name", initAccountName)
+                }
 
-                        function getColor(colorId) {
-                            return Utils.getColorForId(colorId)
-                        }
+                Layout.fillWidth: true
+                Layout.topMargin: -Style.current.halfPadding
 
-                        // Direct call for singleton function is not handled properly by
-                        // SortFilterProxyModel that's why helper function is used instead.
-                        expression: { return getColor(model.colorId) }
-                    }
-                ]
-                filters: ValueFilter {
-                    roleName: "walletType"
-                    value: Constants.watchWalletType
-                    inverted: true
+                currentIndex: (initIndex !== -1) ? initIndex : 0
+                model: root.accounts
+
+                onAddressChanged: {
+                    ownerToken.accountAddress = address
+                    tMasterToken.accountAddress = address
+                }
+                control.onDisplayTextChanged: {
+                    ownerToken.accountName = control.displayText
+                    tMasterToken.accountName = control.displayText
                 }
             }
-            type: StatusComboBox.Type.Secondary
-            size: StatusComboBox.Size.Small
-            implicitHeight: 44
-            defaultAssetName: "filled-account"
 
-            onAddressChanged: {
-                ownerToken.accountAddress = address
-                tMasterToken.accountAddress = address
-            }
-            control.onDisplayTextChanged: {
-                ownerToken.accountName = control.displayText
-                tMasterToken.accountName = control.displayText
+            StatusBaseText {
+                Layout.fillWidth: true
+
+                visible: !!root.feeErrorText
+                horizontalAlignment: Text.AlignRight
+
+                font.pixelSize: Theme.tertiaryTextFontSize
+                color: Theme.palette.dangerColor1
+                text: root.feeErrorText
+                wrapMode: Text.Wrap
             }
         }
 
@@ -193,39 +196,33 @@ StatusScrollView {
             id: networkSelector
 
             label: qsTr("Select network")
-            description: qsTr("The network on which these tokens will be minted.")
+            description: qsTr("The network you select will be where all your community’s tokens reside. Once set, this setting can’t be changed and tokens can’t move to other networks.")
         }
 
-        RowLayout {
+        FeesBox {
             Layout.fillWidth: true
-            Layout.topMargin: Style.current.halfPadding
+            Layout.topMargin: Style.current.padding
 
-            StatusIcon {
-                Layout.preferredWidth: d.iconSize
-                Layout.preferredHeight: d.iconSize
-                Layout.alignment: Qt.AlignTop
+            model: QtObject {
+                id: singleFeeModel
 
-                color: Theme.palette.baseColor1
-                icon: "info"
+                readonly property string title: root.feeLabel
+                readonly property string feeText: root.isFeeLoading ?
+                                                      "" : root.feeText
+                readonly property bool error: root.feeErrorText !== ""
             }
 
-            StatusBaseText {
-                Layout.fillWidth: true
-
-                wrapMode: Text.Wrap
-                font.pixelSize: Style.current.primaryTextFontSize
-                color: Theme.palette.baseColor1
-                lineHeight: 1.2
-                text: qsTr("Make sure you’re happy with the blockchain network selected before minting these tokens as they can’t be moved to a different network later.")
-            }
+            showAccountsSelector: false
         }
 
         StatusButton {
             Layout.preferredHeight: 44
             Layout.alignment: Qt.AlignHCenter
             Layout.fillWidth: true
-            Layout.topMargin: Style.current.padding
+            Layout.topMargin: 4
             Layout.bottomMargin: Style.current.padding
+
+            enabled: root.feeText && !root.feeErrorText
             text: qsTr("Mint")
 
             onClicked: root.mintClicked()
@@ -265,6 +262,8 @@ StatusScrollView {
 
         function setChain(chainId) { netFilter.setChain(chainId) }
 
+        readonly property alias currentNetworkName: netFilter.currentValue
+
         Layout.fillWidth: true
         Layout.topMargin: Style.current.padding
         spacing: 8
@@ -282,23 +281,27 @@ StatusScrollView {
             allNetworks: root.allNetworks
             layer1Networks: root.layer1Networks
             layer2Networks: root.layer2Networks
-            testNetworks: root.testNetworks
             enabledNetworks: root.enabledNetworks
-
             multiSelection: false
+            control.topPadding: 10
+            control.background: Rectangle {
+                height: 44
+                radius: 8
+                color: "transparent"
+                border.color: Theme.palette.directColor7
+            }
 
-            onToggleNetwork: (network) =>
-                             {
-                                 // Set Owner Token network properties:
-                                 ownerToken.chainId = network.chainId
-                                 ownerToken.chainName = network.chainName
-                                 ownerToken.chainIcon = network.iconUrl
+            onToggleNetwork: (network) => {
+                // Set Owner Token network properties:
+                ownerToken.chainId = network.chainId
+                ownerToken.chainName = network.chainName
+                ownerToken.chainIcon = network.iconUrl
 
-                                 // Set TMaster Token network properties:
-                                 tMasterToken.chainId = network.chainId
-                                 tMasterToken.chainName = network.chainName
-                                 tMasterToken.chainIcon = network.iconUrl
-                             }
+                // Set TMaster Token network properties:
+                tMasterToken.chainId = network.chainId
+                tMasterToken.chainName = network.chainName
+                tMasterToken.chainIcon = network.iconUrl
+            }
         }
     }
 }

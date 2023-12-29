@@ -86,6 +86,7 @@ QtObject:
   proc updateLoggedInAccount*(self: Service, displayName: string, images: seq[Image]) =
     self.loggedInAccount.name = displayName
     self.loggedInAccount.images = images
+    singletonInstance.localAccountSettings.setFileName(displayName)
 
   proc getImportedAccount*(self: Service): GeneratedAccountDto =
     return self.importedAccount
@@ -103,8 +104,7 @@ QtObject:
   proc connectToFetchingFromWakuEvents*(self: Service) =
     self.events.on(SignalType.WakuBackedUpProfile.event) do(e: Args):
       var receivedData = WakuBackedUpProfileSignal(e)
-      self.loggedInAccount.name = receivedData.backedUpProfile.displayName
-      self.loggedInAccount.images = receivedData.backedUpProfile.images
+      self.updateLoggedInAccount(receivedData.backedUpProfile.displayName, receivedData.backedUpProfile.images)
 
   proc init*(self: Service) =
     try:
@@ -263,6 +263,11 @@ QtObject:
       if(self.importedAccount.id == accountId):
         return self.prepareSubaccountJsonObject(self.importedAccount, displayName)
 
+  proc toStatusGoSupportedLogLevel*(logLevel: string): string =
+    if logLevel == "TRACE":
+      return "DEBUG"
+    return logLevel
+
   proc prepareAccountSettingsJsonObject(self: Service, account: GeneratedAccountDto,
     installationId: string, displayName: string): JsonNode =
     result = %* {
@@ -277,7 +282,7 @@ QtObject:
       "wallet-root-address": account.derivedAccounts.walletRoot.address,
       "preview-privacy?": true,
       "signing-phrase": generateSigningPhrase(3),
-      "log-level": $LogLevel.INFO,
+      "log-level": main_constants.LOG_LEVEL,
       "latest-derived-path": 0,
       "currency": "usd",
       "networks/networks": @[],
@@ -293,7 +298,8 @@ QtObject:
           "text": ""
         },
       "profile-pictures-show-to": settings.PROFILE_PICTURES_SHOW_TO_EVERYONE,
-      "profile-pictures-visibility": settings.PROFILE_PICTURES_VISIBILITY_EVERYONE
+      "profile-pictures-visibility": settings.PROFILE_PICTURES_VISIBILITY_EVERYONE,
+      "url-unfurling-mode": int(settings.UrlUnfurlingMode.AlwaysAsk),
     }
 
   proc getAccountSettings(self: Service, accountId: string,
@@ -309,7 +315,7 @@ QtObject:
 
   proc getDefaultNodeConfig*(self: Service, installationId: string, recoverAccount: bool): JsonNode =
     let fleet = Fleet.StatusProd
-    let dnsDiscoveryURL = @["enrtree://AOGECG2SPND25EEFMAJ5WF3KSGJNSGV356DSTL2YVLLZWIV6SAYBM@prod.nodes.status.im"]
+    let dnsDiscoveryURL = "enrtree://AL65EKLJAUXKKPG43HVTML5EFFWEZ7L4LOKTLZCLJASG4DSESQZEC@prod.status.nodes.status.im"
 
     result = NODE_CONFIG.copy()
     result["ClusterConfig"]["Fleet"] = newJString($fleet)
@@ -325,8 +331,12 @@ QtObject:
 
     # TODO: fleet.status.im should have different sections depending on the node type
     #       or maybe it's not necessary because a node has the identify protocol
-    result["ClusterConfig"]["WakuNodes"] = %* dnsDiscoveryURL
-    result["ClusterConfig"]["DiscV5BootstrapNodes"] = %* dnsDiscoveryURL
+    result["ClusterConfig"]["WakuNodes"] = %* @[dnsDiscoveryURL]
+
+    var discV5Bootnodes = self.fleetConfiguration.getNodes(fleet, FleetNodes.WakuENR)
+    discV5Bootnodes.add(dnsDiscoveryURL)
+
+    result["ClusterConfig"]["DiscV5BootstrapNodes"] = %* discV5Bootnodes
 
     if TEST_PEER_ENR != "":
       let testPeerENRArr = %* @[TEST_PEER_ENR]
@@ -338,18 +348,77 @@ QtObject:
       result["ClusterConfig"]["DiscV5BootstrapNodes"] = %* (@[])
       result["Rendezvous"] = newJBool(false)
 
-    # Source the connection port from the environment for debugging or if default port not accessible
-    if existsEnv("STATUS_PORT"):
-      let wV1Port = $getEnv("STATUS_PORT")
-      # Waku V1 config
-      result["ListenAddr"] = newJString("0.0.0.0:" & wV1Port)
+    result["LogLevel"] = newJString(toStatusGoSupportedLogLevel(main_constants.LOG_LEVEL))
+
+    if STATUS_PORT != 0:
+      result["ListenAddr"] = newJString("0.0.0.0:" & $main_constants.STATUS_PORT)
 
     result["KeyStoreDir"] = newJString(self.keyStoreDir.replace(main_constants.STATUSGODIR, ""))
     result["RootDataDir"] = newJString(main_constants.STATUSGODIR)
+    result["KeycardPairingDataFile"] = newJString(main_constants.KEYCARDPAIRINGDATAFILE)
     result["ProcessBackedupMessages"] = newJBool(recoverAccount)
 
+  proc getLoginNodeConfig(self: Service): JsonNode =
+    # To create appropriate NodeConfig for Login we set only params that maybe be set via env variables or cli flags
+    result = %*{}
+
+    # mandatory params
+    result["NetworkId"] = NETWORKS[0]{"chainId"}
+    result["DataDir"] = %* "./ethereum/mainnet"
+    result["KeyStoreDir"] = %* self.keyStoreDir.replace(main_constants.STATUSGODIR, "")
+    result["KeycardPairingDataFile"] = %* main_constants.KEYCARDPAIRINGDATAFILE
+
+    # other params
+    result["Networks"] = NETWORKS
+
+    result["UpstreamConfig"] = %* {
+      "URL": NETWORKS[0]{"rpcUrl"},
+      "Enabled": true,
+    }
+
+    result["ShhextConfig"] = %* {
+      "VerifyENSURL": NETWORKS[0]{"fallbackUrl"},
+      "VerifyTransactionURL": NETWORKS[0]{"fallbackUrl"}
+    }
+
+    result["WakuV2Config"] = %* {
+      "Port": WAKU_V2_PORT,
+      "UDPPort": WAKU_V2_PORT
+    }
+
+    result["WalletConfig"] = %* {
+      "LoadAllTransfers": true,
+      "OpenseaAPIKey": OPENSEA_API_KEY_RESOLVED,
+      "RaribleMainnetAPIKey": RARIBLE_MAINNET_API_KEY_RESOLVED,
+      "RaribleTestnetAPIKey": RARIBLE_TESTNET_API_KEY_RESOLVED,
+      "InfuraAPIKey": INFURA_TOKEN_RESOLVED,
+      "InfuraAPIKeySecret": INFURA_TOKEN_SECRET_RESOLVED,
+      "AlchemyAPIKeys": %* {
+        "1": ALCHEMY_ETHEREUM_MAINNET_TOKEN_RESOLVED,
+        "5": ALCHEMY_ETHEREUM_GOERLI_TOKEN_RESOLVED,
+        "11155111": ALCHEMY_ETHEREUM_SEPOLIA_TOKEN_RESOLVED,
+        "42161": ALCHEMY_ARBITRUM_MAINNET_TOKEN_RESOLVED,
+        "421613": ALCHEMY_ARBITRUM_GOERLI_TOKEN_RESOLVED,
+        "421614": ALCHEMY_ARBITRUM_SEPOLIA_TOKEN_RESOLVED,
+        "10": ALCHEMY_OPTIMISM_MAINNET_TOKEN_RESOLVED,
+        "420": ALCHEMY_OPTIMISM_GOERLI_TOKEN_RESOLVED,
+        "11155420": ALCHEMY_OPTIMISM_SEPOLIA_TOKEN_RESOLVED
+      }
+    }
+
+    result["TorrentConfig"] = %* {
+      "Port": TORRENT_CONFIG_PORT,
+      "DataDir": DEFAULT_TORRENT_CONFIG_DATADIR,
+      "TorrentDir": DEFAULT_TORRENT_CONFIG_TORRENTDIR
+    }
+
+    result["LogLevel"] = newJString(toStatusGoSupportedLogLevel(main_constants.LOG_LEVEL))
+
+    if STATUS_PORT != 0:
+      result["ListenAddr"] = newJString("0.0.0.0:" & $main_constants.STATUS_PORT)
+
   proc setLocalAccountSettingsFile(self: Service) =
-    if(main_constants.IS_MACOS and self.getLoggedInAccount.isValid()):
+    if self.getLoggedInAccount.isValid():
       singletonInstance.localAccountSettings.setFileName(self.getLoggedInAccount.name)
 
   proc addKeycardDetails(self: Service, kcInstance: string, settingsJson: var JsonNode, accountData: var JsonNode) =
@@ -423,10 +492,10 @@ QtObject:
         walletRootAddress = self.importedAccount.derivedAccounts.walletRoot.address
         eip1581Address = self.importedAccount.derivedAccounts.eip1581.address
         encryptionPublicKey = self.importedAccount.derivedAccounts.encryption.publicKey
-
         whisperPrivateKey = self.importedAccount.derivedAccounts.whisper.privateKey
-        if whisperPrivateKey.startsWith("0x"):
-          whisperPrivateKey = whisperPrivateKey[2 .. ^1]
+
+      if whisperPrivateKey.startsWith("0x"):
+        whisperPrivateKey = whisperPrivateKey[2 .. ^1]
 
       let installationId = $genUUID()
       let alias = generateAliasFromPk(whisperPublicKey)
@@ -473,7 +542,7 @@ QtObject:
         "wallet-root-address": walletRootAddress,
         "preview-privacy?": true,
         "signing-phrase": generateSigningPhrase(3),
-        "log-level": $LogLevel.INFO,
+        "log-level": main_constants.LOG_LEVEL,
         "latest-derived-path": 0,
         "currency": "usd",
         "networks/networks": @[],
@@ -588,7 +657,7 @@ QtObject:
 
   proc verifyAccountPassword*(self: Service, account: string, password: string): bool =
     try:
-      let response = status_account.verifyAccountPassword(account, password, self.keyStoreDir)
+      let response = status_account.verifyAccountPassword(account, utils.hashPassword(password), self.keyStoreDir)
       if(response.result.contains("error")):
         let errMsg = response.result["error"].getStr
         if(errMsg.len == 0):
@@ -613,7 +682,7 @@ QtObject:
       error "error: ", procName="verifyDatabasePassword", errName = e.name, errDesription = e.msg
 
   proc doLogin(self: Service, account: AccountDto, hashedPassword, thumbnailImage, largeImage: string) =
-    let nodeConfigJson = self.getDefaultNodeConfig(installationId = "", recoverAccount = false)
+    let nodeConfigJson = self.getLoginNodeConfig()
     let response = status_account.login(
       account.name,
       account.keyUid,
@@ -676,7 +745,7 @@ QtObject:
   proc onWaitForReencryptionTimeout(self: Service, response: string) {.slot.} =
     # Reencryption (can freeze and take up to 30 minutes)
     let oldHashedPassword = hashedPasswordToUpperCase(self.tmpHashedPassword)
-    discard status_privacy.changeDatabaseHashedPassword(self.tmpAccount.keyUid, oldHashedPassword, self.tmpHashedPassword)
+    discard status_privacy.changeDatabasePassword(self.tmpAccount.keyUid, oldHashedPassword, self.tmpHashedPassword)
 
     # Normal login after reencryption
     self.doLogin(self.tmpAccount, self.tmpHashedPassword, self.tmpThumbnailImage, self.tmpLargeImage)
@@ -695,7 +764,7 @@ QtObject:
         "key-uid": accToBeLoggedIn.keyUid,
       }
 
-      let nodeConfigJson = self.getDefaultNodeConfig(installationId = "", recoverAccount = false)
+      let nodeConfigJson = self.getLoginNodeConfig()
 
       let response = status_account.loginWithKeycard(keycardData.whisperKey.privateKey,
         keycardData.encryptionKey.publicKey,
@@ -709,12 +778,13 @@ QtObject:
           debug "Account logged in succesfully"
           # this should be fetched later from waku
           self.loggedInAccount = accToBeLoggedIn
+          self.setLocalAccountSettingsFile()
           return
     except Exception as e:
       error "error: ", procName="loginAccountKeycard", errName = e.name, errDesription = e.msg
       return e.msg
 
-  proc convertToKeycardAccount*(self: Service, keycardUid, currentPassword: string, newPassword: string) =
+  proc convertRegularProfileKeypairToKeycard*(self: Service, keycardUid, currentPassword: string, newPassword: string) =
     var accountDataJson = %* {
       "key-uid": self.getLoggedInAccount().keyUid,
       "kdfIterations": KDF_ITERATIONS
@@ -723,16 +793,11 @@ QtObject:
 
     self.addKeycardDetails(keycardUid, settingsJson, accountDataJson)
 
-    if(accountDataJson.isNil or settingsJson.isNil):
-      let description = "at least one json object is not prepared well"
-      error "error: ", procName="convertToKeycardAccount", errDesription = description
-      return
-
     let hashedCurrentPassword = hashPassword(currentPassword)
-    let arg = ConvertToKeycardAccountTaskArg(
-      tptr: cast[ByteAddress](convertToKeycardAccountTask),
+    let arg = ConvertRegularProfileKeypairToKeycardTaskArg(
+      tptr: cast[ByteAddress](convertRegularProfileKeypairToKeycardTask),
       vptr: cast[ByteAddress](self.vptr),
-      slot: "onConvertToKeycardAccount",
+      slot: "onConvertRegularProfileKeypairToKeycard",
       accountDataJson: accountDataJson,
       settingsJson: settingsJson,
       keycardUid: keycardUid,
@@ -743,7 +808,7 @@ QtObject:
     DB_BLOCKED_DUE_TO_PROFILE_MIGRATION = true
     self.threadpool.start(arg)
 
-  proc onConvertToKeycardAccount*(self: Service, response: string) {.slot.} =
+  proc onConvertRegularProfileKeypairToKeycard*(self: Service, response: string) {.slot.} =
     var result = false
     try:
       let rpcResponse = Json.decode(response, RpcResponse[JsonNode])
@@ -752,24 +817,38 @@ QtObject:
         if(errMsg.len == 0):
           result = true
         else:
-          error "error: ", procName="convertToKeycardAccount", errDesription = errMsg
+          error "error: ", procName="onConvertRegularProfileKeypairToKeycard", errDesription = errMsg
     except Exception as e:
-      error "error handilng migrated keypair response", errDesription=e.msg
+      error "error handilng migrated keypair response", procName="onConvertRegularProfileKeypairToKeycard", errDesription=e.msg
     self.events.emit(SIGNAL_CONVERTING_PROFILE_KEYPAIR, ResultArgs(success: result))
 
-  proc convertToRegularAccount*(self: Service, mnemonic: string, currentPassword: string, newPassword: string): string =
-    let hashedPassword = hashPassword(newPassword)
+  proc convertKeycardProfileKeypairToRegular*(self: Service, mnemonic: string, currentPassword: string, newPassword: string) =
+    let hashedNewPassword = hashPassword(newPassword)
+    let arg = ConvertKeycardProfileKeypairToRegularTaskArg(
+      tptr: cast[ByteAddress](convertKeycardProfileKeypairToRegularTask),
+      vptr: cast[ByteAddress](self.vptr),
+      slot: "onConvertKeycardProfileKeypairToRegular",
+      mnemonic: mnemonic,
+      currentPassword: currentPassword,
+      hashedNewPassword: hashedNewPassword
+    )
+
+    DB_BLOCKED_DUE_TO_PROFILE_MIGRATION = true
+    self.threadpool.start(arg)
+
+  proc onConvertKeycardProfileKeypairToRegular*(self: Service, response: string) {.slot.} =
+    var result = false
     try:
-      let response = status_account.convertToRegularAccount(mnemonic, currentPassword, hashedPassword)
-      var errMsg = ""
-      if(response.result.contains("error")):
-        errMsg = response.result["error"].getStr
-        if errMsg.len > 0:
-          error "error: ", procName="convertToRegularAccount", errDesription = errMsg
-      return errMsg
+      let rpcResponse = Json.decode(response, RpcResponse[JsonNode])
+      if(rpcResponse.result.contains("error")):
+        let errMsg = rpcResponse.result["error"].getStr
+        if(errMsg.len == 0):
+          result = true
+        else:
+          error "error: ", procName="onConvertKeycardProfileKeypairToRegular", errDesription = errMsg
     except Exception as e:
-      error "error converting to regular account: ", message = e.msg
-      return e.msg
+      error "error handilng migrated keypair response", procName="onConvertKeycardProfileKeypairToRegular", errDesription=e.msg
+    self.events.emit(SIGNAL_CONVERTING_PROFILE_KEYPAIR, ResultArgs(success: result))
 
   proc verifyPassword*(self: Service, password: string): bool =
     try:

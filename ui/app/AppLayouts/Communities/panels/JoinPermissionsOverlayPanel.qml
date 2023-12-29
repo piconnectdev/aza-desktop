@@ -19,6 +19,7 @@ Control {
 
     property bool joinCommunity: true // Otherwise it means join channel action
     property bool requirementsMet: false
+    property bool requirementsCheckPending: false
     property bool requiresRequest: false
     property bool isInvitationPending: false
     property bool isJoinRequestRejected: false
@@ -50,7 +51,7 @@ Control {
         readonly property string memberchipRequestRejectedText: qsTr("Membership Request Rejected")
 
         function holdingsTextFormat(name, amount) {
-            return PermissionsHelpers.setHoldingsTextFormat(HoldingTypes.Type.Asset, name, amount)
+            return PermissionsHelpers.setHoldingsTextFormat(Constants.TokenType.ERC20, name, amount)
         }
 
         function getInvitationPendingText() {
@@ -162,10 +163,15 @@ Control {
 
         StatusBaseText {
             Layout.alignment: Qt.AlignHCenter
-            visible: !root.showOnlyPanels && (root.isJoinRequestRejected || !root.requirementsMet)
+            visible: !root.showOnlyPanels && !root.requirementsCheckPending && (root.isJoinRequestRejected || !root.requirementsMet)
             text: root.isJoinRequestRejected ? d.memberchipRequestRejectedText :
                                           (root.joinCommunity ? d.communityRequirementsNotMetText : d.channelRequirementsNotMetText)
             color: Theme.palette.dangerColor1
+        }
+
+        RequirementsCheckPendingLoader {
+            visible: root.requirementsCheckPending
+            Layout.alignment: Qt.AlignHCenter
         }
     }
 }

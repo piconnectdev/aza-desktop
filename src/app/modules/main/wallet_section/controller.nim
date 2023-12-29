@@ -54,20 +54,17 @@ proc getCurrencyAmount*(self: Controller, amount: float64, symbol: string): Curr
 proc updateCurrency*(self: Controller, currency: string) =
   self.walletAccountService.updateCurrency(currency)
 
-# proc getIndex*(self: Controller, address: string): int =
-#   return self.walletAccountService.getIndex(address)
-
 proc getNetworks*(self: Controller): seq[NetworkDto] =
   return self.networkService.getNetworks()
 
 proc getWalletAccounts*(self: Controller): seq[wallet_account_service.WalletAccountDto] =
   return self.walletAccountService.getWalletAccounts()
 
-proc getEnabledChainIds*(self: Controller): seq[int] = 
+proc getEnabledChainIds*(self: Controller): seq[int] =
   return self.networkService.getNetworks().filter(n => n.enabled).map(n => n.chainId)
 
-proc toggleIncludeWatchOnlyAccount*(self: Controller) =
-  self.walletAccountService.toggleIncludeWatchOnlyAccount()
+proc getKeypairByAccountAddress*(self: Controller, address: string): KeypairDto =
+  return self.walletAccountService.getKeypairByAccountAddress(address)
 
-proc isIncludeWatchOnlyAccount*(self: Controller): bool =
-  return self.walletAccountService.isIncludeWatchOnlyAccount()
+proc hasPairedDevices*(self: Controller): bool =
+  return self.walletAccountService.hasPairedDevices()

@@ -206,7 +206,7 @@ SettingsContentBase {
         onShowCommunityIntroDialog: {
             Global.openPopup(communityIntroDialogPopup, {
                 communityId: communityId,
-                isInvitationPending: root.rootStore.isCommunityRequestPending(communityId),
+                isInvitationPending: root.rootStore.isMyCommunityRequestPending(communityId),
                 name: name,
                 introMessage: introMessage,
                 imageSrc: imageSrc,
@@ -233,15 +233,50 @@ SettingsContentBase {
             }
 
             loginType: chatStore.loginType
-            walletAccountsModel: WalletStore.RootStore.receiveAccounts
-            permissionsModel: chatStore.permissionsStore.permissionsModel
+            walletAccountsModel: WalletStore.RootStore.nonWatchAccounts
+            requirementsCheckPending: root.rootStore.requirementsCheckPending
+            permissionsModel: {
+                root.rootStore.prepareTokenModelForCommunity(communityIntroDialog.communityId)
+                return root.rootStore.permissionsModel
+            }
             assetsModel: chatStore.assetsModel
             collectiblesModel: chatStore.collectiblesModel
 
-            onJoined: chatStore.requestToJoinCommunityWithAuthentication(root.rootStore.userProfileInst.name, JSON.stringify(sharedAddresses), airdropAddress)
+            onPrepareForSigning: {
+                chatStore.prepareKeypairsForSigning(communityIntroDialog.communityId, root.rootStore.userProfileInst.name, sharedAddresses, airdropAddress, false)
+
+                communityIntroDialog.keypairSigningModel = chatStore.communitiesModuleInst.keypairsSigningModel
+            }
+
+            onSignSharedAddressesForAllNonKeycardKeypairs: {
+                chatStore.signSharedAddressesForAllNonKeycardKeypairs()
+            }
+
+            onSignSharedAddressesForKeypair: {
+                chatStore.signSharedAddressesForKeypair(keyUid)
+            }
+
+            onJoinCommunity: {
+                chatStore.joinCommunityOrEditSharedAddresses()
+            }
+
             onCancelMembershipRequest: root.rootStore.cancelPendingRequest(communityIntroDialog.communityId)
 
+            onSharedAddressesUpdated: {
+                root.rootStore.updatePermissionsModel(communityIntroDialog.communityId, sharedAddresses)
+            }
+
             onClosed: destroy()
+
+            Connections {
+                target: chatStore.communitiesModuleInst
+
+                function onSharedAddressesForAllNonKeycardKeypairsSigned() {
+                    if (!!communityIntroDialog.replaceItem) {
+                        communityIntroDialog.replaceLoader.item.sharedAddressesForAllNonKeycardKeypairsSigned()
+                    }
+                }
+            }
         }
     }
 }

@@ -1,4 +1,4 @@
-import NimQml, std/wrapnils
+import NimQml, std/wrapnils, strutils
 import ./message_item
 
 QtObject:
@@ -57,6 +57,14 @@ QtObject:
   proc quotedMessageAuthorAvatar*(self: MessageItem): string {.slot.} = result = ?.self.messageItem.quotedMessageAuthorAvatar
   QtProperty[string] quotedMessageAuthorAvatar:
     read = quotedMessageAuthorAvatar
+
+  proc quotedMessageAlbumMessageImages*(self: MessageItem): string {.slot.} = result = ?.self.messageItem.quotedMessageAlbumMessageImages.join(" ")
+  QtProperty[string] quotedMessageAlbumMessageImages:
+    read = quotedMessageAlbumMessageImages
+
+  proc quotedMessageAlbumImagesCount*(self: MessageItem): int {.slot.} = result = ?.self.messageItem.quotedMessageAlbumImagesCount
+  QtProperty[int] quotedMessageAlbumImagesCount:
+    read = quotedMessageAlbumImagesCount
 
   proc senderId*(self: MessageItem): string {.slot.} = result = ?.self.messageItem.senderId
   QtProperty[string] senderId:
@@ -185,3 +193,15 @@ QtObject:
   proc reactionsModel*(self: MessageItem): QVariant {.slot.} = result = newQVariant(?.self.messageItem.reactionsModel)
   QtProperty[QVariant] reactionsModel:
     read = reactionsModel
+  
+  proc albumId*(self: MessageItem): string {.slot.} = result = ?.self.messageItem.albumId
+  QtProperty[string] albumId:
+    read = albumId
+
+  proc albumMessageImages*(self: MessageItem): string {.slot.} = result = ?.self.messageItem.albumMessageImages.join(" ")
+  QtProperty[string] albumMessageImages:
+    read = albumMessageImages
+
+  proc albumImagesCount*(self: MessageItem): int {.slot.} = result = ?.self.messageItem.albumImagesCount
+  QtProperty[int] albumImagesCount:
+    read = albumImagesCount

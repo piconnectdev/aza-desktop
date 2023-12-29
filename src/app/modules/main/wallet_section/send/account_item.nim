@@ -1,4 +1,4 @@
-import NimQml, strformat
+import NimQml
 import ../../../shared_models/wallet_account_item
 import ../../../shared_models/token_model
 import ../../../shared_models/currency_amount
@@ -9,6 +9,7 @@ QtObject:
   type AccountItem* = ref object of WalletAccountItem
     assets: token_model.Model
     currencyBalance: CurrencyAmount
+    canSend: bool
 
   proc setup*(self: AccountItem,
     name: string,
@@ -19,6 +20,10 @@ QtObject:
     assets: token_model.Model,
     currencyBalance: CurrencyAmount,
     position: int,
+    areTestNetworksEnabled: bool,
+    prodPreferredChainIds: string,
+    testPreferredChainIds: string,
+    canSend: bool
   ) =
     self.QObject.setup
     self.WalletAccountItem.setup(name,
@@ -29,12 +34,17 @@ QtObject:
       path = "",
       keyUid = "",
       keycardAccount = false,
-      position)
+      position,
+      operability = wa_dto.AccountFullyOperable,
+      areTestNetworksEnabled,
+      prodPreferredChainIds,
+      testPreferredChainIds)
     self.assets = assets
     self.currencyBalance = currencyBalance
+    self.canSend = canSend
 
   proc delete*(self: AccountItem) =
-      self.QObject.delete
+    self.QObject.delete
 
   proc newAccountItem*(
     name: string = "",
@@ -44,10 +54,14 @@ QtObject:
     walletType: string = "",
     assets: token_model.Model = nil,
     currencyBalance: CurrencyAmount = nil,
+    areTestNetworksEnabled: bool = false,
+    prodPreferredChainIds: string = "",
+    testPreferredChainIds: string = "",
     position: int = 0,
+    canSend: bool = true,
     ): AccountItem =
       new(result, delete)
-      result.setup(name, address, colorId, emoji, walletType, assets, currencyBalance, position)
+      result.setup(name, address, colorId, emoji, walletType, assets, currencyBalance, position, areTestNetworksEnabled, prodPreferredChainIds, testPreferredChainIds, canSend)
 
   proc `$`*(self: AccountItem): string =
     result = "WalletSection-Send-Item("
@@ -73,3 +87,6 @@ QtObject:
   QtProperty[QVariant] currencyBalance:
     read = getCurrencyBalanceAsQVariant
     notify = currencyBalanceChanged
+
+  proc canSend*(self: AccountItem): bool =
+    return self.canSend

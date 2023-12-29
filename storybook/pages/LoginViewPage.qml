@@ -110,3 +110,7 @@ SplitView {
         // model editor will go here
     }
 }
+
+// category: Views
+
+// https://www.figma.com/file/17fc13UBFvInrLgNUKJJg5/Kuba%E2%8E%9CDesktop?node-id=1080%3A313192

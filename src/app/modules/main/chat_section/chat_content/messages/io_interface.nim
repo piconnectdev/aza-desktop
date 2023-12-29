@@ -1,4 +1,4 @@
-import NimQml
+import NimQml, uuids
 
 import ../../../../../../app_service/service/message/dto/[message, reaction, pinned_message]
 import ../../../../../../app_service/service/community/dto/community
@@ -46,6 +46,12 @@ method onPinMessage*(self: AccessInterface, messageId: string, actionInitiatedBy
   raise newException(ValueError, "No implementation available")
 
 method onUnpinMessage*(self: AccessInterface, messageId: string) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method markMessageAsUnread*(self: AccessInterface, messageId: string) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method onMarkMessageAsUnread*(self: AccessInterface, messageId: string) {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method messagesAdded*(self: AccessInterface, messages: seq[MessageDto]) {.base.} =
@@ -117,22 +123,13 @@ method getNumberOfPinnedMessages*(self: AccessInterface): int {.base.} =
 method deleteMessage*(self: AccessInterface, messageId: string) {.base.} =
   raise newException(ValueError, "No implementation available")
 
-method onMessageDeleted*(self: AccessInterface, messageId: string) {.base.} =
+method onMessageDeleted*(self: AccessInterface, messageId, deletedBy: string) {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method editMessage*(self: AccessInterface, messageId: string, contentType: int, updatedMsg: string) {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method onHistoryCleared*(self: AccessInterface) {.base.} =
-  raise newException(ValueError, "No implementation available")
-
-method getLinkPreviewData*(self: AccessInterface, link: string, uuid: string, whiteListedSites: string, whiteListedImgExtensions: string, unfurlImages: bool): string {.base.} =
-  raise newException(ValueError, "No implementation available")
-
-method onPreviewDataLoaded*(self: AccessInterface, previewData: string, uuid: string) {.base.} =
-  raise newException(ValueError, "No implementation available")
-
-method requestMoreMessages*(self: AccessInterface) {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method fillGaps*(self: AccessInterface, messageId: string) {.base.} =
@@ -165,6 +162,9 @@ method resetAndScrollToNewMessagesMarker*(self: AccessInterface) {.base.} =
 method markAllMessagesRead*(self: AccessInterface) {.base.} =
   raise newException(ValueError, "No implementation available")
 
+method requestMoreMessages*(self: AccessInterface) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
 method markMessagesAsRead*(self: AccessInterface, messages: seq[string]) {.base.} =
   raise newException(ValueError, "No implementation available")
 
@@ -178,4 +178,10 @@ method isFirstUnseenMessageInitialized*(self: AccessInterface): bool {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method reevaluateViewLoadingState*(self: AccessInterface) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method onGetMessageById*(self: AccessInterface, requestId: UUID, messageId: string, message: MessageDto, error: string) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method forceLinkPreviewsLocalData*(self: AccessInterface, messageId: string) {.base.} =
   raise newException(ValueError, "No implementation available")

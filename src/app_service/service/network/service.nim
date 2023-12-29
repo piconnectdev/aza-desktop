@@ -11,6 +11,13 @@ export dto, types
 logScope:
   topics = "network-service"
 
+const SIGNAL_NETWORK_ENDPOINT_UPDATED* = "networkEndPointUpdated"
+
+type NetworkEndpointUpdatedArgs* = ref object of Args
+  isTest*: bool
+  networkName*: string
+  revertedToDefault*: bool
+
 type 
   Service* = ref object of RootObj
     events: EventEmitter
@@ -45,8 +52,19 @@ proc fetchNetworks*(self: Service, useCached: bool = true): seq[CombinedNetworkD
     self.networks = result
     self.networksInited = true
 
+proc resetNetworks*(self: Service) =
+  discard self.fetchNetworks(useCached = false)
+
 proc getCombinedNetworks*(self: Service): seq[CombinedNetworkDto] =
   return self.fetchNetworks()
+
+# TODO:: update the networks service to unify the model exposed from this service
+# We currently have 3 types: combined, test/mainet and flat and probably can be optimized
+# follow up task https://github.com/status-im/status-desktop/issues/12717
+proc getFlatNetworks*(self: Service): seq[NetworkDto] =
+  for network in self.fetchNetworks():
+      result.add(network.test)
+      result.add(network.prod)
 
 proc getNetworks*(self: Service): seq[NetworkDto] = 
   let testNetworksEnabled = self.settingsService.areTestNetworksEnabled()
@@ -57,14 +75,21 @@ proc getNetworks*(self: Service): seq[NetworkDto] =
     else:
       result.add(network.prod)
 
-proc upsertNetwork*(self: Service, network: NetworkDto) =
-  discard backend.addEthereumChain(backend.Network(
+proc getAllNetworkChainIds*(self: Service): seq[int] =
+  for network in self.fetchNetworks():
+      result.add(network.test.chainId)
+      result.add(network.prod.chainId)
+
+proc upsertNetwork*(self: Service, network: NetworkDto): bool =
+  let response = backend.addEthereumChain(backend.Network(
     chainId: network.chainId,
     nativeCurrencyDecimals: network.nativeCurrencyDecimals,
     layer: network.layer,
     chainName: network.chainName,
     rpcURL: network.rpcURL,
+    originalRpcURL: network.originalRpcURL,
     fallbackURL: network.fallbackURL,
+    originalFallbackURL: network.originalFallbackURL,
     blockExplorerURL: network.blockExplorerURL,
     iconURL: network.iconURL,
     nativeCurrencyName: network.nativeCurrencyName,
@@ -76,6 +101,7 @@ proc upsertNetwork*(self: Service, network: NetworkDto) =
     relatedChainID: network.relatedChainID,
   ))
   self.dirty.store(true)
+  return response.error == nil
 
 proc deleteNetwork*(self: Service, network: NetworkDto) =
   discard backend.deleteEthereumChain(network.chainId)
@@ -88,6 +114,13 @@ proc getNetwork*(self: Service, chainId: int): NetworkDto =
               else: network.prod
     if chainId == net.chainId:
         return net
+
+proc getNetworkByChainId*(self: Service, chainId: int): NetworkDto =
+  for network in self.fetchNetworks():
+    if chainId == network.prod.chainId:
+        return network.prod
+    elif chainId == network.test.chainId:
+       return  network.test
 
 proc getNetwork*(self: Service, networkType: NetworkType): NetworkDto =
   let testNetworksEnabled = self.settingsService.areTestNetworksEnabled()
@@ -108,11 +141,15 @@ proc setNetworksState*(self: Service, chainIds: seq[int], enabled: bool) =
       continue
 
     network.enabled = enabled
-    self.upsertNetwork(network)
+    discard self.upsertNetwork(network)
 
 proc getChainIdForEns*(self: Service): int =
   if self.settingsService.areTestNetworksEnabled():
+    if self.settingsService.isSepoliaEnabled():
+      return Sepolia
+
     return Goerli
+
   return Mainnet
 
 proc getNetworkForEns*(self: Service): NetworkDto =
@@ -121,6 +158,9 @@ proc getNetworkForEns*(self: Service): NetworkDto =
 
 proc getNetworkForStickers*(self: Service): NetworkDto =
   if self.settingsService.areTestNetworksEnabled():
+    if self.settingsService.isSepoliaEnabled():
+      return self.getNetwork(Sepolia)
+
     return self.getNetwork(Goerli)
 
   return self.getNetwork(Mainnet)
@@ -136,15 +176,15 @@ proc getNetworkForActivityCheck*(self: Service): NetworkDto =
 
 proc getNetworkForCollectibles*(self: Service): NetworkDto =
   if self.settingsService.areTestNetworksEnabled():
+    if self.settingsService.isSepoliaEnabled():
+      return self.getNetwork(Sepolia)
+
     return self.getNetwork(Goerli)
 
   return self.getNetwork(Mainnet)
 
-proc updateNetworkEndPointValues*(self: Service, chainId: int, newMainRpcInput, newFailoverRpcUrl: string) =
-  let network = self.getNetwork(chainId)
-
-  if network.rpcURL == newMainRpcInput and network.fallbackURL == newFailoverRpcUrl:
-    return
+proc updateNetworkEndPointValues*(self: Service, chainId: int, newMainRpcInput, newFailoverRpcUrl: string, revertToDefault: bool) =
+  let network = self.getNetworkByChainId(chainId)
 
   if network.rpcURL != newMainRpcInput:
     network.rpcURL = newMainRpcInput
@@ -152,5 +192,5 @@ proc updateNetworkEndPointValues*(self: Service, chainId: int, newMainRpcInput, 
   if network.fallbackURL != newFailoverRpcUrl:
     network.fallbackURL = newFailoverRpcUrl
 
-  self.upsertNetwork(network)
-
+  if self.upsertNetwork(network):
+    self.events.emit(SIGNAL_NETWORK_ENDPOINT_UPDATED, NetworkEndpointUpdatedArgs(isTest: network.isTest, networkName: network.chainName, revertedToDefault: revertToDefault))

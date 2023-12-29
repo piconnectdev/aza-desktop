@@ -5,6 +5,7 @@ import StatusQ.Controls 0.1
 
 import AppLayouts.Communities.layouts 1.0
 import AppLayouts.Communities.views 1.0
+import AppLayouts.Communities.helpers 1.0
 
 import utils 1.0
 
@@ -30,18 +31,14 @@ StackView {
     required property var collectiblesModel
 
     required property var membersModel
-
-    // JS object specifing fees for the airdrop operation, should be set to
-    // provide response to airdropFeesRequested signal.
-    // Refer EditAirdropView::airdropFees for details.
-    property var airdropFees: null
+    required property var accountsModel
 
     property int viewWidth: 560 // by design
     property string previousPageName: depth > 1 ? qsTr("Airdrops") : ""
 
-    signal airdropClicked(var airdropTokens, var addresses, var membersPubKeys)
-    signal airdropFeesRequested(var contractKeysAndAmounts, var addresses)
+    signal airdropClicked(var airdropTokens, var addresses, string feeAccountAddress)
     signal navigateToMintTokenSettings(bool isAssetType)
+    signal registerAirdropFeeSubscriber(var feeSubscriber)
 
     function navigateBack() {
         pop(StackView.Immediate)
@@ -63,8 +60,8 @@ StackView {
         id: d
 
         readonly property bool isAdminOnly: root.isAdmin && !root.isPrivilegedTokenOwnerProfile
-
-        signal selectToken(string key, int amount, int type)
+        property AirdropFeesSubscriber aidropFeeSubscriber: null
+        signal selectToken(string key, string amount, int type)
         signal addAddresses(var addresses)
     }
 
@@ -73,31 +70,14 @@ StackView {
         title: qsTr("Airdrops")
 
         buttons: [
-            // TO BE REMOVED when Owner and TMaster backend is integrated. This is just to keep the airdrop flow available somehow
-            StatusButton {
-
-                text: qsTr("TEMP Airdrop")
-
-                onClicked: root.push(newAirdropView, StackView.Immediate)
-
-                StatusToolTip {
-                    visible: parent.hovered
-                    text: "TO BE REMOVED when Owner and TMaster backend is integrated. This is just to keep the airdrop flow available somehow"
-                    orientation: StatusToolTip.Orientation.Bottom
-                    y: parent.height + 12
-                    maxWidth: 300
-                }
-            },
             StatusButton {
 
                 objectName: "addNewItemButton"
 
                 text: qsTr("New Airdrop")
                 enabled: !d.isAdminOnly && root.arePrivilegedTokensDeployed
-
                 onClicked: root.push(newAirdropView, StackView.Immediate)
             }
-
         ]
 
         contentItem: WelcomeSettingsView {
@@ -135,13 +115,14 @@ StackView {
                 assetsModel: root.assetsModel
                 collectiblesModel: root.collectiblesModel
                 membersModel: root.membersModel
-
-                Binding on airdropFees {
-                    value: root.airdropFees
-                }
+                accountsModel: root.accountsModel
+                totalFeeText: feesSubscriber.totalFee
+                feeErrorText: feesSubscriber.feesError
+                feesPerSelectedContract: feesSubscriber.feesPerContract
+                feesAvailable: !!feesSubscriber.airdropFeesResponse
 
                 onAirdropClicked: {
-                    root.airdropClicked(airdropTokens, addresses, membersPubKeys)
+                    root.airdropClicked(airdropTokens, addresses, feeAccountAddress)
                     root.pop(StackView.Immediate)
                 }
 
@@ -150,7 +131,16 @@ StackView {
                 Component.onCompleted: {
                     d.selectToken.connect(view.selectToken)
                     d.addAddresses.connect(view.addAddresses)
-                    airdropFeesRequested.connect(root.airdropFeesRequested)
+                }
+
+                AirdropFeesSubscriber {
+                    id: feesSubscriber
+                    enabled: view.visible && view.showingFees
+                    communityId: view.communityDetails.id
+                    contractKeysAndAmounts: view.selectedContractKeysAndAmounts
+                    addressesToAirdrop: view.selectedAddressesToAirdrop
+                    feeAccountAddress: view.selectedFeeAccount
+                    Component.onCompleted: root.registerAirdropFeeSubscriber(feesSubscriber)
                 }
             }
         }

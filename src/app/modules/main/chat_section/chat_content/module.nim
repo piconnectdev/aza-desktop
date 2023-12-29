@@ -23,6 +23,7 @@ import ../../../../../app_service/service/community/service as community_service
 import ../../../../../app_service/service/gif/service as gif_service
 import ../../../../../app_service/service/message/service as message_service
 import ../../../../../app_service/service/mailservers/service as mailservers_service
+import ../../../../../app_service/service/shared_urls/service as shared_urls_service
 import ../../../../../app_service/common/types
 
 export io_interface
@@ -42,28 +43,27 @@ type
     moduleLoaded: bool
 
 proc newModule*(delegate: delegate_interface.AccessInterface, events: EventEmitter, sectionId: string, chatId: string,
-  belongsToCommunity: bool, isUsersListAvailable: bool, settingsService: settings_service.Service,
-  nodeConfigurationService: node_configuration_service.Service, contactService: contact_service.Service, chatService: chat_service.Service,
-  communityService: community_service.Service, messageService: message_service.Service, gifService: gif_service.Service,
-  mailserversService: mailservers_service.Service, communityUsersModule: users_module.AccessInterface):
+    belongsToCommunity: bool, isUsersListAvailable: bool, settingsService: settings_service.Service,
+    nodeConfigurationService: node_configuration_service.Service, contactService: contact_service.Service,
+    chatService: chat_service.Service, communityService: community_service.Service,
+    messageService: message_service.Service, gifService: gif_service.Service,
+    mailserversService: mailservers_service.Service, sharedUrlsService: shared_urls_service.Service):
   Module =
   result = Module()
   result.delegate = delegate
   result.view = view.newView(result)
   result.viewVariant = newQVariant(result.view)
   result.controller = controller.newController(result, events, sectionId, chatId, belongsToCommunity,
-    isUsersListAvailable, settingsService, nodeConfigurationService, contactService, chatService, communityService, messageService)
+    isUsersListAvailable, settingsService, nodeConfigurationService, contactService, chatService, communityService,
+    messageService)
   result.moduleLoaded = false
 
   result.inputAreaModule = input_area_module.newModule(result, events, sectionId, chatId, belongsToCommunity, 
-    chatService, communityService, gifService, messageService)
+    chatService, communityService, gifService, messageService, settingsService)
   result.messagesModule = messages_module.newModule(result, events, sectionId, chatId, belongsToCommunity,
-    contactService, communityService, chatService, messageService, mailserversService)
-  result.usersModule = 
-    if communityUsersModule == nil: 
-      users_module.newModule( events, sectionId, chatId, belongsToCommunity, 
-      isUsersListAvailable, contactService, chat_service, communityService, messageService)
-    else: communityUsersModule
+    contactService, communityService, chatService, messageService, mailserversService, sharedUrlsService)
+  result.usersModule = users_module.newModule(events, sectionId, chatId, belongsToCommunity,
+    isUsersListAvailable, contactService, chat_service, communityService, messageService)
 
 method delete*(self: Module) =
   self.controller.delete
@@ -94,7 +94,7 @@ method load*(self: Module, chatItem: chat_item.Item) =
   self.view.load(chatItem.id, chatItem.`type`, self.controller.belongsToCommunity(),
     self.controller.isUsersListAvailable(), chatName, chatImage,
     chatItem.color, chatItem.description, chatItem.emoji, chatItem.hasUnreadMessages, chatItem.notificationsCount,
-    chatItem.muted, chatItem.position, isUntrustworthy = trustStatus == TrustStatus.Untrustworthy,
+    chatItem.highlight, chatItem.muted, chatItem.position, isUntrustworthy = trustStatus == TrustStatus.Untrustworthy,
     isContact, chatItem.blocked)
 
   self.inputAreaModule.load()
@@ -156,8 +156,7 @@ proc buildPinnedMessageItem(self: Module, message: MessageDto, actionInitiatedBy
     item: var pinned_msg_item.Item):bool =
 
   let contactDetails = self.controller.getContactDetails(message.`from`)
-  let chatDetails = self.controller.getChatDetails()
-  let communityChats = self.controller.getCommunityById(chatDetails.communityId).chats
+  let communityChats = self.controller.getCommunityDetails().chats
   var quotedMessageAuthorDetails = ContactDetails()
   if message.quotedMessage.`from` != "":
     if(message.`from` == message.quotedMessage.`from`):
@@ -212,6 +211,9 @@ proc buildPinnedMessageItem(self: Module, message: MessageDto, actionInitiatedBy
     contactDetails.dto.ensVerified,
     message.discordMessage,
     resendError = "",
+    message.deleted,
+    message.deletedBy,
+    deletedByContactDetails = ContactDetails(),
     message.mentioned,
     message.quotedMessage.`from`,
     message.quotedMessage.text,
@@ -220,6 +222,8 @@ proc buildPinnedMessageItem(self: Module, message: MessageDto, actionInitiatedBy
     message.quotedMessage.deleted,
     message.quotedMessage.discordMessage,
     quotedMessageAuthorDetails,
+    message.quotedMessage.albumImages,
+    message.quotedMessage.albumImagesCount,
     message.albumId,
     if (len(message.albumId) == 0): @[] else: @[message.image],
     if (len(message.albumId) == 0): @[] else: @[message.id],
@@ -251,8 +255,10 @@ method onUnpinMessage*(self: Module, messageId: string) =
 
 method onPinMessage*(self: Module, messageId: string, actionInitiatedBy: string) =
   var item: pinned_msg_item.Item
-  let (message, err) = self.controller.getMessageById(messageId)
-  if(err.len > 0 or not self.buildPinnedMessageItem(message, actionInitiatedBy, item)):
+  let response = self.controller.getMessageById(messageId)
+  if response.error.len > 0:
+    return
+  if not self.buildPinnedMessageItem(response.message, actionInitiatedBy, item):
     return
 
   self.view.pinnedModel().insertItemBasedOnClock(item)
@@ -274,6 +280,9 @@ method unblockChat*(self: Module) =
 
 method markAllMessagesRead*(self: Module) =
   self.controller.markAllMessagesRead()
+
+method requestMoreMessages*(self: Module) =
+  self.controller.requestMoreMessages()
 
 method markMessageRead*(self: Module, msgID: string) =
   self.controller.markMessageRead(msgID)
@@ -343,8 +352,7 @@ method onContactDetailsUpdated*(self: Module, contactId: string) =
       item.quotedMessageAuthorAvatar = updatedContact.icon
 
     if item.messageContainsMentions and item.mentionedUsersPks.anyIt(it == contactId):
-      let chatDetails = self.controller.getChatDetails()
-      let communityChats = self.controller.getCommunityById(chatDetails.communityId).chats
+      let communityChats = self.controller.getCommunityDetails().chats
       item.messageText = self.controller.getRenderedText(item.parsedText, communityChats)
 
   if(self.controller.getMyChatId() == contactId):
@@ -397,14 +405,21 @@ method amIChatAdmin*(self: Module): bool =
     let chatDto = self.controller.getChatDetails()
     for member in chatDto.members:
       if member.id == singletonInstance.userProfile.getPubKey():
-        return member.role == MemberRole.Owner or member.role == MemberRole.Admin
+        return member.role == MemberRole.Owner or member.role == MemberRole.Admin or member.role == MemberRole.TokenMaster
     return false
   else:
     let communityDto = self.controller.getCommunityDetails()
-    return communityDto.memberRole == MemberRole.Owner or communityDto.memberRole == MemberRole.Admin
+    return communityDto.memberRole == MemberRole.Owner or 
+      communityDto.memberRole == MemberRole.Admin or communityDto.memberRole == MemberRole.TokenMaster
 
 method onUpdateViewOnlyPermissionsSatisfied*(self: Module, value: bool) =
   self.view.setViewOnlyPermissionsSatisfied(value)
 
 method onUpdateViewAndPostPermissionsSatisfied*(self: Module, value: bool) =
   self.view.setViewAndPostPermissionsSatisfied(value)
+
+method setPermissionsCheckOngoing*(self: Module, value: bool) =
+  self.view.setPermissionsCheckOngoing(value)
+
+method getPermissionsCheckOngoing*(self: Module): bool =
+  self.view.getPermissionsCheckOngoing()

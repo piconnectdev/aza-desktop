@@ -9,6 +9,14 @@ ModelUtilsInternal::ModelUtilsInternal(QObject* parent)
 {
 }
 
+bool ModelUtilsInternal::isModel(const QVariant &obj) const
+{
+    if (!obj.canConvert<QObject*>())
+        return false;
+
+    return qobject_cast<QAbstractItemModel*>(obj.value<QObject*>()) != nullptr;
+}
+
 QStringList ModelUtilsInternal::roleNames(QAbstractItemModel *model) const
 {
     if (model == nullptr)
@@ -52,6 +60,32 @@ QVariant ModelUtilsInternal::get(QAbstractItemModel *model,
     return {};
 }
 
+QVariantList ModelUtilsInternal::getAll(QAbstractItemModel* model,
+                                        const QString& roleName,
+                                        const QString& filterRoleName,
+                                        const QVariant& filterValue) const
+{
+    if (!model || filterValue.isNull())
+        return {};
+
+    const auto role = roleByName(model, roleName);
+    if (role == -1)
+        return {};
+
+    const auto filterRole = roleByName(model, filterRoleName);
+    if (filterRole == -1)
+        return {};
+
+    QVariantList result;
+    const auto size = model->rowCount();
+    for (auto i = 0; i < size; i++) {
+        const auto srcIndex = model->index(i, 0);
+        if (srcIndex.data(filterRole) == filterValue)
+            result.append(srcIndex.data(role));
+    }
+    return result;
+}
+
 bool ModelUtilsInternal::contains(QAbstractItemModel* model,
                                   const QString& roleName,
                                   const QVariant& value,
@@ -61,6 +95,29 @@ bool ModelUtilsInternal::contains(QAbstractItemModel* model,
 
     Qt::MatchFlags flags = Qt::MatchFixedString; // Qt::CaseInsensitive by default
     if(mode == Qt::CaseSensitive) flags |= Qt::MatchCaseSensitive;
-    const auto indexes = model->match(model->index(0, 0), roleByName(model, roleName), value, 1, flags);
+
+    auto role = roleByName(model, roleName);
+
+    if (role == -1)
+        return false;
+
+    const auto indexes = model->match(model->index(0, 0), role, value, 1, flags);
     return !indexes.isEmpty();
+}
+
+bool ModelUtilsInternal::isSameArray(const QJSValue& lhs, const QJSValue& rhs) const
+{
+    if (!lhs.isArray() || !rhs.isArray())
+        return false;
+
+    auto left = lhs.toVariant().toStringList();
+    auto right = rhs.toVariant().toStringList();
+
+    if (left.size() != right.size())
+        return false;
+
+    left.sort();
+    right.sort();
+
+    return left == right;
 }

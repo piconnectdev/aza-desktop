@@ -1,4 +1,4 @@
-import Tables, stint
+import stint
 import ./io_interface
 
 import ../../../global/app_signals
@@ -7,7 +7,6 @@ import ../../../../app_service/service/activity_center/service as activity_cente
 import ../../../../app_service/service/contacts/service as contacts_service
 import ../../../../app_service/service/message/service as message_service
 import ../../../../app_service/service/community/service as community_service
-import ../../../../app_service/service/eth/utils as eth_utils
 import ../../../../app_service/service/chat/service as chat_service
 
 type
@@ -54,81 +53,62 @@ proc init*(self: Controller) =
   self.events.on(activity_center_service.SIGNAL_ACTIVITY_CENTER_NOTIFICATIONS_LOADED) do(e: Args):
     let args = ActivityCenterNotificationsArgs(e)
     self.delegate.addActivityCenterNotifications(args.activityCenterNotifications)
+    self.updateActivityGroupCounters()
 
-  self.events.on(activity_center_service.SIGNAL_MARK_NOTIFICATIONS_AS_ACCEPTED) do(e: Args):
-    var evArgs = MarkAsAcceptedNotificationProperties(e)
-    self.delegate.acceptActivityCenterNotificationsDone(evArgs.notificationIds)
-
-  self.events.on(activity_center_service.SIGNAL_MARK_NOTIFICATIONS_AS_DISMISSED) do(e: Args):
-    var evArgs = MarkAsDismissedNotificationProperties(e)
-    self.delegate.dismissActivityCenterNotificationsDone(evArgs.notificationIds)
-
-  self.events.on(activity_center_service.SIGNAL_MARK_NOTIFICATIONS_AS_READ) do(e: Args):
-    var evArgs = MarkAsReadNotificationProperties(e)
-    if (evArgs.isAll):
-       self.delegate.markAllActivityCenterNotificationsReadDone()
-       return
+  self.events.on(activity_center_service.SIGNAL_ACTIVITY_CENTER_MARK_NOTIFICATIONS_AS_READ) do(e: Args):
+    var evArgs = ActivityCenterNotificationIdsArgs(e)
     if (evArgs.notificationIds.len > 0):
       self.delegate.markActivityCenterNotificationReadDone(evArgs.notificationIds)
 
-  self.events.on(activity_center_service.SIGNAL_MARK_NOTIFICATIONS_AS_UNREAD) do(e: Args):
-    var evArgs = MarkAsUnreadNotificationProperties(e)
+  self.events.on(activity_center_service.SIGNAL_ACTIVITY_CENTER_MARK_NOTIFICATIONS_AS_UNREAD) do(e: Args):
+    var evArgs = ActivityCenterNotificationIdsArgs(e)
     if (evArgs.notificationIds.len > 0):
       self.delegate.markActivityCenterNotificationUnreadDone(evArgs.notificationIds)
 
+  self.events.on(activity_center_service.SIGNAL_ACTIVITY_CENTER_MARK_ALL_NOTIFICATIONS_AS_READ) do(e: Args):
+    self.delegate.markAllActivityCenterNotificationsReadDone()
+
   self.events.on(activity_center_service.SIGNAL_ACTIVITY_CENTER_NOTIFICATIONS_COUNT_MAY_HAVE_CHANGED) do(e: Args):
-    self.delegate.unreadActivityCenterNotificationsCountChanged()
-    self.delegate.hasUnseenActivityCenterNotificationsChanged()
+    self.delegate.onNotificationsCountMayHaveChanged()
     self.updateActivityGroupCounters()
 
   self.events.on(activity_center_service.SIGNAL_ACTIVITY_CENTER_NOTIFICATIONS_REMOVED) do(e: Args):
-    var evArgs = RemoveActivityCenterNotificationsArgs(e)
+    var evArgs = ActivityCenterNotificationIdsArgs(e)
     if (evArgs.notificationIds.len > 0):
       self.delegate.removeActivityCenterNotifications(evArgs.notificationIds)
 
 proc hasMoreToShow*(self: Controller): bool =
-   return self.activityCenterService.hasMoreToShow()
+  return self.activityCenterService.hasMoreToShow()
 
 proc unreadActivityCenterNotificationsCount*(self: Controller): int =
-   return self.activityCenterService.getUnreadActivityCenterNotificationsCount()
+  return self.activityCenterService.getUnreadActivityCenterNotificationsCount()
 
 proc hasUnseenActivityCenterNotifications*(self: Controller): bool =
-   return self.activityCenterService.getHasUnseenActivityCenterNotifications()
+  return self.activityCenterService.getHasUnseenActivityCenterNotifications()
 
 proc getContactDetails*(self: Controller, contactId: string): ContactDetails =
-   return self.contactsService.getContactDetails(contactId)
+  return self.contactsService.getContactDetails(contactId)
 
 proc getCommunityById*(self: Controller, communityId: string): CommunityDto =
   return self.communityService.getCommunityById(communityId)
 
 proc getActivityCenterNotifications*(self: Controller): seq[ActivityCenterNotificationDto] =
-   return self.activityCenterService.getActivityCenterNotifications()
+  return self.activityCenterService.getActivityCenterNotifications()
 
-proc markAllActivityCenterNotificationsRead*(self: Controller): string =
-   return self.activityCenterService.markAllActivityCenterNotificationsRead()
+proc asyncActivityNotificationLoad*(self: Controller) =
+  self.activityCenterService.asyncActivityNotificationLoad()
 
-proc markActivityCenterNotificationRead*(
-    self: Controller,
-    notificationId: string,
-    markAsReadProps: MarkAsReadNotificationProperties
-    ): string =
-   return self.activityCenterService.markActivityCenterNotificationRead(notificationId, markAsReadProps)
+proc markAllActivityCenterNotificationsRead*(self: Controller) =
+  self.activityCenterService.markAllActivityCenterNotificationsRead()
 
-proc markActivityCenterNotificationUnread*(
-    self: Controller,
-    notificationId: string,
-    markAsUnreadProps: MarkAsUnreadNotificationProperties
-    ): string =
-   return self.activityCenterService.markActivityCenterNotificationUnread(notificationId, markAsUnreadProps)
+proc markActivityCenterNotificationRead*(self: Controller, notificationId: string) =
+  self.activityCenterService.markActivityCenterNotificationRead(notificationId)
+
+proc markActivityCenterNotificationUnread*(self: Controller,notificationId: string) =
+  self.activityCenterService.markActivityCenterNotificationUnread(notificationId)
 
 proc markAsSeenActivityCenterNotifications*(self: Controller) =
-   self.activityCenterService.markAsSeenActivityCenterNotifications()
-
-proc acceptActivityCenterNotifications*(self: Controller, notificationIds: seq[string]): string =
-   return self.activityCenterService.acceptActivityCenterNotifications(notificationIds)
-
-proc dismissActivityCenterNotifications*(self: Controller, notificationIds: seq[string]): string =
-   return self.activityCenterService.dismissActivityCenterNotifications(notificationIds)
+  self.activityCenterService.markAsSeenActivityCenterNotifications()
 
 proc replacePubKeysWithDisplayNames*(self: Controller, message: string): string =
   return self.messageService.replacePubKeysWithDisplayNames(message)
@@ -168,4 +148,3 @@ proc setActivityCenterReadType*(self: Controller, readType: ActivityCenterReadTy
 
 proc getActivityCenterReadType*(self: Controller): ActivityCenterReadType =
   return self.activityCenterService.getActivityCenterReadType()
-

@@ -113,6 +113,10 @@ proc getBloomLevel*(self: Service): string =
     else:
       return BLOOM_LEVEL_LIGHT
 
+proc isShardFleet(config: NodeConfigDto): bool =
+  return case config.ClusterConfig.Fleet:
+    of $Fleet.ShardsTest: true
+    else: false
 
 proc setWakuConfig(configuration: NodeConfigDto, wakuVersion: int): NodeConfigDto =
   var newConfiguration = configuration
@@ -129,6 +133,7 @@ proc setWakuConfig(configuration: NodeConfigDto, wakuVersion: int): NodeConfigDt
     newConfiguration.WakuV2Config.EnableDiscV5 = true
     newConfiguration.WakuV2Config.DiscoveryLimit = 20
     newConfiguration.WakuV2Config.Rendezvous = true
+    newConfiguration.WakuV2Config.UseShardAsDefaultTopic = isShardFleet(newConfiguration)
 
   return newConfiguration
 
@@ -223,18 +228,25 @@ proc setFleet*(self: Service, fleet: string): bool =
   var dnsDiscoveryURL: seq[string] = @[]
   case fleetType:
     of Fleet.WakuV2Prod:
-      dnsDiscoveryURL.add("enrtree://AOGECG2SPND25EEFMAJ5WF3KSGJNSGV356DSTL2YVLLZWIV6SAYBM@prod.waku.nodes.status.im")
+      dnsDiscoveryURL.add("enrtree://ANEDLO25QVUGJOUTQFRYKWX6P4Z4GKVESBMHML7DZ6YK4LGS5FC5O@prod.wakuv2.nodes.status.im")
     of Fleet.WakuV2Test:
-      dnsDiscoveryURL.add("enrtree://AOGECG2SPND25EEFMAJ5WF3KSGJNSGV356DSTL2YVLLZWIV6SAYBM@test.waku.nodes.status.im")
+      dnsDiscoveryURL.add("enrtree://AO47IDOLBKH72HIZZOXQP6NMRESAN7CHYWIBNXDXWRJRZWLODKII6@test.wakuv2.nodes.status.im")
     of Fleet.StatusTest:
-      dnsDiscoveryURL.add("enrtree://AOGECG2SPND25EEFMAJ5WF3KSGJNSGV356DSTL2YVLLZWIV6SAYBM@test.nodes.status.im")
+      dnsDiscoveryURL.add("enrtree://AIO6LUM3IVWCU2KCPBBI6FEH2W42IGK3ASCZHZGG5TIXUR56OGQUO@test.status.nodes.status.im")
     of Fleet.StatusProd:
-      dnsDiscoveryURL.add("enrtree://AOGECG2SPND25EEFMAJ5WF3KSGJNSGV356DSTL2YVLLZWIV6SAYBM@prod.nodes.status.im")
+      dnsDiscoveryURL.add("enrtree://AL65EKLJAUXKKPG43HVTML5EFFWEZ7L4LOKTLZCLJASG4DSESQZEC@prod.status.nodes.status.im")
+    of Fleet.ShardsTest:
+      dnsDiscoveryURL.add("enrtree://AMOJVZX4V6EXP7NTJPMAYJYST2QP6AJXYW76IU6VGJS7UVSNDYZG4@boot.test.shards.nodes.status.im")
     else:
       wakuVersion = 1
 
   newConfiguration.ClusterConfig.WakuNodes = dnsDiscoveryURL
-  newConfiguration.ClusterConfig.DiscV5BootstrapNodes = dnsDiscoveryURL
+
+  var discV5Bootnodes = self.fleetConfiguration.getNodes(fleetType, FleetNodes.WakuENR)
+  if dnsDiscoveryURL.len != 0:
+    discV5Bootnodes.add(dnsDiscoveryURL[0])
+
+  newConfiguration.ClusterConfig.DiscV5BootstrapNodes = discV5Bootnodes
 
   newConfiguration = setWakuConfig(newConfiguration, wakuVersion)
 
@@ -274,16 +286,6 @@ proc isV2LightMode*(self: Service): bool =
 
 proc isFullNode*(self: Service): bool =
    return self.configuration.WakuConfig.FullNode
-
-proc isWakuV2StoreEnabled*(self: Service): bool =
-  return self.configuration.WakuV2Config.EnableStore
-
-proc setWakuV2StoreEnabled*(self: Service, enabled: bool, storeCapacity: int = 0, storeSeconds: int = 0): bool =
-  var newConfiguration = self.configuration
-  newConfiguration.WakuV2Config.EnableStore = enabled
-  newConfiguration.WakuV2Config.StoreCapacity = storeCapacity
-  newConfiguration.WakuV2Config.StoreSeconds = storeSeconds
-  return self.saveConfiguration(newConfiguration)
 
 proc getLogMaxBackups*(self: Service): int =
   return self.configuration.LogMaxBackups

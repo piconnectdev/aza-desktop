@@ -56,6 +56,7 @@
 #ifdef QT_QUICKCONTROLS2_LIB
 #include <QtQuickControls2/QQuickStyle>
 #endif
+#include <QtWebView>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -68,7 +69,6 @@
 #include "DOtherSide/DosQQuickImageProvider.h"
 #include "DOtherSide/DOtherSideSingleInstance.h"
 
-#include "DOtherSide/Status/DockShowAppEvent.h"
 #include "DOtherSide/Status/OSThemeEvent.h"
 #include "DOtherSide/Status/UrlSchemeEvent.h"
 #include "DOtherSide/Status/OSNotification.h"
@@ -174,6 +174,11 @@ void dos_qguiapplication_enable_hdpi(const char *uiScaleFilePath)
 void dos_qguiapplication_initialize_opengl()
 {
     QGuiApplication::setAttribute(Qt::AA_ShareOpenGLContexts);
+}
+
+void dos_qtwebview_initialize()
+{
+    QtWebView::initialize();
 }
 
 void dos_qguiapplication_try_enable_threaded_renderer()
@@ -1302,8 +1307,11 @@ void dos_qabstractitemmodel_dataChanged(::DosQAbstractItemModel *vptr,
     auto model = dynamic_cast<DOS::DosIQAbstractItemModelImpl *>(object);
     auto topLeft = static_cast<const QModelIndex *>(topLeftIndex);
     auto bottomRight = static_cast<const QModelIndex *>(bottomRightIndex);
-    auto roles = QVector<int>(rolesArrayPtr, rolesArrayPtr + rolesArrayLength);
-    model->publicDataChanged(*topLeft, *bottomRight, roles);
+    if (rolesArrayPtr && rolesArrayLength > 0) {
+        model->publicDataChanged(*topLeft, *bottomRight, {rolesArrayPtr, rolesArrayPtr + rolesArrayLength});
+    } else {
+        model->publicDataChanged(*topLeft, *bottomRight);
+    }
 }
 
 DosQModelIndex *dos_qabstractitemmodel_createIndex(::DosQAbstractItemModel *vptr,
@@ -1553,11 +1561,6 @@ bool dos_singleinstance_isfirst(DosSingleInstance *vptr)
 }
 
 #pragma region Events
-::DosEvent* dos_event_create_showAppEvent(::DosQQmlApplicationEngine* vptr)
-{
-    auto engine = static_cast<QQmlApplicationEngine*>(vptr);
-    return new Status::DockShowAppEvent(engine);
-}
 
 ::DosEvent* dos_event_create_osThemeEvent(::DosQQmlApplicationEngine* vptr)
 {

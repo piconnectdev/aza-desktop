@@ -27,6 +27,8 @@ QtObject {
     property int discordImportProgressCurrentChunk: root.communitiesModuleInst.discordImportProgressCurrentChunk
     property string discordImportCommunityId: root.communitiesModuleInst.discordImportCommunityId
     property string discordImportCommunityName: root.communitiesModuleInst.discordImportCommunityName
+    property string discordImportChannelId: root.communitiesModuleInst.discordImportChannelId
+    property string discordImportChannelName: root.communitiesModuleInst.discordImportChannelName
     property url discordImportCommunityImage: root.communitiesModuleInst.discordImportCommunityImage
     property bool discordImportHasCommunityImage: root.communitiesModuleInst.discordImportHasCommunityImage
     property var discordImportTasks: root.communitiesModuleInst.discordImportTasks
@@ -57,6 +59,8 @@ QtObject {
     property string communityTags: communitiesModuleInst.tags
 
     signal importingCommunityStateChanged(string communityId, int state, string errorMsg)
+
+    signal communityInfoRequestCompleted(string communityId, string errorMsg)
 
     function createCommunity(args = {
                                 name: "",
@@ -92,12 +96,53 @@ QtObject {
         root.communitiesModuleInst.importCommunity(communityKey);
     }
 
-    function requestCommunityInfo(communityKey, importing = false) {
+    function getCommunityPublicKeyFromPrivateKey(privateKey) {
+        return root.communitiesModuleInst.getCommunityPublicKeyFromPrivateKey(privateKey);
+    }
+
+    function requestCommunityInfo(communityKey, shardCluster, shardIndex, importing = false) {
         const publicKey = Utils.isCompressedPubKey(communityKey)
                             ? Utils.changeCommunityKeyCompression(communityKey)
                             : communityKey
-        root.mainModuleInst.setCommunityIdToSpectate(publicKey)
-        root.communitiesModuleInst.requestCommunityInfo(publicKey, importing)
+        if (importing)
+            root.mainModuleInst.setCommunityIdToSpectate(publicKey)
+        root.communitiesModuleInst.requestCommunityInfo(publicKey, shardCluster, shardIndex, importing)
+    }
+
+    property var communitiesList: communitiesModuleInst.model
+    readonly property bool requirementsCheckPending: communitiesModuleInst.requirementsCheckPending
+
+    function spectateCommunity(publicKey) {
+        root.communitiesModuleInst.spectateCommunity(publicKey, "");
+    }
+
+    function prepareTokenModelForCommunity(publicKey) {
+        root.communitiesModuleInst.prepareTokenModelForCommunity(publicKey);
+    }
+
+    function getCommunityDetails(communityId) {
+        const publicKey = Utils.isCompressedPubKey(communityId)
+                            ? Utils.changeCommunityKeyCompression(communityId)
+                            : communityId
+        try {
+            const communityJson = root.communitiesList.getSectionByIdJson(publicKey)
+            if (!!communityJson)
+                return JSON.parse(communityJson)
+        } catch (e) {
+            console.error("Error parsing community", e)
+        }
+        return null
+    }
+
+    function getCommunityDetailsAsJson(communityId) {
+        const jsonObj = root.communitiesModuleInst.getCommunityDetails(communityId)
+        try {
+            return JSON.parse(jsonObj)
+        }
+        catch (e) {
+            console.warn("error parsing community by id: ", communityId, " error: ", e.message)
+            return {}
+        }
     }
 
     function setActiveCommunity(communityId) {
@@ -111,6 +156,7 @@ QtObject {
     function removeFileListItem(filePath) {
         root.communitiesModuleInst.removeFileListItem(filePath)
     }
+
     function setFileListItems(filePaths) {
         root.communitiesModuleInst.setFileListItems(filePaths)
     }
@@ -133,10 +179,22 @@ QtObject {
 
     function toggleDiscordChannel(id, selected) {
         root.communitiesModuleInst.toggleDiscordChannel(id, selected)
-      }
+    }
+
+    function toggleOneDiscordChannel(id) {
+        root.communitiesModuleInst.toggleOneDiscordChannel(id)
+    }
 
     function requestCancelDiscordCommunityImport(id) {
         root.communitiesModuleInst.requestCancelDiscordCommunityImport(id)
+    }
+
+    function requestCancelDiscordChannelImport(id) {
+        root.communitiesModuleInst.requestCancelDiscordChannelImport(id)
+    }
+
+    function removeImportedDiscordChannel() {
+        root.communitiesModuleInst.removeImportedDiscordChannel()
     }
 
     function resetDiscordImport() {
@@ -170,11 +228,29 @@ QtObject {
                     args.options.historyArchiveSupportEnabled, args.options.pinMessagesAllowedForMembers, from);
     }
 
+    function requestImportDiscordChannel(args = {
+                                         communityId: "",
+                                         discordChannelId: "",
+                                         name: "",
+                                         description: "",
+                                         color: "",
+                                         emoji: "",
+                                         options: {
+                                             // TODO
+                                         }
+                                      }, from = 0) {
+        communitiesModuleInst.requestImportDiscordChannel(args.name, args.discordChannelId, args.communityId,
+                                                        args.description, args.color, args.emoji, from)
+    }
 
     readonly property Connections connections: Connections {
         target: communitiesModuleInst
         function onImportingCommunityStateChanged(communityId, state, errorMsg) {
             root.importingCommunityStateChanged(communityId, state, errorMsg)
+        }
+
+        function onCommunityInfoRequestCompleted(communityId, erorrMsg) {
+            root.communityInfoRequestCompleted(communityId, erorrMsg)
         }
     }
 }

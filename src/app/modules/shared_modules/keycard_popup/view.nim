@@ -7,6 +7,8 @@ QtObject:
   type
     View* = ref object of QObject
       delegate: io_interface.AccessInterface
+      returnToFlow: FlowType
+      forceFlow: bool # used to disable any possibility of closing the popup, the user is forced to complete the flow or forcibly close the app (no other way to close the popup)
       disablePopup: bool # used to disable popup after each action, to block users do multiple clikcs which the action is ongoing
       currentState: StateWrapper
       currentStateVariant: QVariant
@@ -44,12 +46,37 @@ QtObject:
     result.currentState = newStateWrapper()
     result.currentStateVariant = newQVariant(result.currentState)
     result.remainingAttempts = -1
+    result.returnToFlow = FlowType.General
+    result.forceFlow = false
     result.disablePopup = false
 
     signalConnect(result.currentState, "backActionClicked()", result, "onBackActionClicked()", 2)
     signalConnect(result.currentState, "cancelActionClicked()", result, "onCancelActionClicked()", 2)
     signalConnect(result.currentState, "primaryActionClicked()", result, "onPrimaryActionClicked()", 2)
     signalConnect(result.currentState, "secondaryActionClicked()", result, "onSecondaryActionClicked()", 2)
+    signalConnect(result.currentState, "tertiaryActionClicked()", result, "onTertiaryActionClicked()", 2)
+
+  proc returnToFlowChanged*(self: View) {.signal.}
+  proc getReturnToFlowStr(self: View): string {.slot.} =
+    return $self.returnToFlow
+  QtProperty[string] returnToFlow:
+    read = getReturnToFlowStr
+    notify = returnToFlowChanged
+  proc getReturnToFlow*(self: View): FlowType =
+    return self.returnToFlow
+  proc setReturnToFlow*(self: View, value: FlowType) =
+    self.returnToFlow = value
+    self.returnToFlowChanged()
+
+  proc forceFlowChanged*(self: View) {.signal.}
+  proc getForceFlow*(self: View): bool {.slot.} =
+    return self.forceFlow
+  QtProperty[bool] forceFlow:
+    read = getForceFlow
+    notify = forceFlowChanged
+  proc setForceFlow*(self: View, value: bool) =
+    self.forceFlow = value
+    self.forceFlowChanged()
 
   proc diablePopupChanged*(self: View) {.signal.}
   proc getDisablePopup*(self: View): bool {.slot.} =
@@ -108,6 +135,9 @@ QtObject:
 
   proc onSecondaryActionClicked*(self: View) {.slot.} =
     self.delegate.onSecondaryActionClicked()
+
+  proc onTertiaryActionClicked*(self: View) {.slot.} =
+    self.delegate.onTertiaryActionClicked()
 
   proc keyPairModel*(self: View): KeyPairModel =
     return self.keyPairModel
@@ -183,6 +213,12 @@ QtObject:
   proc setPassword*(self: View, value: string) {.slot.} =
     self.delegate.setPassword(value)
 
+  proc setNewPassword*(self: View, value: string) {.slot.} =
+    self.delegate.setNewPassword(value)
+
+  proc getNewPassword*(self: View): string {.slot.} =
+    self.delegate.getNewPassword()
+
   proc getNameFromKeycard*(self: View): string {.slot.} =
     return self.delegate.getNameFromKeycard()
 
@@ -206,7 +242,7 @@ QtObject:
 
   proc validSeedPhrase*(self: View, value: string): bool {.slot.} =
     return self.delegate.validSeedPhrase(value)
-  
+
   proc migratingProfileKeyPair*(self: View): bool {.slot.} =
     return self.delegate.migratingProfileKeyPair()
 

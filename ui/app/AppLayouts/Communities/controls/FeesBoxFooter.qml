@@ -16,8 +16,12 @@ Control {
     property bool showTotal: true
     property alias totalFeeText: feeTotalRow.feeText
 
-    property alias accountsModel: accountSelector.model
+    readonly property alias accountsSelector: accountSelector
+    property bool showAccountsSelector: true
+
     property alias accountErrorText: accountErrorText.text
+
+    required property string accountSelectorText
 
     component Separator: Rectangle {
         Layout.fillWidth: true
@@ -28,7 +32,6 @@ Control {
     }
 
     component ErrorText: StatusBaseText {
-
         Layout.fillWidth: true
         Layout.topMargin: Style.current.halfPadding
         horizontalAlignment: Text.AlignRight
@@ -72,7 +75,7 @@ Control {
             Layout.fillWidth: true
 
             visible: accountSelector.visible
-            text: qsTr("Select account to pay gas fees from")
+            text: root.accountSelectorText
             color: Theme.palette.baseColor1
             font.pixelSize: Theme.primaryTextFontSize
             lineHeight: 1.2
@@ -85,7 +88,8 @@ Control {
             Layout.fillWidth: true
             Layout.topMargin: Style.current.halfPadding
 
-            visible: !!model
+            visible: root.showAccountsSelector
+            forceError: accountErrorText.visible
         }
 
         ErrorText {

@@ -1,20 +1,20 @@
-import Tables, chronicles, strutils, os
+import Tables, chronicles, strutils
 import uuids
 import io_interface
 
-import ../../../constants as main_constants
-import ../../global/global_singleton
-import ../../core/signals/types
-import ../../core/eventemitter
-import ../../../app_service/service/general/service as general_service
-import ../../../app_service/service/accounts/service as accounts_service
-import ../../../app_service/service/keychain/service as keychain_service
-import ../../../app_service/service/profile/service as profile_service
-import ../../../app_service/service/keycard/service as keycard_service
-import ../../../app_service/service/devices/service as devices_service
-import ../../../app_service/common/[account_constants, utils]
+import constants as main_constants
+import app/global/global_singleton
+import app/core/signals/types
+import app/core/eventemitter
+import app_service/service/general/service as general_service
+import app_service/service/accounts/service as accounts_service
+import app_service/service/keychain/service as keychain_service
+import app_service/service/profile/service as profile_service
+import app_service/service/keycard/service as keycard_service
+import app_service/service/devices/service as devices_service
+import app_service/common/[account_constants, utils]
 
-import ../shared_modules/keycard_popup/io_interface as keycard_shared_module
+import app/modules/shared_modules/keycard_popup/io_interface as keycard_shared_module
 
 logScope:
   topics = "startup-controller"
@@ -54,7 +54,7 @@ type
     tmpKeycardEvent: KeycardEvent
     tmpCardMetadata: CardMetadata
     tmpKeychainErrorOccurred: bool
-    tmpRecoverUsingSeedPhraseWhileLogin: bool
+    tmpRecoverKeycardUsingSeedPhraseWhileLoggingIn: bool
     tmpConnectionString: string
     localPairingStatus: LocalPairingStatus
 
@@ -79,7 +79,7 @@ proc newController*(delegate: io_interface.AccessInterface,
   result.tmpPinMatch = false
   result.tmpSeedPhraseLength = 0
   result.tmpKeychainErrorOccurred = false
-  result.tmpRecoverUsingSeedPhraseWhileLogin = false
+  result.tmpRecoverKeycardUsingSeedPhraseWhileLoggingIn = false
   result.tmpSelectedLoginAccountIsKeycardAccount = false
 
 # Forward declaration
@@ -129,12 +129,12 @@ proc disconnect*(self: Controller) =
 
 proc delete*(self: Controller) =
   self.disconnect()
+  self.cleanTmpData()
 
 proc init*(self: Controller) =
   var handlerId = self.events.onWithUUID(SignalType.NodeLogin.event) do(e:Args):
     let signal = NodeSignal(e)
     self.delegate.onNodeLogin(signal.error)
-    self.cleanTmpData()
   self.connectionIds.add(handlerId)
 
   handlerId = self.events.onWithUUID(SignalType.NodeStopped.event) do(e:Args):
@@ -168,7 +168,10 @@ proc init*(self: Controller) =
   self.connectionIds.add(handlerId)
 
   handlerId = self.events.onWithUUID(SIGNAL_LOCAL_PAIRING_STATUS_UPDATE) do(e: Args):
-    self.localPairingStatus = LocalPairingStatus(e)
+    let args = LocalPairingStatus(e)
+    if args.pairingType != PairingType.AppSync:
+      return
+    self.localPairingStatus = args
     self.delegate.onLocalPairingStatusUpdate(self.localPairingStatus)
   self.connectionIds.add(handlerId)
 
@@ -185,6 +188,11 @@ proc init*(self: Controller) =
     self.delegate.emitAccountLoginError(args.error)
   self.connectionIds.add(handlerId)
 
+  handlerId = self.events.onWithUUID(SIGNAL_CONVERTING_PROFILE_KEYPAIR) do(e: Args):
+    let args = ResultArgs(e)
+    self.delegate.onProfileConverted(args.success)
+  self.connectionIds.add(handlerId)
+
 proc shouldStartWithOnboardingScreen*(self: Controller): bool =
   return self.accountsService.openedAccounts().len == 0
 
@@ -195,8 +203,8 @@ proc storeProfileDataAndProceedWithAppLoading*(self: Controller) =
   self.accountsService.updateLoggedInAccount(self.tmpDisplayName, images)
   self.delegate.finishAppLoading()
 
-proc checkFetchingStatusAndProceedWithAppLoading*(self: Controller) =
-  self.delegate.checkFetchingStatusAndProceedWithAppLoading()
+proc checkFetchingStatusAndProceed*(self: Controller) =
+  self.delegate.checkFetchingStatusAndProceed()
 
 proc getGeneratedAccounts*(self: Controller): seq[GeneratedAccountDto] =
   return self.accountsService.generatedAccounts()
@@ -309,11 +317,11 @@ proc syncKeycardBasedOnAppWalletStateAfterLogin(self: Controller) =
 proc keychainErrorOccurred*(self: Controller): bool =
   return self.tmpKeychainErrorOccurred
 
-proc setRecoverUsingSeedPhraseWhileLogin*(self: Controller, value: bool) =
-  self.tmpRecoverUsingSeedPhraseWhileLogin = value
+proc setRecoverKeycardUsingSeedPhraseWhileLoggingIn*(self: Controller, value: bool) =
+  self.tmpRecoverKeycardUsingSeedPhraseWhileLoggingIn = value
 
-proc getRecoverUsingSeedPhraseWhileLogin*(self: Controller): bool =
-  return self.tmpRecoverUsingSeedPhraseWhileLogin
+proc getRecoverKeycardUsingSeedPhraseWhileLoggingIn*(self: Controller): bool =
+  return self.tmpRecoverKeycardUsingSeedPhraseWhileLoggingIn
 
 proc cleanTmpData(self: Controller) =
   self.tmpProfileImageDetails = ProfileImageDetails()
@@ -328,7 +336,7 @@ proc cleanTmpData(self: Controller) =
   self.setSeedPhrase("")
   self.setKeyUid("")
   self.setKeycardEvent(KeycardEvent())
-  self.setRecoverUsingSeedPhraseWhileLogin(false)
+  self.setRecoverKeycardUsingSeedPhraseWhileLoggingIn(false)
 
 proc tryToObtainDataFromKeychain*(self: Controller) =
   ## This proc is used to fetch pass/pin from the keychain while user is trying to login.
@@ -406,22 +414,37 @@ proc storeKeycardAccountAndLogin*(self: Controller, storeToKeychain: bool, newKe
   else:
     error "an error ocurred while importing mnemonic"
 
-proc setupKeycardAccount*(self: Controller, storeToKeychain: bool, newKeycard: bool, recoverAccount: bool = false) =
+proc setupKeycardAccount*(self: Controller, storeToKeychain: bool, recoverAccount: bool = false) =
+  if self.tmpKeycardEvent.keyUid.len == 0 or
+    self.accountsService.openedAccountsContainsKeyUid(self.tmpKeycardEvent.keyUid):
+      self.delegate.emitStartupError(ACCOUNT_ALREADY_EXISTS_ERROR, StartupErrorType.ImportAccError)
+      return
   if self.tmpSeedPhrase.len > 0:
     # if `tmpSeedPhrase` is not empty means user has recovered keycard via seed phrase
-    self.storeKeycardAccountAndLogin(storeToKeychain, newKeycard)
-  else:
-    if self.tmpKeycardEvent.keyUid.len == 0 or
-      self.accountsService.openedAccountsContainsKeyUid(self.tmpKeycardEvent.keyUid):
-        self.delegate.emitStartupError(ACCOUNT_ALREADY_EXISTS_ERROR, StartupErrorType.ImportAccError)
-        return
-    self.delegate.moveToLoadingAppState()
-    if newKeycard:
-      self.delegate.storeDefaultKeyPairForNewKeycardUser()
-    else:
-      self.syncKeycardBasedOnAppWalletStateAfterLogin()
-    self.accountsService.setupAccountKeycard(self.tmpKeycardEvent, self.tmpDisplayName, useImportedAcc = false, recoverAccount)
-    self.setupKeychain(storeToKeychain)
+    let accFromSeedPhrase = self.accountsService.createAccountFromMnemonic(self.tmpSeedPhrase, includeEncryption = true,
+      includeWhisper = true, includeRoot = true, includeDefaultWallet = true, includeEip1581 = true)
+    self.tmpKeycardEvent.masterKey.privateKey = accFromSeedPhrase.privateKey
+    self.tmpKeycardEvent.masterKey.publicKey = accFromSeedPhrase.publicKey
+    self.tmpKeycardEvent.masterKey.address = accFromSeedPhrase.address
+    self.tmpKeycardEvent.whisperKey.privateKey = accFromSeedPhrase.derivedAccounts.whisper.privateKey
+    self.tmpKeycardEvent.whisperKey.publicKey = accFromSeedPhrase.derivedAccounts.whisper.publicKey
+    self.tmpKeycardEvent.whisperKey.address = accFromSeedPhrase.derivedAccounts.whisper.address
+    self.tmpKeycardEvent.walletKey.privateKey = accFromSeedPhrase.derivedAccounts.defaultWallet.privateKey
+    self.tmpKeycardEvent.walletKey.publicKey = accFromSeedPhrase.derivedAccounts.defaultWallet.publicKey
+    self.tmpKeycardEvent.walletKey.address = accFromSeedPhrase.derivedAccounts.defaultWallet.address
+    self.tmpKeycardEvent.walletRootKey.privateKey = accFromSeedPhrase.derivedAccounts.walletRoot.privateKey
+    self.tmpKeycardEvent.walletRootKey.publicKey = accFromSeedPhrase.derivedAccounts.walletRoot.publicKey
+    self.tmpKeycardEvent.walletRootKey.address = accFromSeedPhrase.derivedAccounts.walletRoot.address
+    self.tmpKeycardEvent.eip1581Key.privateKey = accFromSeedPhrase.derivedAccounts.eip1581.privateKey
+    self.tmpKeycardEvent.eip1581Key.publicKey = accFromSeedPhrase.derivedAccounts.eip1581.publicKey
+    self.tmpKeycardEvent.eip1581Key.address = accFromSeedPhrase.derivedAccounts.eip1581.address
+    self.tmpKeycardEvent.encryptionKey.privateKey = accFromSeedPhrase.derivedAccounts.encryption.privateKey
+    self.tmpKeycardEvent.encryptionKey.publicKey = accFromSeedPhrase.derivedAccounts.encryption.publicKey
+    self.tmpKeycardEvent.encryptionKey.address = accFromSeedPhrase.derivedAccounts.encryption.address
+  self.delegate.moveToLoadingAppState()
+  self.syncKeycardBasedOnAppWalletStateAfterLogin()
+  self.accountsService.setupAccountKeycard(self.tmpKeycardEvent, self.tmpDisplayName, useImportedAcc = false, recoverAccount)
+  self.setupKeychain(storeToKeychain)
 
 proc getOpenedAccounts*(self: Controller): seq[AccountDto] =
   return self.accountsService.openedAccounts()
@@ -459,6 +482,7 @@ proc loginLocalPairingAccount*(self: Controller) =
     self.accountsService.login(self.localPairingStatus.account, self.localPairingStatus.password)
   else:
     var kcEvent = KeycardEvent()
+    kcEvent.keyUid = self.localPairingStatus.account.keyUid
     kcEvent.whisperKey.privateKey = self.localPairingStatus.chatKey
     kcEvent.encryptionKey.publicKey = self.localPairingStatus.password
     discard self.accountsService.loginAccountKeycard(self.localPairingStatus.account, kcEvent)
@@ -493,9 +517,11 @@ proc loginAccountKeycardUsingSeedPhrase*(self: Controller, storeToKeychain: bool
   if(error.len > 0):
     self.delegate.emitAccountLoginError(error)
 
-proc convertToRegularAccount*(self: Controller): string =
+proc convertKeycardProfileKeypairToRegular*(self: Controller) =
   let acc = self.accountsService.createAccountFromMnemonic(self.getSeedPhrase(), includeEncryption = true)
-  return self.accountsService.convertToRegularAccount(self.getSeedPhrase(), acc.derivedAccounts.encryption.publicKey, self.getPassword())
+  self.accountsService.convertKeycardProfileKeypairToRegular(self.getSeedPhrase(), acc.derivedAccounts.encryption.publicKey,
+    self.getPassword())
+
 proc getKeyUidForSeedPhrase*(self: Controller, seedPhrase: string): string =
   let acc = self.accountsService.createAccountFromMnemonic(seedPhrase)
   return acc.keyUid
@@ -508,9 +534,6 @@ proc getLastReceivedKeycardData*(self: Controller): tuple[flowType: string, flow
 
 proc cancelCurrentFlow*(self: Controller) =
   self.keycardService.cancelCurrentFlow()
-  # in most cases we're running another flow after canceling the current one,
-  # this way we're giving to the keycard some time to cancel the current flow
-  sleep(200)
 
 proc runLoadAccountFlow*(self: Controller, seedPhraseLength = 0, seedPhrase = "", pin = "", puk = "", factoryReset = false) =
   self.cancelCurrentFlow() # before running into any flow we're making sure that the previous flow is canceled

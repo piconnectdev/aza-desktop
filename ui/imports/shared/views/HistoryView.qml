@@ -15,6 +15,7 @@ import utils 1.0
 
 import "../panels"
 import "../popups"
+import "../popups/send"
 import "../stores"
 import "../controls"
 
@@ -27,13 +28,28 @@ ColumnLayout {
     id: root
 
     property var overview
+    property bool showAllAccounts: false
+    property var sendModal
 
-    signal launchTransactionDetail(var transaction)
+    signal launchTransactionDetail(var transaction, int entryIndex)
+
+    function resetView() {
+        if (!!filterPanelLoader.item) {
+            filterPanelLoader.item.resetView()
+        }
+    }
 
     onVisibleChanged: {
-        if (visible && RootStore.transactionActivityStatus.isFilterDirty) {
+        if (!visible)
+            return
+
+        filterPanelLoader.active = true
+        if (RootStore.transactionActivityStatus.isFilterDirty) {
             WalletStores.RootStore.currentActivityFiltersStore.applyAllFilters()
         }
+
+        WalletStores.RootStore.currentActivityFiltersStore.updateCollectiblesModel()
+        WalletStores.RootStore.currentActivityFiltersStore.updateRecipientsModel()
     }
 
     Connections {
@@ -41,6 +57,10 @@ ColumnLayout {
         enabled: root.visible
         function onIsFilterDirtyChanged() {
             RootStore.updateTransactionFilter()
+        }
+        function onFilterChainsChanged() {
+            WalletStores.RootStore.currentActivityFiltersStore.updateCollectiblesModel()
+            WalletStores.RootStore.currentActivityFiltersStore.updateRecipientsModel()
         }
     }
 
@@ -79,13 +99,18 @@ ColumnLayout {
         text: qsTr("Activity for this account will appear here")
     }
 
-    ActivityFilterPanel {
-        id: filterComponent
-        visible: d.isInitialLoading || transactionListRoot.count > 0 || WalletStores.RootStore.currentActivityFiltersStore.filtersSet
+    Loader {
+        id: filterPanelLoader
+        active: false
+        asynchronous: true
         Layout.fillWidth: true
-        activityFilterStore: WalletStores.RootStore.currentActivityFiltersStore
-        store: WalletStores.RootStore
-        isLoading: d.isInitialLoading
+        sourceComponent: ActivityFilterPanel {
+            visible: d.isInitialLoading || transactionListRoot.count > 0 || WalletStores.RootStore.currentActivityFiltersStore.filtersSet
+            activityFilterStore: WalletStores.RootStore.currentActivityFiltersStore
+            store: WalletStores.RootStore
+            hideNoResults: newTransactions.visible
+            isLoading: d.isInitialLoading
+        }
     }
 
     Item {
@@ -135,11 +160,18 @@ ColumnLayout {
                             return qsTr("Earlier this week")
                         } else if (daysToBeginingOfThisWeek > -7) {
                             return qsTr("Last week")
-                        } else if (currDate.getMonth() === timestampDate.getMonth()) {
+                        } else if (currDate.getMonth() === timestampDate.getMonth() && currDate.getYear() === timestampDate.getYear()) {
                             return qsTr("Earlier this month")
-                        } else if ((new Date(new Date().setDate(0))).getMonth() === timestampDate.getMonth()) {
+                        }
+
+                        const previousMonthDate = (new Date(new Date().setDate(0)))
+                        // Special case for the end of the year
+                        if ((timestampDate.getMonth() === previousMonthDate.getMonth() && timestampDate.getYear() === previousMonthDate.getYear())
+                            || (previousMonthDate.getMonth() === 11 && timestampDate.getMonth() === 0 && Math.abs(timestampDate.getYear() - previousMonthDate.getYear()) === 1))
+                        {
                             return qsTr("Last month")
                         }
+
                         return timestampDate.toLocaleDateString(Qt.locale(), "MMM yyyy")
                     }
                 }
@@ -242,6 +274,12 @@ ColumnLayout {
 
             function onNewDataAvailableChanged() {
                 if (!d.lastRefreshTime || ((Date.now() - d.lastRefreshTime) > (1000 * d.maxSecondsBetweenRefresh))) {
+                    // Show `New transactions` button only when filter is applied
+                    if (!WalletStores.RootStore.currentActivityFiltersStore.filtersSet) {
+                        d.refreshData()
+                        return
+                    }
+
                     newTransactions.visible = RootStore.newDataAvailable
                     return
                 }
@@ -275,13 +313,12 @@ ColumnLayout {
         property var transaction
         property var transactionDelegate
 
-        function openMenu(delegate, mouse) {
-            if (!delegate || !delegate.modelData)
+        function openMenu(delegate, mouse, data) {
+            if (!delegate || !data)
                 return
 
             delegateMenu.transactionDelegate = delegate
-            delegateMenu.transaction = delegate.modelData
-            repeatTransactionAction.enabled = !overview.isWatchOnlyAccount && delegate.modelData.txType === TransactionDelegate.Send
+            delegateMenu.transaction = data
             popup(delegate, mouse.x, mouse.y)
         }
 
@@ -292,13 +329,35 @@ ColumnLayout {
 
         StatusAction {
             id: repeatTransactionAction
+
             text: qsTr("Repeat transaction")
-            enabled: false
             icon.name: "rotate"
+
+            property alias tx: delegateMenu.transaction
+
+            enabled: {
+                if (!overview.isWatchOnlyAccount && !tx)
+                    return false
+                return WalletStores.RootStore.isTxRepeatable(tx)
+            }
+
             onTriggered: {
-                if (!delegateMenu.transaction)
+                if (!tx)
                     return
-                root.sendModal.open(delegateMenu.transaction.to)
+                let asset = WalletStores.RootStore.getAssetForSendTx(tx)
+
+                let req = Helpers.lookupAddressesForSendModal(tx.sender, tx.recipient, asset, tx.isNFT, tx.amount)
+
+                root.sendModal.preSelectedAccount = req.preSelectedAccount
+                root.sendModal.preSelectedRecipient = req.preSelectedRecipient
+                root.sendModal.preSelectedRecipientType = req.preSelectedRecipientType
+                root.sendModal.preSelectedHolding = req.preSelectedHolding
+                root.sendModal.preSelectedHoldingID = req.preSelectedHoldingID
+                root.sendModal.preSelectedHoldingType = req.preSelectedHoldingType
+                root.sendModal.preSelectedSendType = req.preSelectedSendType
+                root.sendModal.preDefinedAmountToSend = req.preDefinedAmountToSend
+                root.sendModal.onlyAssets = false
+                root.sendModal.open()
             }
         }
         StatusSuccessAction {
@@ -316,11 +375,40 @@ ColumnLayout {
         }
         StatusAction {
             id: filterAction
-            enabled: false
             text: qsTr("Filter by similar")
             icon.name: "filter"
             onTriggered: {
-                // TODO apply filter
+                const store = WalletStores.RootStore.currentActivityFiltersStore
+                const tx = delegateMenu.transaction
+
+                store.autoUpdateFilter = false
+                store.resetAllFilters()
+
+                const currentAddress = overview.mixedcaseAddress.toUpperCase()
+
+                store.toggleType(tx.txType)
+                // Contract deployment has always ETH symbol. Symbol doesn't affect this type
+                if (tx.txType !== Constants.TransactionType.ContractDeployment) {
+                    const symbol = tx.symbol
+                    if (!!symbol)
+                        store.toggleToken(symbol)
+                    const inSymbol = tx.inSymbol
+                    if (!!inSymbol && inSymbol !== symbol)
+                        store.toggleToken(inSymbol)
+                }
+                if (showAllAccounts || tx.txType !== Constants.TransactionType.Bridge) {
+                    const recipient = tx.recipient.toUpperCase()
+                    if (!!recipient && recipient !== currentAddress && !/0X0+$/.test(recipient))
+                        store.toggleRecents(recipient)
+                }
+                if (tx.isNFT) {
+                    const uid = store.collectiblesList.getUidForData(tx.tokenID, tx.tokenAddress, tx.chainId)
+                    if (!!uid)
+                        store.toggleCollectibles(uid)
+                }
+
+                store.autoUpdateFilter = true
+                store.applyAllFilters()
             }
         }
     }
@@ -335,11 +423,12 @@ ColumnLayout {
             timeStampText: isModelDataValid ? LocaleUtils.formatRelativeTimestamp(modelData.timestamp * 1000, true) : ""
             rootStore: RootStore
             walletRootStore: WalletStores.RootStore
+            showAllAccounts: root.showAllAccounts
             onClicked: {
                 if (mouse.button === Qt.RightButton) {
                     delegateMenu.openMenu(this, mouse, modelData)
                 } else {
-                    launchTransactionDetail(modelData)
+                    launchTransactionDetail(modelData, index)
                 }
             }
         }
@@ -371,6 +460,8 @@ ColumnLayout {
 
             Repeater {
                 model: {
+                    if (!root.visible)
+                        return 0
                     if (!noTxs.visible) {
                         const delegateHeight = 64 + footerColumn.spacing
                         if (d.isInitialLoading) {

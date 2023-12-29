@@ -8,11 +8,8 @@ QT_INSTALL_DIR="/opt/qt"
 
 function check_version {
   source /etc/os-release
-  
-  if [[ "$NAME" != "Ubuntu" ]] || ! [[ "$VERSION" =~ ^20\.04 ]]; then
-    echo "ERROR: Ubuntu version is not 20.04.4"
-    exit 1
-  fi
+  [[ "${NAME}" != "Ubuntu" ]] && { echo "ERROR: This script only supports Ubuntu!"; exit 1; }
+  [[ "${VERSION_ID}" != '22.04' ]] && { echo "ERROR: Ubuntu version not 22.04!"; exit 1; }
 }
 
 function install_build_dependencies {
@@ -26,7 +23,9 @@ function install_build_dependencies {
 function install_release_dependencies {
   echo "Install release dependencies"
   mkdir -p /usr/local/bin
-  curl -Lo/usr/local/bin/linuxdeployqt "https://github.com/probonopd/linuxdeployqt/releases/download/continuous/linuxdeployqt-continuous-x86_64.AppImage"
+  LINUXDEPLOYQT='linuxdeployqt-20230423-8428c59-x86_64.AppImage'
+  curl -L "https://status-misc.ams3.digitaloceanspaces.com/desktop/${LINUXDEPLOYQT}"
+    -o /usr/local/bin/linuxdeployqt
   chmod a+x /usr/local/bin/linuxdeployqt
 
   apt install -yq gstreamer1.0-plugins-good gstreamer1.0-plugins-bad \
@@ -36,7 +35,7 @@ function install_release_dependencies {
 
 function install_runtime_dependencies {
   echo "Install runtime dependencies"
-  # xvfb is needed in order run squish test into a headless server 
+  # xvfb is needed in order run squish test into a headless server
   apt install -yq libxcomposite-dev xvfb libxft-dev \
       libxcb-shape0 libxcb-randr0 libxcb-render0 libxcb-icccm4 libxcb-image0 \
       libxcb-keysyms1 libxcb-render-util0 libxcb-xinerama0

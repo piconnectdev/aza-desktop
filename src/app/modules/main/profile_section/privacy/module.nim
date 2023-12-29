@@ -57,9 +57,6 @@ method viewDidLoad*(self: Module) =
 method getModuleAsVariant*(self: Module): QVariant =
   return self.viewVariant
 
-method getLinkPreviewWhitelist*(self: Module): string =
-  return self.controller.getLinkPreviewWhitelist()
-
 method changePassword*(self: Module, password: string, newPassword: string) =
   self.controller.changePassword(password, newPassword)
 
@@ -78,6 +75,9 @@ method getMnemonic*(self: Module): string =
 method removeMnemonic*(self: Module) =
   self.controller.removeMnemonic()
 
+method mnemonicWasShown*(self: Module) =
+  self.controller.mnemonicWasShown()
+
 method getMnemonicWordAtIndex*(self: Module, index: int): string =
   return self.controller.getMnemonicWordAtIndex(index)
 
@@ -87,6 +87,12 @@ method getMessagesFromContactsOnly*(self: Module): bool =
 method setMessagesFromContactsOnly*(self: Module, value: bool) =
   if(not self.controller.setMessagesFromContactsOnly(value)):
     error "an error occurred while saving messages from contacts only flag"
+
+method urlUnfurlingMode*(self: Module): int =
+  return self.controller.urlUnfurlingMode()
+
+method setUrlUnfurlingMode*(self: Module, value: int) =
+  self.controller.setUrlUnfurlingMode(value)
 
 method validatePassword*(self: Module, password: string): bool =
   self.controller.validatePassword(password)
@@ -121,3 +127,6 @@ method onUserAuthenticated*(self: Module, pin: string, password: string, keyUid:
 
 method backupData*(self: Module): int64 =
   return self.controller.backupData()
+
+method onUrlUnfurlingModeUpdated*(self: Module, mode: int) =
+  self.view.emitUrlUnfurlingModeUpdated(mode)

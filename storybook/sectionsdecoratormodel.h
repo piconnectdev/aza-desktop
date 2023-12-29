@@ -1,7 +1,6 @@
 #pragma once
 
 #include <QAbstractListModel>
-#include <optional>
 
 class SectionsDecoratorModel : public QAbstractListModel
 {
@@ -9,9 +8,12 @@ class SectionsDecoratorModel : public QAbstractListModel
     Q_PROPERTY(QAbstractItemModel* sourceModel READ sourceModel
                WRITE setSourceModel NOTIFY sourceModelChanged)
 public:
-    static constexpr int IsSectionRole = Qt::UserRole + 100;
-    static constexpr int IsFoldedRole = Qt::UserRole + 101;
-    static constexpr int SubitemsCountRole = Qt::UserRole + 102;
+    enum Roles {
+        SectionRole = Qt::UserRole + 100,
+        IsSectionRole,
+        IsFoldedRole,
+        SubitemsCountRole
+    };
 
     explicit SectionsDecoratorModel(QObject *parent = nullptr);
 
@@ -38,6 +40,9 @@ private:
 
     void initialize();
     void calculateOffsets();
+
+    void onInserted(const QModelIndex &parent, int first, int last);
+    void onRemoved(const QModelIndex &parent, int first, int last);
 
     QAbstractItemModel* m_sourceModel = nullptr;
     std::vector<RowMetadata> m_rowsMetadata;

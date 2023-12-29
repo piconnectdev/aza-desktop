@@ -30,6 +30,7 @@ type
     RequestToJoinId
     RequestToJoinLoading
     AirdropAddress
+    MembershipRequestState
 
 QtObject:
   type
@@ -98,6 +99,7 @@ QtObject:
       ModelRole.RequestToJoinId.int: "requestToJoinId",
       ModelRole.RequestToJoinLoading.int: "requestToJoinLoading",
       ModelRole.AirdropAddress.int: "airdropAddress",
+      ModelRole.MembershipRequestState.int: "membershipRequestState"
     }.toTable
 
   method data(self: Model, index: QModelIndex, role: int): QVariant =
@@ -155,9 +157,13 @@ QtObject:
       result = newQVariant(item.requestToJoinLoading)
     of ModelRole.AirdropAddress:
       result = newQVariant(item.airdropAddress)
+    of ModelRole.MembershipRequestState:
+      result = newQVariant(item.membershipRequestState.int)
 
   proc addItem*(self: Model, item: MemberItem) =
-    self.beginInsertRows(newQModelIndex(), self.items.len, self.items.len)
+    let modelIndex = newQModelIndex()
+    defer: modelIndex.delete
+    self.beginInsertRows(modelIndex, self.items.len, self.items.len)
     self.items.add(item)
     self.endInsertRows()
     self.countChanged()
@@ -192,6 +198,7 @@ QtObject:
     self.items[ind].localNickname = localNickname
 
     let index = self.createIndex(ind, 0, nil)
+    defer: index.delete
     self.dataChanged(index, index, @[
       ModelRole.DisplayName.int,
       ModelRole.EnsName.int,
@@ -206,6 +213,7 @@ QtObject:
     self.items[ind].icon = icon
 
     let index = self.createIndex(ind, 0, nil)
+    defer: index.delete
     self.dataChanged(index, index, @[ModelRole.Icon.int])
 
   proc updateItem*(
@@ -240,6 +248,7 @@ QtObject:
     self.items[ind].isUntrustworthy = isUntrustworthy
 
     let index = self.createIndex(ind, 0, nil)
+    defer: index.delete
     self.dataChanged(index, index, @[
       ModelRole.DisplayName.int,
       ModelRole.IsEnsVerified.int,
@@ -282,6 +291,7 @@ QtObject:
     self.items[ind].isUntrustworthy = isUntrustworthy
 
     let index = self.createIndex(ind, 0, nil)
+    defer: index.delete
     self.dataChanged(index, index, @[
       ModelRole.DisplayName.int,
       ModelRole.EnsName.int,
@@ -294,19 +304,35 @@ QtObject:
       ModelRole.IsUntrustworthy.int,
     ])
 
-  proc setOnlineStatus*(self: Model, pubKey: string,
-      onlineStatus: OnlineStatus) =
-    let ind = self.findIndexForMember(pubKey)
-    if(ind == -1):
+  proc setOnlineStatus*(self: Model, pubKey: string, onlineStatus: OnlineStatus) =
+    let idx = self.findIndexForMember(pubKey)
+    if(idx == -1):
       return
 
-    if(self.items[ind].onlineStatus == onlineStatus):
+    if(self.items[idx].onlineStatus == onlineStatus):
       return
 
-    var item = self.items[ind]
-    item.onlineStatus = onlineStatus
-    self.removeItemWithIndex(ind)
-    self.addItem(item)
+    self.items[idx].onlineStatus = onlineStatus
+    let index = self.createIndex(idx, 0, nil)
+    defer: index.delete
+    self.dataChanged(index, index, @[
+      ModelRole.OnlineStatus.int
+    ])
+
+  proc setAirdropAddress*(self: Model, pubKey: string, airdropAddress: string) =
+    let idx = self.findIndexForMember(pubKey)
+    if(idx == -1):
+      return
+
+    if(self.items[idx].airdropAddress == airdropAddress):
+      return
+
+    self.items[idx].airdropAddress = airdropAddress
+    let index = self.createIndex(idx, 0, nil)
+    defer: index.delete
+    self.dataChanged(index, index, @[
+      ModelRole.AirdropAddress.int
+    ])
 
 # TODO: rename me to removeItemByPubkey
   proc removeItemById*(self: Model, pubKey: string) =
@@ -327,7 +353,19 @@ QtObject:
 
     self.items[idx].requestToJoinLoading = requestToJoinLoading
     let index = self.createIndex(idx, 0, nil)
+    defer: index.delete
     self.dataChanged(index, index, @[
       ModelRole.RequestToJoinLoading.int
     ])
 
+  proc updateMembershipStatus*(self: Model, memberKey: string, status: MembershipRequestState) {.inline.} =
+    let idx = self.findIndexForMember(memberKey)
+    if(idx == -1):
+      return
+
+    self.items[idx].membershipRequestState = status
+    let index = self.createIndex(idx, 0, nil)
+    defer: index.delete
+    self.dataChanged(index, index, @[
+      ModelRole.MembershipRequestState.int
+    ])

@@ -1,11 +1,10 @@
-import NimQml, chronicles, uuids
+import NimQml, chronicles
 import io_interface
 import ../io_interface as delegate_interface
 import view, controller
 
 import ../../../../../constants
 import ../../../../core/eventemitter
-import ../../../../global/global_singleton
 import ../../../../../app_service/service/settings/service as settings_service
 import ../../../../../app_service/service/stickers/service as stickers_service
 import ../../../../../app_service/service/node_configuration/service as node_configuration_service
@@ -130,15 +129,6 @@ method toggleCommunitiesPortalSection*(self: Module) =
 
 method toggleNodeManagementSection*(self: Module) =
   self.controller.toggleNodeManagementSection()
-
-method onWakuV2StoreToggled*(self: Module) =
-  self.view.emitWakuV2StoreEnabledSignal()
-
-method toggleWakuV2Store*(self: Module) =
-  self.controller.toggleWakuV2Store()
-
-method isWakuV2StoreEnabled*(self: Module): bool =
-  self.controller.isWakuV2StoreEnabled()
 
 method getLogMaxBackups*(self: Module): int =
   self.controller.getLogMaxBackups()

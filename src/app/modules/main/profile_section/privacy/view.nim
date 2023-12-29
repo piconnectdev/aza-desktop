@@ -18,9 +18,6 @@ QtObject:
   proc load*(self: View) =
     self.delegate.viewDidLoad()
 
-  proc getLinkPreviewWhitelist*(self: View): string {.slot.} =
-    return self.delegate.getLinkPreviewWhitelist()
-
   proc changePassword*(self: View, password: string, newPassword: string) {.slot.} =
     self.delegate.changePassword(password, newPassword)
 
@@ -44,6 +41,9 @@ QtObject:
   proc removeMnemonic*(self: View) {.slot.} =
     self.delegate.removeMnemonic()
 
+  proc mnemonicWasShown*(self: View) {.slot.} =
+    self.delegate.mnemonicWasShown()
+
   proc getMnemonicWordAtIndex*(self: View, index: int): string {.slot.} =
     return self.delegate.getMnemonicWordAtIndex(index)
 
@@ -51,12 +51,27 @@ QtObject:
   proc getMessagesFromContactsOnly(self: View): bool {.slot.} =
     return self.delegate.getMessagesFromContactsOnly()
   proc setMessagesFromContactsOnly(self: View, value: bool) {.slot.} =
+    if self.getMessagesFromContactsOnly() == value:
+      return
     self.delegate.setMessagesFromContactsOnly(value)
     self.messagesFromContactsOnlyChanged()
   QtProperty[bool] messagesFromContactsOnly:
     read = getMessagesFromContactsOnly
     write = setMessagesFromContactsOnly
     notify = messagesFromContactsOnlyChanged
+
+  proc urlUnfurlingModeChanged(self: View) {.signal.}
+  proc getUrlUnfurlingMode(self: View): int {.slot.} =
+    return self.delegate.urlUnfurlingMode()
+  proc setUrlUnfurlingMode(self: View, value: int) {.slot.} =
+    if self.getUrlUnfurlingMode() == value:
+      return
+    self.delegate.setUrlUnfurlingMode(value)
+
+  QtProperty[int] urlUnfurlingMode:
+    read = getUrlUnfurlingMode
+    write = setUrlUnfurlingMode
+    notify = urlUnfurlingModeChanged
 
   proc validatePassword*(self: View, password: string): bool {.slot.} =
     self.delegate.validatePassword(password)
@@ -80,3 +95,6 @@ QtObject:
     
   proc backupData*(self: View): int {.slot.} =
     return self.delegate.backupData().int
+  
+  proc emitUrlUnfurlingModeUpdated*(self: View, mode: int) =
+    self.urlUnfurlingModeChanged()

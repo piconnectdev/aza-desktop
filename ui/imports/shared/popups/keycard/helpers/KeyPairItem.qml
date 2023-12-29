@@ -2,6 +2,7 @@ import QtQuick 2.14
 import QtQml.Models 2.14
 import QtQuick.Controls 2.14
 
+import StatusQ.Core 0.1
 import StatusQ.Core.Theme 0.1
 import StatusQ.Core.Utils 0.1
 import StatusQ.Components 0.1
@@ -12,12 +13,13 @@ import utils 1.0
 StatusListItem {
     id: root
 
-    property var sharedKeycardModule
     property ButtonGroup buttonGroup
     property bool usedAsSelectOption: false
     property bool tagClickable: false
     property bool tagDisplayRemoveAccountButton: false
     property bool canBeSelected: true
+    property bool displayRadioButtonForSelection: true
+    property bool useTransparentItemBackgroundColor: false
 
     property int keyPairType: Constants.keycard.keyPairType.unknown
     property string keyPairKeyUid: ""
@@ -28,11 +30,24 @@ StatusListItem {
     property bool keyPairCardLocked: false
     property var keyPairAccounts
 
+    property bool displayAdditionalInfoForProfileKeypair: true
+    property string additionalInfoForProfileKeypair: qsTr("Moving this key pair will require you to use your Keycard to login")
+
     signal keyPairSelected()
     signal removeAccount(int index, string name)
     signal accountClicked(int index)
 
-    color: root.keyPairCardLocked? Theme.palette.dangerColor3 : Theme.palette.baseColor2
+    color: {
+        if (!root.useTransparentItemBackgroundColor) {
+            return root.keyPairCardLocked? Theme.palette.dangerColor3 : Theme.palette.baseColor2
+        }
+
+        if (sensor.containsMouse) {
+            return Theme.palette.baseColor2
+        }
+
+        return Theme.palette.transparent
+    }
     title: root.keyPairName
     statusListItemTitleAside.textFormat: Text.RichText
     statusListItemTitleAside.visible: !!statusListItemTitleAside.text
@@ -48,8 +63,8 @@ StatusListItem {
         return t
     }
 
-    beneathTagsTitle: root.keyPairType === Constants.keycard.keyPairType.profile?
-                          qsTr("Moving this key pair will require you to use your Keycard to login") :
+    beneathTagsTitle: root.keyPairType === Constants.keycard.keyPairType.profile && root.displayAdditionalInfoForProfileKeypair?
+                          root.additionalInfoForProfileKeypair :
                           !root.canBeSelected?
                               qsTranslate("", "Contains account(s) with Keycard incompatible derivation paths", root.keyPairAccounts.count.toString()) :
                               ""
@@ -115,23 +130,38 @@ StatusListItem {
         property list<Item> components: [
             StatusRadioButton {
                 id: radioButton
-                visible: root.usedAsSelectOption
+                visible: root.usedAsSelectOption && root.displayRadioButtonForSelection
                 ButtonGroup.group: root.buttonGroup
                 onCheckedChanged: {
-                    if (!root.usedAsSelectOption || !root.canBeSelected)
-                        return
-                    if (checked) {
-                        root.sharedKeycardModule.setSelectedKeyPair(root.keyPairKeyUid)
-                        root.keyPairSelected()
+                    d.doAction(checked)
+                }
+            },
+            StatusIcon {
+                visible: root.usedAsSelectOption && !root.displayRadioButtonForSelection
+                icon: "next"
+                color: Theme.palette.baseColor1
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        d.doAction(true)
                     }
                 }
             }
         ]
+
+        function doAction(checked){
+            if (!root.usedAsSelectOption || !root.canBeSelected)
+                return
+            if (checked) {
+                root.keyPairSelected()
+            }
+        }
     }
 
     onClicked: {
         if (!root.usedAsSelectOption || !root.canBeSelected)
             return
-        radioButton.checked = true
+        d.doAction(!root.displayRadioButtonForSelection || radioButton.checked)
     }
 }

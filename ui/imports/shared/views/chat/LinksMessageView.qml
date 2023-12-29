@@ -1,234 +1,203 @@
 import QtQuick 2.15
-import QtGraphicalEffects 1.13
-import QtQuick.Layouts 1.13
 
 import utils 1.0
 
 import StatusQ.Core 0.1
 import StatusQ.Core.Theme 0.1
 import StatusQ.Controls 0.1
+import StatusQ.Components 0.1
 
+import shared.controls 1.0
 import shared.status 1.0
 import shared.panels 1.0
-import shared.stores 1.0
-import shared.controls.chat 1.0
 
-ColumnLayout {
+import shared.controls.delegates 1.0
+
+Flow {
     id: root
 
-    property var store
-    property var messageStore
-    property var linkPreviewModel
+    required property bool isOnline
+    required property bool playAnimations
 
-    property bool isCurrentUser: false
+    required property var linkPreviewModel
+    required property var gifLinks
 
-    signal imageClicked(var image, var mouse, var imageSource)
+    required property bool gifUnfurlingEnabled
+    required property bool canAskToUnfurlGifs
+
+    readonly property alias hoveredLink: linksRepeater.hoveredUrl
+    property string highlightLink: ""
+
+    signal imageClicked(var image, var mouse, string imageSource, string url)
+    signal openContextMenu(var item, string url, string domain)
+    signal setNeverAskAboutUnfurlingAgain(bool neverAskAgain)
+
+    function resetLocalAskAboutUnfurling() {
+        d.localAskAboutUnfurling = true
+    }
+
+    spacing: 12
+
+    //TODO: remove once GIF previews are unfurled sender side
+
+    QtObject {
+        id: d
+        property bool localAskAboutUnfurling: true
+    }
+
+    Loader {
+        visible: active
+        active: root.gifLinks && root.gifLinks.length > 0
+                 && !root.gifUnfurlingEnabled
+                 && d.localAskAboutUnfurling && root.canAskToUnfurlGifs
+        sourceComponent: enableLinkComponent
+    }
+
+    Repeater {
+        id: tempRepeater
+        visible: root.canAskToUnfurlGifs
+        model: root.gifUnfurlingEnabled ? gifLinks : []
+
+        delegate: LinkPreviewGifDelegate {
+            required property string modelData
+
+            link: modelData
+            isOnline: root.isOnline
+            playAnimation: root.playAnimations
+            onClicked: root.imageClicked(imageAlias, mouse, link, link)
+        }
+    }
 
     Repeater {
         id: linksRepeater
+
+        property string hoveredUrl: ""
+
         model: root.linkPreviewModel
+        delegate: LinkPreviewCardDelegate {
+            id: delegate
+            highlight: url === root.highlightLink
+            onHoveredChanged: {
+                linksRepeater.hoveredUrl = hovered ? url : ""
+            }
+            onClicked: (mouse) => {
+                if(mouse.button === Qt.RightButton) {
+                    const domain = previewType === Constants.LinkPreviewType.Standard ? linkData.domain : Constants.externalStatusLink
+                    root.openContextMenu(delegate, url, domain)
+                    return
+                }
 
-        delegate: Loader {
-            id: linkMessageLoader
+                if(previewType === Constants.LinkPreviewType.Standard) {
+                    Global.openLinkWithConfirmation(url, linkData.domain)
+                    return
+                }
 
-            // properties from the model
-            required property bool unfurled
-            required property string title
-            required property string description
-            required property string hostname
-            required property int thumbnailWidth
-            required property int thumbnailHeight
-            required property string thumbnailUrl
-            required property string thumbnailDataUri
-
-            asynchronous: true
-            sourceComponent: unfurledLinkComponent
-
-            StateGroup {
-                //Using StateGroup as a warkardound for https://bugreports.qt.io/browse/QTBUG-47796
-                states: [
-                    State {
-                        name: "loadLinkPreview"
-                        when: !linkMessageLoader.isImage && !linkMessageLoader.isStatusDeepLink
-                        PropertyChanges { target: linkMessageLoader; sourceComponent: unfurledLinkComponent }
-                    }
-                    // NOTE: New unfurling not yet suppport images and status links.
-                    //       Uncomment code below when implemented:
-                    //       - https://github.com/status-im/status-go/issues/3761
-                    //       - https://github.com/status-im/status-go/issues/3762
-
-                    // State {
-                    //     name: "loadImage"
-                    //     when: linkMessageLoader.isImage
-                    //     PropertyChanges { target: linkMessageLoader; sourceComponent: unfurledImageComponent }
-                    // },
-                    // State {
-                    //     name: "statusInvitation"
-                    //     when: linkMessageLoader.isStatusDeepLink
-                    //     PropertyChanges { target: linkMessageLoader; sourceComponent: invitationBubble }
-                    // }
-                ]
+                Global.activateDeepLink(url)
             }
         }
     }
 
     Component {
-        id: unfurledImageComponent
+        id: enableLinkComponent
 
-        MessageBorder {
-            implicitWidth: linkImage.width
-            implicitHeight: linkImage.height
-            isCurrentUser: root.isCurrentUser
+        Rectangle {
+            id: enableLinkRoot
+            implicitWidth: 300
+            implicitHeight: childrenRect.height + Style.current.smallPadding
+            radius: 16
+            border.width: 1
+            border.color: Style.current.border
+            color: Style.current.background
 
-            StatusChatImageLoader {
-                id: linkImage
-
-                readonly property bool globalAnimationEnabled: root.messageStore.playAnimation
-                property bool localAnimationEnabled: true
-
-                objectName: "LinksMessageView_unfurledImageComponent_linkImage"
-                anchors.centerIn: parent
-                source: result.thumbnailUrl
-                imageWidth: 300
-                isCurrentUser: root.isCurrentUser
-                playing: globalAnimationEnabled && localAnimationEnabled
-                isOnline: root.store.mainModuleInst.isOnline
-                asynchronous: true
-                isAnimated: result.contentType ? result.contentType.toLowerCase().endsWith("gif") : false
-                onClicked: {
-                    if (isAnimated && !playing)
-                        localAnimationEnabled = true
-                    else
-                        root.imageClicked(linkImage.imageAlias, mouse, source)
-                }
-                imageAlias.cache: localAnimationEnabled // GIFs can only loop/play properly with cache enabled
-                Loader {
-                    width: 45
-                    height: 38
-                    anchors.left: parent.left
-                    anchors.leftMargin: 12
-                    anchors.bottom: parent.bottom
-                    anchors.bottomMargin: 12
-                    active: linkImage.isAnimated && !linkImage.playing
-                    sourceComponent: Item {
-                        anchors.fill: parent
-                        Rectangle {
-                            anchors.fill: parent
-                            color: "black"
-                            radius: Style.current.radius
-                            opacity: .4
-                        }
-                        StatusBaseText {
-                            anchors.centerIn: parent
-                            text: "GIF"
-                            font.pixelSize: 13
-                            color: "white"
-                        }
-                    }
-                }
-                Timer {
-                    id: animationPlayingTimer
-                    interval: 10000
-                    running: linkImage.isAnimated && linkImage.playing
-                    onTriggered: { linkImage.localAnimationEnabled = false }
-                }
+            StatusFlatRoundButton {
+                anchors.top: parent.top
+                anchors.topMargin: Style.current.smallPadding
+                anchors.right: parent.right
+                anchors.rightMargin: Style.current.smallPadding
+                icon.width: 20
+                icon.height: 20
+                icon.name: "close-circle"
+                onClicked: d.localAskAboutUnfurling = false
             }
-        }
-    }
-
-    Component {
-        id: invitationBubble
-
-        InvitationBubbleView {
-            property var invitationData: root.store.getLinkDataForStatusLinks(link)
-
-            store: root.store
-            communityId: invitationData ? invitationData.communityId : ""
-            anchors.left: parent.left
-            visible: !!invitationData
-            loading: invitationData.fetching
-            onInvitationDataChanged: {
-                if (!invitationData)
-                    linksModel.remove(index)
-            }
-
-            Connections {
-                enabled: !!invitationData && invitationData.fetching
-                target: root.store.communitiesModuleInst
-                function onCommunityAdded(communityId:  string) {
-                    if (communityId !== invitationData.communityId) return
-                    invitationData = root.store.getLinkDataForStatusLinks(link)
-                }
-            }
-        }
-    }
-
-    Component {
-        id: unfurledLinkComponent
-
-        MessageBorder {
-            id: unfurledLink
-            implicitWidth: linkImage.visible ? linkImage.width + 2 : 300
-            implicitHeight: {
-                if (linkImage.visible) {
-                    return linkImage.height + (Style.current.smallPadding * 2) + (linkTitle.height + 2 + linkSite.height)
-                }
-                return (Style.current.smallPadding * 2) + linkTitle.height + 2 + linkSite.height
-            }
-            isCurrentUser: root.isCurrentUser
-
-            StatusChatImageLoader {
-                id: linkImage
-                objectName: "LinksMessageView_unfurledLinkComponent_linkImage"
-                source: thumbnailUrl
-                visible: thumbnailUrl.length
-                imageWidth: Math.min(300, thumbnailWidth > 0 ? thumbnailWidth : 300)
-                isCurrentUser: root.isCurrentUser
+            Image {
+                id: unfurlingImage
+                source: Style.png("unfurling-image")
+                width: 132
+                height: 94
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.top: parent.top
-                isOnline: root.store.mainModuleInst.isOnline
-                asynchronous: true
+                anchors.topMargin: Style.current.smallPadding
+            }
+            StatusBaseText {
+                id: enableText
+                text: qsTr("Enable automatic GIF unfurling")
+                horizontalAlignment: Text.AlignHCenter
+                width: parent.width
+                wrapMode: Text.WordWrap
+                anchors.top: unfurlingImage.bottom
+                anchors.topMargin: Style.current.halfPadding
+                color: Theme.palette.directColor1
+            }
+            StatusBaseText {
+                id: infoText
+                text: qsTr("Once enabled, links posted in the chat may share your metadata with their owners")
+                horizontalAlignment: Text.AlignHCenter
+                width: parent.width
+                wrapMode: Text.WordWrap
+                anchors.top: enableText.bottom
+                font.pixelSize: 13
+                color: Theme.palette.baseColor1
+            }
+            Separator {
+                id: sep1
+                anchors.top: infoText.bottom
+                anchors.topMargin: Style.current.smallPadding
+            }
+            StatusFlatButton {
+                id: enableBtn
+                objectName: "LinksMessageView_enableBtn"
+                text: qsTr("Enable in Settings")
                 onClicked: {
-                    Global.openLink(result.address)
+                    Global.changeAppSectionBySectionType(Constants.appSection.profile, Constants.settingsSubsection.messaging);
+                }
+                width: parent.width
+                anchors.top: sep1.bottom
+                Component.onCompleted: {
+                    background.radius = 0;
                 }
             }
-
-            StatusBaseText {
-                id: linkTitle
-                text: title
-                font.pixelSize: 13
-                font.weight: Font.Medium
-                wrapMode: Text.Wrap
-                anchors.top: linkImage.visible ? linkImage.bottom : parent.top
-                anchors.topMargin: Style.current.smallPadding
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.leftMargin: Style.current.smallPadding
-                anchors.rightMargin: Style.current.smallPadding
+            Separator {
+                id: sep2
+                anchors.top: enableBtn.bottom
+                anchors.topMargin: 0
             }
-
-            StatusBaseText {
-                id: linkSite
-                text: hostname
-                font.pixelSize: 12
-                font.weight: Font.Thin
-                color: Theme.palette.baseColor1
-                anchors.top: linkTitle.bottom
-                anchors.topMargin: 2
-                anchors.left: linkTitle.left
-                anchors.bottomMargin: Style.current.halfPadding
-            }
-
-            MouseArea {
-                anchors.top: linkImage.visible ? linkImage.top : linkTitle.top
-                anchors.left: linkImage.visible ? linkImage.left : linkTitle.left
-                anchors.right: linkImage.visible ? linkImage.right : linkTitle.right
-                anchors.bottom: linkSite.bottom
-                cursorShape: Qt.PointingHandCursor
-                onClicked:  {
-                    Global.openLink(link)
+            Item {
+                width: parent.width
+                height: 44
+                anchors.top: sep2.bottom
+                clip: true
+                StatusFlatButton {
+                    id: dontAskBtn
+                    width: parent.width
+                    height: (parent.height+Style.current.padding)
+                    anchors.top: parent.top
+                    anchors.topMargin: -Style.current.padding
+                    contentItem: Item {
+                        StatusBaseText {
+                            anchors.centerIn: parent
+                            anchors.verticalCenterOffset: Style.current.halfPadding
+                            font: dontAskBtn.font
+                            color: dontAskBtn.textColor
+                            text: qsTr("Don't ask me again")
+                        }
+                    }
+                    onClicked: root.setNeverAskAboutUnfurlingAgain(true)
+                    Component.onCompleted: {
+                        background.radius = Style.current.padding;
+                    }
                 }
             }
         }
     }
 }
+

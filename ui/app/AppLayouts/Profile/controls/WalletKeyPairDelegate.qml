@@ -9,25 +9,31 @@ import StatusQ.Popups 0.1
 
 import utils 1.0
 
+import AppLayouts.Profile.popups 1.0
+
 Rectangle {
     id: root
 
     property var keyPair
-    property string chainShortNames
+    property bool hasPairedDevices
+    property var getNetworkShortNames: function(chainIds){}
     property string userProfilePublicKey
-    property bool includeWatchOnlyAccount
 
     signal goToAccountView(var account)
-    signal toggleIncludeWatchOnlyAccount()
+    signal runExportQrFlow()
+    signal runImportViaQrFlow()
+    signal runImportViaSeedPhraseFlow()
+    signal runImportViaPrivateKeyFlow()
     signal runRenameKeypairFlow()
+    signal runRemoveKeypairFlow()
+    signal runMoveKeypairToKeycardFlow()
+    signal runStopUsingKeycardFlow()
 
     QtObject {
         id: d
-        readonly property var relatedAccounts: keyPair.accounts
-        readonly property bool isWatchOnly: keyPair.pairType === Constants.keycard.keyPairType.watchOnly
-        readonly property bool isPrivateKeyImport: keyPair.pairType === Constants.keycard.keyPairType.privateKeyImport
-        readonly property bool isProfileKeypair: keyPair.pairType === Constants.keycard.keyPairType.profile
-        readonly property string locationInfo: keyPair.migratedToKeycard ? qsTr("On Keycard"): qsTr("On device")
+        readonly property var relatedAccounts: !!root.keyPair? root.keyPair.accounts : {}
+        readonly property bool isWatchOnly: !!root.keyPair && root.keyPair.pairType === Constants.keypair.type.watchOnly
+        readonly property bool isProfileKeypair: !!root.keyPair && root.keyPair.pairType === Constants.keypair.type.profile
     }
 
     implicitHeight: layout.height
@@ -39,26 +45,27 @@ Rectangle {
         anchors.horizontalCenter: parent.horizontalCenter
         width: parent.width
         StatusListItem {
+            objectName: "walletKeyPairDelegate"
             Layout.fillWidth: true
-            title: d.isWatchOnly ? qsTr("Watched addresses") : keyPair.name
+            title: !!root.keyPair? d.isWatchOnly ? qsTr("Watched addresses") : root.keyPair.name : ""
             statusListItemSubTitle.textFormat: Qt.RichText
-            titleTextIcon: keyPair.migratedToKeycard ? "keycard": ""
-            subTitle: d.isWatchOnly ? "" : d.isProfileKeypair ?
-                      Utils.getElidedCompressedPk(keyPair.pubKey) + Constants.settingsSection.dotSepString + d.locationInfo : d.locationInfo
+            titleTextIcon: !!root.keyPair && keyPair.migratedToKeycard ? "keycard": ""
+            subTitle: Utils.getKeypairLocation(root.keyPair, false)
+            statusListItemSubTitle.color: Utils.getKeypairLocationColor(root.keyPair)
             color: Theme.palette.transparent
             ringSettings {
                 ringSpecModel: d.isProfileKeypair ? Utils.getColorHashAsJson(root.userProfilePublicKey) : []
                 ringPxSize: Math.max(asset.width / 24.0)
             }
             asset {
-                width: keyPair.icon ? Style.current.bigPadding : 40
-                height: keyPair.icon ? Style.current.bigPadding : 40
-                name: keyPair.image ? keyPair.image : keyPair.icon
-                isImage: !!keyPair.image
+                width: !!root.keyPair && keyPair.icon? Style.current.bigPadding : 40
+                height: !!root.keyPair && keyPair.icon? Style.current.bigPadding : 40
+                name: !!root.keyPair? !!root.keyPair.image? root.keyPair.image : root.keyPair.icon : ""
+                isImage: !!root.keyPair && !!keyPair.image
                 color: d.isProfileKeypair ? Utils.colorForPubkey(root.userProfilePublicKey) : Theme.palette.primaryColor1
                 letterSize: Math.max(4, asset.width / 2.4)
                 charactersLen: 2
-                isLetterIdenticon: !keyPair.icon && !asset.name.toString()
+                isLetterIdenticon: !!root.keyPair && !keyPair.icon && !asset.name.toString()
             }
             components: [
                 StatusFlatRoundButton {
@@ -74,72 +81,22 @@ Rectangle {
                     Loader {
                         id: menuLoader
                         active: false
-                        sourceComponent: StatusMenu {
+                        sourceComponent: WalletKeypairAccountMenu {
                             onClosed: {
                                 menuLoader.active = false
                             }
-
-                            StatusAction {
-                                text: enabled? qsTr("Show encrypted QR of keypairs on device") : ""
-                                enabled: !d.isProfileKeypair &&
-                                         !model.keyPair.migratedToKeycard &&
-                                         !model.keyPair.operability === Constants.keypair.operability.nonOperable
-                                icon.name: "qr"
-                                icon.color: Theme.palette.primaryColor1
-                                onTriggered: {
-                                    console.warn("TODO: show encrypted QR")
-                                }
-                            }
-
-
-                            StatusAction {
-                                text: model.keyPair.migratedToKeycard? qsTr("Stop using Keycard") : qsTr("Move keys to a Keycard")
-                                icon.name: model.keyPair.migratedToKeycard? "keycard-crossed" : "keycard"
-                                icon.color: Theme.palette.primaryColor1
-                                onTriggered: {
-                                    if (model.keyPair.migratedToKeycard)
-                                        console.warn("TODO: stop using Keycard")
-                                    else
-                                        console.warn("TODO: move keys to a Keycard")
-                                }
-                            }
-
-                            StatusAction {
-                                text: enabled? qsTr("Rename keypair") : ""
-                                enabled: !d.isProfileKeypair
-                                icon.name: "edit"
-                                icon.color: Theme.palette.primaryColor1
-                                onTriggered: {
-                                    root.runRenameKeypairFlow()
-                                }
-                            }
-
-                            StatusMenuSeparator {
-                                visible: !d.isProfileKeypair
-                            }
-
-                            StatusAction {
-                                text: enabled? qsTr("Remove keypair and associated accounts") : ""
-                                enabled: !d.isProfileKeypair
-                                type: StatusAction.Type.Danger
-                                icon.name: "delete"
-                                icon.color: Theme.palette.dangerColor1
-                                onTriggered: {
-                                    console.warn("TODO: remove master keys and associated accounts")
-                                }
-                            }
+                            keyPair: root.keyPair
+                            hasPairedDevices: root.hasPairedDevices
+                            onRunExportQrFlow: root.runExportQrFlow()
+                            onRunImportViaQrFlow: root.runImportViaQrFlow()
+                            onRunImportViaSeedPhraseFlow: root.runImportViaSeedPhraseFlow()
+                            onRunImportViaPrivateKeyFlow: root.runImportViaPrivateKeyFlow()
+                            onRunRenameKeypairFlow: root.runRenameKeypairFlow()
+                            onRunRemoveKeypairFlow: root.runRemoveKeypairFlow()
+                            onRunMoveKeypairToKeycardFlow: root.runMoveKeypairToKeycardFlow()
+                            onRunStopUsingKeycardFlow: root.runStopUsingKeycardFlow()
                         }
                     }
-                },
-                StatusBaseText {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: qsTr("Include in total balance")
-                    visible: d.isWatchOnly
-                },
-                StatusSwitch {
-                    visible: d.isWatchOnly
-                    checked: root.includeWatchOnlyAccount
-                    onClicked: root.toggleIncludeWatchOnlyAccount()
                 }
             ]
         }
@@ -152,9 +109,10 @@ Rectangle {
             model: d.relatedAccounts
             delegate: WalletAccountDelegate {
                 width: ListView.view.width
+                label: keyPair.pairType !== Constants.keypair.type.watchOnly ? "" : model.account.hideFromTotalBalance ? qsTr("Excl. from total balance"): qsTr("Incl. in total balance")
                 account: model.account
                 totalCount: ListView.view.count
-                chainShortNames: root.chainShortNames
+                getNetworkShortNames: root.getNetworkShortNames
                 onGoToAccountView: root.goToAccountView(model.account)
             }
         }

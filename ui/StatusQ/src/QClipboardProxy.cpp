@@ -36,7 +36,8 @@ bool QClipboardProxy::hasHtml() const
 
 QString QClipboardProxy::html() const
 {
-    return m_clipboard->mimeData()->html();
+    auto mimeData = m_clipboard->mimeData();
+    return mimeData ? mimeData->html() : QString{};
 }
 
 bool QClipboardProxy::hasImage() const
@@ -75,7 +76,7 @@ bool QClipboardProxy::isValidImageUrl(const QUrl& url, const QStringList& accept
 {
     const auto strippedUrl = url.url(QUrl::RemoveAuthority | QUrl::RemoveFragment | QUrl::RemoveQuery);
     return std::any_of(acceptedExtensions.constBegin(), acceptedExtensions.constEnd(), [strippedUrl](const auto & ext) {
-        return strippedUrl.endsWith(ext);
+        return strippedUrl.endsWith(ext, Qt::CaseInsensitive);
     });
 }
 

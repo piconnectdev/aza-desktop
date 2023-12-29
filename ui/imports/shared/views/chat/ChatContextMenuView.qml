@@ -42,7 +42,7 @@ StatusMenu {
 
     signal createCommunityChannel(string chatId, string newName, string newDescription, string newEmoji, string newColor)
     signal editCommunityChannel(string chatId, string newName, string newDescription, string newEmoji, string newColor, string newCategory)
-    signal fetchMoreMessages(int timeFrame)
+    signal requestMoreMessages(string chatId)
     signal addRemoveGroupMember()
 
     width: root.amIChatAdmin && (root.chatType === Constants.chatType.privateGroupChat) ? 207 : implicitWidth
@@ -59,8 +59,18 @@ StatusMenu {
         onTriggered: { root.addRemoveGroupMember() }
     }
 
+    StatusAction {
+        text: qsTr("Copy channel link")
+        icon.name: "copy"
+        enabled: root.isCommunityChat
+        onTriggered: {
+            const link = Utils.getCommunityChannelShareLinkWithChatId(root.chatId)
+            Utils.copyToClipboard(link)
+        }
+    }
+
     StatusMenuSeparator {
-        visible: root.chatType === Constants.chatType.oneToOne || root.chatType === Constants.chatType.privateGroupChat
+        visible: root.chatType === Constants.chatType.oneToOne || root.chatType === Constants.chatType.privateGroupChat || root.isCommunityChat
     }
 
     StatusAction {
@@ -114,46 +124,13 @@ StatusMenu {
         }
     }
 
-    //TODO uncomment when implemented
-//    StatusMenu {
-//        title: qsTr("Fetch messages")
-//        enabled: (root.chatType === Constants.chatType.oneToOne ||
-//                  root.chatType === Constants.chatType.privateGroupChat)
-//        StatusAction {
-//            text: "Last 24 hours"
-//            onTriggered: {
-//                root.fetchMoreMessages();
-//            }
-//        }
-
-//        StatusAction {
-//            text: "Last 2 days"
-//            onTriggered: {
-
-//            }
-//        }
-
-//        StatusAction {
-//            text: "Last 3 days"
-//            onTriggered: {
-
-//            }
-//        }
-
-//        StatusAction {
-//            text: "Last 7 days"
-//            onTriggered: {
-
-//            }
-//        }
-//    }
-
     StatusAction {
-        objectName: "clearHistoryMenuItem"
-        text: qsTr("Clear History")
-        icon.name: "close-circle"
+        objectName: "chatFetchMessagesMenuItem"
+        text: qsTr("Fetch messages")
+        icon.name: "download"
+        enabled: !production
         onTriggered: {
-            root.clearChatHistory(root.chatId)
+            root.requestMoreMessages(root.chatId)
         }
     }
 
@@ -206,12 +183,23 @@ StatusMenu {
     }
 
     StatusMenuSeparator {
-        visible: deleteOrLeaveMenuItem.enabled
+        visible: clearHistoryMenuItem.enabled || deleteOrLeaveMenuItem.enabled
     }
 
     StatusAction {
-        objectName: "deleteOrLeaveMenuItem"
+        id: clearHistoryMenuItem
+        objectName: "clearHistoryMenuItem"
+        text: qsTr("Clear History")
+        icon.name: "close-circle"
+        type: deleteOrLeaveMenuItem.enabled ? StatusAction.Type.Normal : StatusAction.Type.Danger
+        onTriggered: {
+            Global.openPopup(clearChatConfirmationDialogComponent);
+        }
+    }
+
+    StatusAction {
         id: deleteOrLeaveMenuItem
+        objectName: "deleteOrLeaveMenuItem"
         text: {
             if (root.isCommunityChat) {
                 return qsTr("Delete Channel")
@@ -229,7 +217,7 @@ StatusMenu {
         type: StatusAction.Type.Danger
         onTriggered: {
             if (root.chatType === Constants.chatType.privateGroupChat) {
-                root.leaveChat(root.chatId);
+                Global.openPopup(leaveGroupConfirmationDialogComponent);
             } else {
                 Global.openPopup(deleteChatConfirmationDialogComponent);
             }
@@ -252,6 +240,52 @@ StatusMenu {
     }
 
     Component {
+        id: clearChatConfirmationDialogComponent
+        ConfirmationDialog {
+            confirmButtonObjectName: "clearChatConfirmationDialogClearButton"
+            headerSettings.title: qsTr("Clear chat history")
+            confirmationText: qsTr("Are you sure you want to clear chat history for <b>%1</b>?").arg(root.chatName)
+            confirmButtonLabel: qsTr("Clear")
+            showCancelButton: true
+            cancelBtnType: "normal"
+
+            onClosed: {
+                destroy()
+            }
+            onCancelButtonClicked: {
+                close()
+            }
+            onConfirmButtonClicked: {
+                root.clearChatHistory(root.chatId)
+                close()
+            }
+        }
+    }
+
+    Component {
+        id: leaveGroupConfirmationDialogComponent
+        ConfirmationDialog {
+            confirmButtonObjectName: "leaveGroupConfirmationDialogLeaveButton"
+            headerSettings.title: qsTr("Leave group")
+            confirmationText: qsTr("Are you sure you want to leave group chat <b>%1</b>?").arg(root.chatName)
+            confirmButtonLabel: qsTr("Leave")
+            showCancelButton: true
+            cancelBtnType: "normal"
+
+            onClosed: {
+                destroy()
+            }
+            onCancelButtonClicked: {
+                close()
+            }
+            onConfirmButtonClicked: {
+                root.leaveChat(root.chatId)
+                close()
+            }
+        }
+    }
+
+    Component {
         id: deleteChatConfirmationDialogComponent
         ConfirmationDialog {
             confirmButtonObjectName: "deleteChatConfirmationDialogDeleteButton"
@@ -264,7 +298,8 @@ StatusMenu {
                                                 root.chatType === Constants.chatType.oneToOne ?
                                                 qsTr("Are you sure you want to delete this chat?"):
                                                 qsTr("Are you sure you want to leave this chat?")
-            showCancelButton: root.isCommunityChat
+            showCancelButton: true
+            cancelBtnType: "normal"
 
             onClosed: {
                 destroy()

@@ -6,6 +6,7 @@ import StatusQ.Core.Utils 0.1 as CoreUtils
 
 import mainui 1.0
 import AppLayouts.Profile.panels 1.0
+import shared.stores 1.0
 
 import utils 1.0
 
@@ -22,12 +23,14 @@ SplitView {
     Popups {
         popupParent: root
         rootStore: QtObject {}
+        communityTokensStore: CommunityTokensStore {}
     }
 
     readonly property string currentWallet: "0xcdc2ea3b6ba8fed3a3402f8db8b2fab53e7b7420"
 
     ListModel {
         id: accountsModel
+
         ListElement {
             name: "My Status Account"
             address: "0xcdc2ea3b6ba8fed3a3402f8db8b2fab53e7b7420"
@@ -58,6 +61,41 @@ SplitView {
         }
     }
 
+    ListModel {
+        id: inShowcaseAccountsModel
+
+        signal baseModelFilterConditionsMayHaveChanged()
+
+        function setVisibilityByIndex(index, visibility) {
+            if (visibility === Constants.ShowcaseVisibility.NoOne) {
+                remove(index)
+            } else {
+                 get(index).showcaseVisibility = visibility
+            }
+        }
+
+        function setVisibility(address, visibility) {
+            for (let i = 0; i < count; ++i) {
+                if (get(i).address === address) {
+                    setVisibilityByIndex(i, visibility)
+                }
+            }
+        }
+
+        function hasItemInShowcase(address) {
+            for (let i = 0; i < count; ++i) {
+                if (get(i).address === address) {
+                    return true
+                }
+            }
+            return false
+        }
+
+        function upsertItemJson(item) {
+            append(JSON.parse(item))
+        }
+    }
+
     StatusScrollView { // wrapped in a ScrollView on purpose; to simulate SettingsContentBase.qml
         SplitView.fillWidth: true
         SplitView.preferredHeight: 500
@@ -65,6 +103,7 @@ SplitView {
             id: showcasePanel
             width: 500
             baseModel: accountsModel
+            showcaseModel: inShowcaseAccountsModel
             currentWallet: root.currentWallet
         }
     }
@@ -83,3 +122,9 @@ SplitView {
         }
     }
 }
+
+// category: Panels
+
+// https://www.figma.com/file/idUoxN7OIW2Jpp3PMJ1Rl8/%E2%9A%99%EF%B8%8F-Settings-%7C-Desktop?node-id=14580-339549&t=RkXAEv3G6mp3EUvl-0
+// https://www.figma.com/file/idUoxN7OIW2Jpp3PMJ1Rl8/%E2%9A%99%EF%B8%8F-Settings-%7C-Desktop?node-id=14729-233846&t=RkXAEv3G6mp3EUvl-0
+// https://www.figma.com/file/idUoxN7OIW2Jpp3PMJ1Rl8/%E2%9A%99%EF%B8%8F-Settings-%7C-Desktop?node-id=14609-237740&t=RkXAEv3G6mp3EUvl-0

@@ -1,17 +1,17 @@
-import NimQml, Tables, sequtils, sugar
+import NimQml, sequtils, sugar
 
-import ../../../../global/global_singleton
-import ../../../../core/eventemitter
-import ../../../../../app_service/service/currency/service as currency_service
-import ../../../../../app_service/service/wallet_account/service as wallet_account_service
-import ../../../../../app_service/service/network/service as network_service
-import ../../../shared/wallet_utils
-import ../../../shared_models/currency_amount
+import app/global/global_singleton
+import app/core/eventemitter
+import app_service/service/currency/service as currency_service
+import app_service/service/wallet_account/service as wallet_account_service
+import app/modules/shared/wallet_utils
+import app/modules/shared_models/currency_amount
 import ./item
 
-import ../filter
 import ./io_interface, ./view, ./controller
 import ../io_interface as delegate_interface
+
+import backend/helpers/token
 
 export io_interface
 
@@ -65,7 +65,7 @@ proc getWalletAccoutColors(self: Module, walletAccounts: seq[WalletAccountDto]) 
     colors.add(account.colorId)
   return colors
 
-method filterChanged*(self: Module, addresses: seq[string], chainIds: seq[int], includeWatchOnly: bool, allAddresses: bool) =
+method filterChanged*(self: Module, addresses: seq[string], chainIds: seq[int], allAddresses: bool) =
   let walletAccounts = self.controller.getWalletAccountsByAddresses(addresses)
   if allAddresses:
     let item = initItem(
@@ -77,12 +77,12 @@ method filterChanged*(self: Module, addresses: seq[string], chainIds: seq[int], 
       "",
       isWatchOnlyAccount=false,
       isAllAccounts=true,
-      includeWatchOnly=includeWatchOnly,
       self.getWalletAccoutColors(walletAccounts)
     )
     self.view.setData(item)
   else:
     let walletAccount = walletAccounts[0]
+    let isWatchOnlyAccount = walletAccount.walletType == "watch"
     let item = initItem(
       walletAccount.name,
       walletAccount.mixedCaseAddress,
@@ -90,7 +90,8 @@ method filterChanged*(self: Module, addresses: seq[string], chainIds: seq[int], 
       walletAccount.assetsLoading,
       walletAccount.colorId,
       walletAccount.emoji,
-      isWatchOnlyAccount=walletAccount.walletType == "watch"
+      isWatchOnlyAccount=isWatchOnlyAccount,
+      canSend=not isWatchOnlyAccount and (walletAccount.operable==AccountFullyOperable or walletAccount.operable==AccountPartiallyOperable)
     )
     self.view.setData(item)
 

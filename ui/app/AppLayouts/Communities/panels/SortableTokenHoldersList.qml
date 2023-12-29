@@ -9,31 +9,26 @@ import StatusQ.Core.Utils 0.1 as StatusQUtils
 
 import utils 1.0
 
+import "../controls"
+
 /*!
    \qmltype SortableTokenHoldersList
    \inherits StatusListView
    \brief Shows list of users or addresses with corrensponding numbers of
    messages and holding amounts.
 
-   Expected roles: name, walletAddress, imageSource, noOfMessages, amount
+   Expected roles: contactId, name, walletAddress, imageSource, numberOfMessages, amount
   */
 StatusListView {
     id: root
 
-    enum SortBy {
-        None, Username, NoOfMessages, Holding
-    }
-
-    enum Sorting {
-        Descending, Ascending
-    }
-
     readonly property alias sortBy: d.sortBy
-    readonly property alias sorting: d.sorting
+    readonly property alias sortOrder: d.sorting
 
     signal clicked(int index, var parent, var mouse)
 
     currentIndex: -1
+    spacing: Style.current.halfPadding
 
     component ColumnHeader: StatusSortableColumnHeader {
         id: columnHeader
@@ -54,27 +49,17 @@ StatusListView {
             d.resetOtherHeaders(this)
 
             if (sorting === StatusSortableColumnHeader.Sorting.Ascending)
-                d.sorting = SortableTokenHoldersList.Sorting.Ascending
+                d.sorting = Qt.AscendingOrder
             else if (sorting === StatusSortableColumnHeader.Sorting.Descending)
-                d.sorting = SortableTokenHoldersList.Sorting.Descending
+                d.sorting = Qt.DescendingOrder
         }
-    }
-
-    component NumberCell: StatusBaseText {
-        horizontalAlignment: Qt.AlignRight
-
-        font.weight: Font.Medium
-        font.pixelSize: 13
-
-        color: Theme.palette.baseColor1
-        elide: Qt.ElideRight
     }
 
     QtObject {
         id: d
 
-        property int sortBy: SortableTokenHoldersList.SortBy.None
-        property int sorting: SortableTokenHoldersList.Sorting.Descending
+        property int sortBy: TokenHoldersProxyModel.SortBy.None
+        property int sorting: Qt.DescendingOrder
 
         readonly property int red2Color: 4
 
@@ -86,6 +71,7 @@ StatusListView {
 
         padding: 0
         horizontalPadding: Style.current.padding
+
 
         readonly property alias usernameHeaderWidth: usernameHeader.width
         readonly property alias noOfMessagesHeaderWidth: noOfMessagesHeader.width
@@ -110,9 +96,9 @@ StatusListView {
 
                     onClicked: {
                         if (sorting !== StatusSortableColumnHeader.Sorting.NoSorting)
-                            d.sortBy = SortableTokenHoldersList.SortBy.Username
+                            d.sortBy = TokenHoldersProxyModel.SortBy.Username
                         else
-                            d.sortBy = SortableTokenHoldersList.SortBy.None
+                            d.sortBy = TokenHoldersProxyModel.SortBy.None
                     }
                 }
 
@@ -128,9 +114,9 @@ StatusListView {
 
                 onClicked: {
                     if (sorting !== StatusSortableColumnHeader.Sorting.NoSorting)
-                        d.sortBy = SortableTokenHoldersList.SortBy.NoOfMessages
+                        d.sortBy = TokenHoldersProxyModel.SortBy.NumberOfMessages
                     else
-                        d.sortBy = SortableTokenHoldersList.SortBy.None
+                        d.sortBy = TokenHoldersProxyModel.SortBy.None
                 }
             }
 
@@ -146,128 +132,42 @@ StatusListView {
 
                     onClicked: {
                         if (sorting !== StatusSortableColumnHeader.Sorting.NoSorting)
-                            d.sortBy = SortableTokenHoldersList.SortBy.Holding
+                            d.sortBy = TokenHoldersProxyModel.SortBy.Holding
                         else
-                            d.sortBy = SortableTokenHoldersList.SortBy.None
+                            d.sortBy = TokenHoldersProxyModel.SortBy.None
                     }
                 }
             }
         }
     }
 
-    delegate: ItemDelegate {
+    delegate: TokenHolderListItem {
         id: delegate
 
-        padding: 0
-        horizontalPadding: Style.current.padding
+        width: ListView.view.width
+        usernameHeaderWidth: root.headerItem.usernameHeaderWidth
+        noOfMessagesHeaderWidth: root.headerItem.noOfMessagesHeaderWidth
+        holdingHeaderWidth: root.headerItem.holdingHeaderWidth
+        isCurrentItem: delegate.ListView.isCurrentItem
 
-        topPadding: showSeparator ? 10 : 0
+        remotelyDestructInProgress: model.remotelyDestructState === Constants.ContractTransactionStatus.InProgress
 
-        readonly property string name: model.name
+        contactId: model.contactId
+        name: model.name
+        walletAddress: model.walletAddress
+        imageSource: model.imageSource
+        numberOfMessages: model.numberOfMessages
+        amount: model.amount
 
-        readonly property bool isFirstRowAddress: {
-            if (model.name !== "")
+        showSeparator: isFirstRowAddress && root.sortBy === TokenHoldersProxyModel.SortBy.Username
+        isFirstRowAddress: {
+            if (name !== "")
                 return false
 
             const item = root.itemAtIndex(index - 1)
             return item && item.name
         }
 
-        readonly property bool showSeparator: isFirstRowAddress
-            && root.sortBy === SortableTokenHoldersList.SortBy.Username
-
-        width: ListView.view.width
-
-        background: Item {
-            Rectangle {
-                anchors.fill: parent
-
-                anchors.topMargin: delegate.topPadding
-
-                radius: Style.current.radius
-                color: (delegate.hovered || delegate.ListView.isCurrentItem)
-                       ? Theme.palette.baseColor2 : "transparent"
-            }
-
-            Rectangle {
-                visible: delegate.showSeparator
-
-                anchors.top: parent.top
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.topMargin: delegate.topPadding / 2
-
-                height: 1
-                color: Theme.palette.baseColor2
-            }
-        }
-
-        contentItem: Item {
-            implicitWidth: delegateRow.implicitWidth
-            implicitHeight: delegateRow.implicitHeight
-
-            RowLayout {
-                id: delegateRow
-
-                spacing: Style.current.padding
-
-                StatusListItem {
-                    id: listItem
-
-                    readonly property bool unknownHolder: model.name === ""
-                    readonly property string formattedTitle: unknownHolder
-                                                             ? "?" : model.name
-
-                    readonly property string addressElided:
-                        StatusQUtils.Utils.elideText(
-                            model.walletAddress, 6, 3).replace("0x", "0×")
-
-                    Layout.preferredWidth: root.headerItem.usernameHeaderWidth
-
-                    color: "transparent"
-
-                    leftPadding: 0
-                    rightPadding: 0
-                    sensor.enabled: false
-                    title: unknownHolder ? addressElided : model.name
-
-                    statusListItemIcon.name: "?"
-
-                    subTitle: unknownHolder ? "" : addressElided
-
-                    statusListItemSubTitle.font.pixelSize: Theme.asideTextFontSize
-                    statusListItemSubTitle.lineHeightMode: Text.FixedHeight
-                    statusListItemSubTitle.lineHeight: 14
-
-                    asset.name: model.imageSource
-                    asset.isImage: true
-                    asset.isLetterIdenticon: unknownHolder
-                    asset.color: Theme.palette.userCustomizationColors[d.red2Color]
-                }
-
-                NumberCell {
-                    Layout.preferredWidth: root.headerItem.noOfMessagesHeaderWidth
-
-                    text: model.name
-                          ? LocaleUtils.numberToLocaleString(model.noOfMessages)
-                          : "-"
-                }
-
-                NumberCell {
-                    Layout.preferredWidth: root.headerItem.holdingHeaderWidth
-
-                    text: LocaleUtils.numberToLocaleString(model.amount)
-                }
-            }
-        }
-
-        MouseArea {
-            anchors.fill: parent
-
-            acceptedButtons: Qt.AllButtons
-            cursorShape: Qt.PointingHandCursor
-
-            onClicked: root.clicked(model.index, delegate, mouse)
-        }
+        onClicked: root.clicked(model.index, delegate, mouse)
     }
 }

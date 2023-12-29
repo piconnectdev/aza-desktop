@@ -1,4 +1,4 @@
-import NimQml, Tables, strutils
+import NimQml, Tables, strutils, strformat
 
 import fetching_data_item
 
@@ -16,6 +16,8 @@ QtObject:
       allTotalsSet: bool
       lastKnownBackedUpMsgClock: uint64
 
+  proc reevaluateAllTotals(self: Model)
+
   proc delete(self: Model) =
     self.items = @[]
     self.QAbstractListModel.delete
@@ -28,6 +30,11 @@ QtObject:
     result.setup
     result.allTotalsSet = false
     result.lastKnownBackedUpMsgClock = 0
+
+  proc `$`*(self: Model): string =
+    result = "FetchingDataModel:\n"
+    for i in 0 ..< self.items.len:
+      result &= fmt"""[{i}]:{$self.items[i]}"""
 
   proc countChanged(self: Model) {.signal.}
   proc getCount*(self: Model): int {.slot.} =
@@ -87,7 +94,9 @@ QtObject:
     if(ind == -1):
       return
     self.items[ind].receivedMessageAtPosition(position)
+    self.reevaluateAllTotals()
     let index = self.createIndex(ind, 0, nil)
+    defer: index.delete
     self.dataChanged(index, index, @[ModelRole.LoadedMessages.int])
 
   proc evaluateWhetherToProcessReceivedData*(self: Model, backedUpMsgClock: uint64, entities: seq[tuple[entity: string, icon: string]]): bool =
@@ -114,6 +123,7 @@ QtObject:
     self.items[ind].totalMessages = totalMessages
     self.reevaluateAllTotals()
     let index = self.createIndex(ind, 0, nil)
+    defer: index.delete
     self.dataChanged(index, index, @[ModelRole.TotalMessages.int, ModelRole.LoadedMessages.int])
 
   proc removeSection*(self: Model, entity: string) =
@@ -142,4 +152,4 @@ QtObject:
     let ind = self.findIndexForEntity(entity)
     if(ind == -1):
       return false
-    return self.items[ind].loadedMessages == self.items[ind].totalMessages
+    return self.items[ind].totalMessages > 0 and self.items[ind].loadedMessages == self.items[ind].totalMessages

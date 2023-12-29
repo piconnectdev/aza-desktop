@@ -1,29 +1,37 @@
-import QtQuick 2.13
-import QtQuick.Controls 2.13
-import QtQuick.Layouts 1.13
+import QtQuick 2.15
+import QtQuick.Controls 2.15
+import QtQuick.Layouts 1.15
 
 import utils 1.0
 import shared 1.0
 import shared.panels 1.0
 import shared.stores 1.0 as SharedStores
+import shared.popups.keycard 1.0
 
 import AppLayouts.Wallet.controls 1.0
+import AppLayouts.Wallet.stores 1.0
 
 import "stores"
 import "popups"
 import "views"
 
+import StatusQ.Core 0.1
 import StatusQ.Layout 0.1
 import StatusQ.Controls 0.1
+import StatusQ.Popups.Dialog 0.1
+import StatusQ.Core.Utils 0.1 as SQUtils
 
 StatusSectionLayout {
     id: root
+
+    objectName: "profileStatusSectionLayout"
 
     property ProfileSectionStore store
     property var globalStore
     property var systemPalette
     property var emojiPopup
     property var networkConnectionStore
+    required property TokensStore tokensStore
 
     backButtonName: root.store.backButtonName
     notificationCount: activityCenterStore.unreadNotificationsCount
@@ -35,6 +43,10 @@ StatusSectionLayout {
         case Constants.settingsSubsection.contacts:
             Global.changeAppSectionBySectionType(Constants.appSection.profile, Constants.settingsSubsection.messaging)
             break;
+        case Constants.settingsSubsection.about_privacy:
+        case Constants.settingsSubsection.about_terms:
+            Global.changeAppSectionBySectionType(Constants.appSection.profile, Constants.settingsSubsection.about)
+            break;
         case Constants.settingsSubsection.wallet:
             walletView.item.resetStack()
             break;
@@ -42,6 +54,7 @@ StatusSectionLayout {
             keycardView.item.handleBackAction()
             break;
         }
+        Global.settingsSubSubsection = -1
     }
 
     Component.onCompleted: {
@@ -68,7 +81,7 @@ StatusSectionLayout {
         store: root.store
         anchors.fill: parent
         onMenuItemClicked: {
-            if (profileContainer.currentItem.dirty) {
+            if (profileContainer.currentItem.dirty && !profileContainer.currentItem.ignoreDirty) {
                 event.accepted = true;
                 profileContainer.currentItem.notifyDirty();
             }
@@ -93,6 +106,8 @@ StatusSectionLayout {
 
             if (currentIndex === Constants.settingsSubsection.contacts) {
                 root.store.backButtonName = root.store.getNameForSubsection(Constants.settingsSubsection.messaging)
+            } else if (currentIndex === Constants.settingsSubsection.about_privacy || currentIndex === Constants.settingsSubsection.about_terms) {
+                root.store.backButtonName = root.store.getNameForSubsection(Constants.settingsSubsection.about)
             } else if (currentIndex === Constants.settingsSubsection.wallet) {
                 walletView.item.resetStack()
             } else if (currentIndex === Constants.settingsSubsection.keycard) {
@@ -171,6 +186,7 @@ StatusSectionLayout {
                 implicitHeight: parent.height
                 rootStore: root.store
                 walletStore: root.store.walletStore
+                tokensStore: root.tokensStore
                 emojiPopup: root.emojiPopup
                 sectionTitle: root.store.getNameForSubsection(Constants.settingsSubsection.wallet)
                 contentWidth: d.contentWidth
@@ -226,6 +242,7 @@ StatusSectionLayout {
                 implicitWidth: parent.width
                 implicitHeight: parent.height
 
+                isProduction: production
                 profileStore: root.store.profileStore
                 devicesStore: root.store.devicesStore
                 privacyStore: root.store.privacyStore
@@ -283,11 +300,15 @@ StatusSectionLayout {
                         return root.store.getCurrentVersion()
                     }
 
-                    function getReleaseNotes() {
-                        const link = isProduction ? "https://github.com/status-im/status-desktop/releases/%1".arg(getCurrentVersion()) :
-                                                    "https://github.com/status-im/status-desktop/"
+                    function getStatusGoVersion() {
+                        return root.store.getStatusGoVersion()
+                    }
 
-                        openLink(link)
+                    function getReleaseNotes() {
+                        const link = isProduction ? "https://github.com/status-im/status-desktop/releases/tag/%1" :
+                                                    "https://github.com/status-im/status-desktop/commit/%1"
+
+                        openLink(link.arg(getCurrentVersion()))
                     }
 
                     function openLink(url) {
@@ -328,6 +349,92 @@ StatusSectionLayout {
                 mainSectionTitle: root.store.getNameForSubsection(Constants.settingsSubsection.keycard)
                 contentWidth: d.contentWidth
             }
+        }
+
+        Loader {
+            active: false
+            asynchronous: true
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            sourceComponent: SettingsContentBase {
+                implicitWidth: parent.width
+                implicitHeight: parent.height
+                sectionTitle: "Status Software Terms of Use"
+                contentWidth: d.contentWidth
+
+                StatusBaseText {
+                    width: d.contentWidth
+                    wrapMode: Text.Wrap
+                    textFormat: Text.MarkdownText
+                    text: SQUtils.StringUtils.readTextFile(":/imports/assets/docs/terms-of-use.mdwn")
+                }
+            }
+        }
+
+        Loader {
+            active: false
+            asynchronous: true
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            sourceComponent: SettingsContentBase {
+                implicitWidth: parent.width
+                implicitHeight: parent.height
+                sectionTitle: "Status Software Privacy Statement"
+                contentWidth: d.contentWidth
+
+                StatusBaseText {
+                    width: d.contentWidth
+                    wrapMode: Text.Wrap
+                    textFormat: Text.MarkdownText
+                    text: SQUtils.StringUtils.readTextFile(":/imports/assets/docs/privacy.mdwn")
+                }
+            }
+        }
+    }
+
+    Connections {
+        target: root.store.keycardStore.keycardModule
+        enabled: profileContainer.currentIndex === Constants.settingsSubsection.wallet ||
+                 profileContainer.currentIndex === Constants.settingsSubsection.keycard
+
+        function onDisplayKeycardSharedModuleFlow() {
+            keycardPopup.active = true
+        }
+        function onDestroyKeycardSharedModuleFlow() {
+            keycardPopup.active = false
+        }
+        function onSharedModuleBusy() {
+            Global.openPopup(sharedModuleBusyPopupComponent)
+        }
+    }
+
+    Loader {
+        id: keycardPopup
+        active: false
+        sourceComponent: KeycardPopup {
+            sharedKeycardModule: root.store.keycardStore.keycardModule.keycardSharedModule
+            emojiPopup: root.emojiPopup
+        }
+
+        onLoaded: {
+            keycardPopup.item.open()
+        }
+    }
+
+    Component {
+        id: sharedModuleBusyPopupComponent
+        StatusDialog {
+            id: titleContentDialog
+            title: qsTr("Status Keycard")
+
+            StatusBaseText {
+                anchors.fill: parent
+                font.pixelSize: Constants.keycard.general.fontSize2
+                color: Theme.palette.directColor1
+                text: qsTr("The Keycard module is still busy, please try again")
+            }
+
+            standardButtons: Dialog.Ok
         }
     }
 }

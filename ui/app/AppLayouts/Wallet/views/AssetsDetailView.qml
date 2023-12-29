@@ -23,11 +23,13 @@ Item {
     property var token: ({})
     property var networkConnectionStore
     /*required*/ property string address: ""
+    property bool showAllAccounts: false
     property bool assetsLoading: true
 
     QtObject {
         id: d
         property var marketValueStore : RootStore.marketValueStore
+        readonly property string symbol: root.token ? root.token.symbol : ""
     }
 
     Connections {
@@ -53,18 +55,13 @@ Item {
         width: parent.width
         asset.name: token && token.symbol ? Style.png("tokens/%1".arg(token.symbol)) : ""
         asset.isImage: true
-        primaryText: token.name ?? Constants.dummyText
-        secondaryText: token ? LocaleUtils.currencyAmountToLocaleString(token.enabledNetworkBalance) : Constants.dummyText
-        tertiaryText: token ? LocaleUtils.currencyAmountToLocaleString(token.enabledNetworkCurrencyBalance) : Constants.dummyText
+        primaryText: token && token.name ? token.name : Constants.dummyText
+        secondaryText: token && token.enabledNetworkBalance ? LocaleUtils.currencyAmountToLocaleString(token.enabledNetworkBalance) : Constants.dummyText
+        tertiaryText: token && token.enabledNetworkCurrencyBalance ? LocaleUtils.currencyAmountToLocaleString(token.enabledNetworkCurrencyBalance) : Constants.dummyText
         balances: token && token.balances ? token.balances : null
+        networksModel: RootStore.allNetworks
         isLoading: root.assetsLoading
         errorTooltipText: token && token.balances ? networkConnectionStore.getBlockchainNetworkDownTextForToken(token.balances): ""
-        getNetworkColor: function(chainId){
-            return RootStore.getNetworkColor(chainId)
-        }
-        getNetworkIcon: function(chainId){
-            return RootStore.getNetworkIcon(chainId)
-        }
         formatBalance: function(balance){
             return LocaleUtils.currencyAmountToLocaleString(balance)
         }
@@ -132,6 +129,13 @@ Item {
 
                 chart.animateToNewData()
             }
+
+            readonly property var dateToShortLabel: function (value) {
+                    const range = balanceStore.timeRangeStrToEnum(graphDetail.selectedTimeRange)
+                    return range === ChartStoreBase.TimeRange.Weekly || range === ChartStoreBase.TimeRange.Monthly ?
+                         LocaleUtils.getDayMonth(value) :
+                         LocaleUtils.getMonthYear(value)
+            }
             chart.chartType: 'line'
             chart.chartData: {
                 return {
@@ -141,7 +145,7 @@ Item {
                             yAxisId: 'y-axis-1',
                             backgroundColor: (Theme.palette.name === "dark") ? 'rgba(136, 176, 255, 0.2)' : 'rgba(67, 96, 223, 0.2)',
                             borderColor: (Theme.palette.name === "dark") ? 'rgba(136, 176, 255, 1)' : 'rgba(67, 96, 223, 1)',
-                            borderWidth: 3,
+                            borderWidth: graphDetail.selectedGraphType === AssetsDetailView.GraphType.Price ? 3 : 2,
                             pointRadius: 0,
                             data: RootStore.marketHistoryIsLoading ? [] : graphDetail.dataRange,
                             parsing: false,
@@ -156,6 +160,11 @@ Item {
                     legend: {
                         display: false
                     },
+                    elements: {
+                        line: {
+                            cubicInterpolationMode: 'monotone' // without it interpolation makes the line too curvy that can extend horizontally farther then data points
+                        }
+                    },
                     //TODO enable zoom
                     //zoom: {
                     //  enabled: true,
@@ -165,6 +174,15 @@ Item {
                     //},
                     //pan:{enabled:true,mode:'x'},
                     tooltips: {
+                        format: {
+                            enabled: graphDetail.selectedGraphType === AssetsDetailView.GraphType.Balance,
+                            callback: function (value) {
+                                return graphDetail.dateToShortLabel(value)
+                            },
+                            valueCallback: function(value) {
+                                return LocaleUtils.currencyAmountToLocaleString({ amount: value, symbol: RootStore.currencyStore.currentCurrencySymbol, displayDecimals: 2 })
+                            }
+                        },
                         intersect: false,
                         displayColors: false,
                         callbacks: {
@@ -173,15 +191,26 @@ Item {
                                 if (label) {
                                     label += ': ';
                                 }
-                                label += tooltipItem.yLabel.toFixed(2);
-                                return label.slice(0,label.indexOf(":")+1) + " %1".arg(RootStore.currencyStore.currentCurrencySymbol) + label.slice(label.indexOf(":") + 2, label.length);
+
+                                if (graphDetail.selectedGraphType === AssetsDetailView.GraphType.Balance)
+                                    return label + tooltipItem.yLabel // already formatted in tooltips.value.callback
+
+                                const value = LocaleUtils.currencyAmountToLocaleString({ amount: tooltipItem.yLabel, symbol: RootStore.currencyStore.currentCurrencySymbol, displayDecimals: 2 })
+                                return label + value
                             }
                         }
                     },
                     scales: {
+                        labelFormat: {
+                            callback: function (value) {
+                                return graphDetail.dateToShortLabel(value)
+                            },
+                            enabled: graphDetail.selectedGraphType === AssetsDetailView.GraphType.Balance,
+                        },
                         xAxes: [{
                                 id: 'x-axis-1',
                                 position: 'bottom',
+                                type: graphDetail.selectedGraphType === AssetsDetailView.GraphType.Price ? 'category' : 'time',
                                 gridLines: {
                                     drawOnChartArea: false,
                                     drawBorder: false,
@@ -195,6 +224,9 @@ Item {
                                     minRotation: 0,
                                     maxTicksLimit: graphDetail.maxTicksLimit,
                                 },
+                                time: {
+                                    minUnit: 'day' // for '7days' timeframe, otherwise labels are '10PM', '10AM', '10PM', etc
+                                }
                             }],
                         yAxes: [{
                                 position: 'left',
@@ -235,8 +267,8 @@ Item {
                 let selectedTimeRangeEnum = balanceStore.timeRangeStrToEnum(graphDetail.selectedTimeRange)
 
                 let currencySymbol = RootStore.currencyStore.currentCurrency
-                if(!balanceStore.hasData(root.address, token.symbol, currencySymbol, selectedTimeRangeEnum)) {
-                    RootStore.fetchHistoricalBalanceForTokenAsJson(root.address, token.symbol, currencySymbol, selectedTimeRangeEnum)
+                if(!balanceStore.hasData(root.address, root.showAllAccounts, token.symbol, currencySymbol, selectedTimeRangeEnum)) {
+                    RootStore.fetchHistoricalBalanceForTokenAsJson(root.address, root.showAllAccounts, token.symbol, currencySymbol, selectedTimeRangeEnum)
                 }
             }
 
@@ -255,8 +287,8 @@ Item {
                 }
 
                 Connections {
-                    target: token
-                    function onSymbolChanged() { graphDetail.updateBalanceStore() }
+                    target: d
+                    function onSymbolChanged() { if (d.symbol) graphDetail.updateBalanceStore() }
                 }
             }
         }
@@ -297,7 +329,7 @@ Item {
                 Layout.fillWidth: true
             }
             InformationTile {
-                readonly property double changePctHour: token.changePctHour ?? 0
+                readonly property double changePctHour: token && token.changePctHour ? token.changePctHour : 0
                 maxWidth: parent.width
                 primaryText: qsTr("Hour")
                 secondaryText: "%1%".arg(LocaleUtils.numberToLocaleString(changePctHour, 2))
@@ -307,7 +339,7 @@ Item {
                 isLoading: root.assetsLoading
             }
             InformationTile {
-                readonly property double changePctDay: token.changePctDay ?? 0
+                readonly property double changePctDay: token && token.changePctDay ? token.changePctDay : 0
                 maxWidth: parent.width
                 primaryText: qsTr("Day")
                 secondaryText: "%1%".arg(LocaleUtils.numberToLocaleString(changePctDay, 2))
@@ -317,7 +349,7 @@ Item {
                 isLoading: root.assetsLoading
             }
             InformationTile {
-                readonly property double changePct24hour: token.changePct24hour ?? 0
+                readonly property double changePct24hour: token && token.changePct24hour ? token.changePct24hour : 0
                 maxWidth: parent.width
                 primaryText: qsTr("24 Hours")
                 secondaryText: "%1%".arg(LocaleUtils.numberToLocaleString(changePct24hour, 2))
@@ -365,7 +397,7 @@ Item {
                         font.pixelSize: 15
                         lineHeight: 22
                         lineHeightMode: Text.FixedHeight
-                        text: token.description ?? Constants.dummyText
+                        text: token && token.description ? token.description : Constants.dummyText
                         customColor: Theme.palette.directColor1
                         elide: Text.ElideRight
                         wrapMode: Text.Wrap
@@ -407,7 +439,7 @@ Item {
                                 return networkIconUrl ? Style.svg("tiny/" + networkIconUrl) : ""
                             }
                             tagPrimaryLabel.text: token && token.builtOn !== "" ? RootStore.getNetworkName(token.builtOn) : "---"
-                            tagSecondaryLabel.text: token.address ?? "---"
+                            tagSecondaryLabel.text: token && token.address ? token.address : "---"
                             visible: typeof token != "undefined" && token && token.builtOn !== "" && token.address !== ""
                             customBackground: Component {
                                 Rectangle {

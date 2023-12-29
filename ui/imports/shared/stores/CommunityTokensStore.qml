@@ -9,25 +9,38 @@ QtObject {
     // Network selection properties:
     property var layer1Networks: networksModule.layer1
     property var layer2Networks: networksModule.layer2
-    property var testNetworks: networksModule.test
     property var enabledNetworks: networksModule.enabled
     property var allNetworks: networksModule.all
 
-    signal deployFeeUpdated(var ethCurrency, var fiatCurrency, int error)
-    signal selfDestructFeeUpdated(var ethCurrency, var fiatCurrency, int error)
+    // set by asyncGetOwnerTokenDetails
+    readonly property var ownerTokenDetails: {
+        JSON.parse(communityTokensModuleInst.ownerTokenDetails)
+    }
+
+    signal deployFeeUpdated(var ethCurrency, var fiatCurrency, int error, string responseId)
+    signal selfDestructFeeUpdated(var ethCurrency, var fiatCurrency, int error, string responseId)
     signal airdropFeeUpdated(var airdropFees)
-    signal burnFeeUpdated(var ethCurrency, var fiatCurrency, int error)
+    signal burnFeeUpdated(var ethCurrency, var fiatCurrency, int error, string responseId)
+    signal setSignerFeeUpdated(var ethCurrency, var fiatCurrency, int error, string responseId)
 
     signal deploymentStateChanged(string communityId, int status, string url)
+    signal ownerTokenDeploymentStateChanged(string communityId, int status, string url)
     signal remoteDestructStateChanged(string communityId, string tokenName, int status, string url)
     signal burnStateChanged(string communityId, string tokenName, int status, string url)
     signal airdropStateChanged(string communityId, string tokenName, string chainName, int status, string url)
+    signal ownerTokenDeploymentStarted(string communityId, string url)
+    signal setSignerStateChanged(string communityId, string communityName, int status, string url)
+    signal ownershipLost(string communityId, string communityName)
+    signal communityOwnershipDeclined(string communityName)
+    signal sendOwnerTokenStateChanged(string tokenName, int status, string url)
+    signal ownerTokenReceived(string communityId, string communityName)
 
     // Minting tokens:
     function deployCollectible(communityId, collectibleItem)
-    {        
-        // TODO: Backend will need to check if the collectibleItem has a valid tokenKey, so it means a deployment retry,
-        // otherwise, it is a new deployment.
+    {
+        if (collectibleItem.key !== "")
+            deleteToken(communityId, collectibleItem.key)
+
         const jsonArtworkFile = Utils.getImageAndCropInfoJson(collectibleItem.artworkSource, collectibleItem.artworkCropRect)
         communityTokensModuleInst.deployCollectible(communityId, collectibleItem.accountAddress, collectibleItem.name,
                                                     collectibleItem.symbol, collectibleItem.description, collectibleItem.supply,
@@ -37,8 +50,9 @@ QtObject {
 
     function deployAsset(communityId, assetItem)
     {
-        // TODO: Backend will need to check if the collectibleItem has a valid tokenKey, so it means a deployment retry,
-        // otherwise, it is a new deployment.
+        if (assetItem.key !== "")
+            deleteToken(communityId, assetItem.key)
+
         const jsonArtworkFile = Utils.getImageAndCropInfoJson(assetItem.artworkSource, assetItem.artworkCropRect)
         communityTokensModuleInst.deployAssets(communityId, assetItem.accountAddress, assetItem.name,
                                                assetItem.symbol, assetItem.description, assetItem.supply,
@@ -47,34 +61,58 @@ QtObject {
 
     function deployOwnerToken(communityId, ownerToken, tMasterToken)
     {
-        // NOTE for backend team: `ownerToken` and `tMasterToken` can be used to do an assertion before the deployment process starts, since
-        // the objects have been created to display the token details to the user and must be the same than backend builds.
-        // TODO: Backend will need to check if the ownerToken or tMasterToken have a valid tokenKey, so it means a deployment retry,
-        // otherwise, it is a new deployment.
-        console.log("TODO: Backend Owner and Token Master token deployment!")
+        const jsonArtworkFile = Utils.getImageAndCropInfoJson(ownerToken.artworkSource, ownerToken.artworkCropRect)
+        communityTokensModuleInst.deployOwnerToken(communityId, ownerToken.accountAddress, ownerToken.name, ownerToken.symbol, ownerToken.description,
+                                                   tMasterToken.name, tMasterToken.symbol, tMasterToken.description, ownerToken.chainId, jsonArtworkFile)
     }
 
     function deleteToken(communityId, contractUniqueKey) {
-        console.log("TODO: Delete token bakend!")
+        let parts = contractUniqueKey.split("_");
+        communityTokensModuleInst.removeCommunityToken(communityId, parts[0], parts[1])
     }
+
+    function updateSmartContract(communityId, chainId, contractAddress, accountAddress) {
+        communityTokensModuleInst.setSigner(communityId, chainId, contractAddress, accountAddress)
+    }
+
+    function ownershipDeclined(communityId, communityName) {
+            communityTokensModuleInst.declineOwnership(communityId)
+            root.communityOwnershipDeclined(communityName)
+        }
 
     readonly property Connections connections: Connections {
         target: communityTokensModuleInst
 
-        function onDeployFeeUpdated(ethCurrency, fiatCurrency, errorCode) {
-            root.deployFeeUpdated(ethCurrency, fiatCurrency, errorCode)
+        function onDeployFeeUpdated(ethCurrency, fiatCurrency, errorCode, responseId) {
+            root.deployFeeUpdated(ethCurrency, fiatCurrency, errorCode, responseId)
         }
 
-        function onSelfDestructFeeUpdated(ethCurrency, fiatCurrency, errorCode) {
-            root.selfDestructFeeUpdated(ethCurrency, fiatCurrency, errorCode)
+        function onSelfDestructFeeUpdated(ethCurrency, fiatCurrency, errorCode, responseId) {
+            root.selfDestructFeeUpdated(ethCurrency, fiatCurrency, errorCode, responseId)
         }
 
         function onAirdropFeesUpdated(jsonFees) {
             root.airdropFeeUpdated(JSON.parse(jsonFees))
         }
 
+        function onBurnFeeUpdated(ethCurrency, fiatCurrency, errorCode, responseId) {
+            root.burnFeeUpdated(ethCurrency, fiatCurrency, errorCode, responseId)
+        }
+
+        function onSetSignerFeeUpdated(ethCurrency, fiatCurrency, errorCode, responseId) {
+            root.setSignerFeeUpdated(ethCurrency, fiatCurrency, errorCode, responseId)
+        }
+
         function onDeploymentStateChanged(communityId, status, url) {
             root.deploymentStateChanged(communityId, status, url)
+        }
+
+        function onOwnerTokenDeploymentStateChanged(communityId, status, url) {
+            root.ownerTokenDeploymentStateChanged(communityId, status, url)
+        }
+
+        function onOwnerTokenDeploymentStarted(communityId, url) {
+            root.ownerTokenDeploymentStarted(communityId, url)
         }
 
         function onRemoteDestructStateChanged(communityId, tokenName, status, url) {
@@ -89,40 +127,79 @@ QtObject {
             root.burnStateChanged(communityId, tokenName, status, url)
         }
 
-        function onBurnFeeUpdated(ethCurrency, fiatCurrency, errorCode) {
-            root.burnFeeUpdated(ethCurrency, fiatCurrency, errorCode)
+        function onOwnerTokenReceived(communityId, communityName, chainId, communityAddress) {
+            root.ownerTokenReceived(communityId, communityName)
+        }
+
+        function onSetSignerStateChanged(communityId, communityName, status, url) {
+            root.setSignerStateChanged(communityId, communityName, status, url)
+        }
+
+        function onOwnershipLost(communityId, communityName) {
+            root.ownershipLost(communityId, communityName)
+        }
+
+        function onSendOwnerTokenStateChanged(tokenName, status, url) {
+            root.sendOwnerTokenStateChanged(tokenName, status, url)
         }
     }
 
-    function computeDeployFee(chainId, accountAddress, tokenType) {
-        communityTokensModuleInst.computeDeployFee(chainId, accountAddress, tokenType)
-    }
-
-    function computeSelfDestructFee(selfDestructTokensList, tokenKey) {
-        communityTokensModuleInst.computeSelfDestructFee(JSON.stringify(selfDestructTokensList), tokenKey)
-    }
-
-    function remoteSelfDestructCollectibles(communityId, selfDestructTokensList, tokenKey) {
-        communityTokensModuleInst.selfDestructCollectibles(communityId, JSON.stringify(selfDestructTokensList), tokenKey)
-    }
-
     // Burn:
-    function computeBurnFee(tokenKey, amount) {
-        communityTokensModuleInst.computeBurnFee(tokenKey, amount)
+    function computeBurnFee(tokenKey, amount, accountAddress, requestId) {
+        console.assert(typeof amount === "string")
+        communityTokensModuleInst.computeBurnFee(tokenKey, amount, accountAddress, requestId)
     }
 
-    function burnToken(communityId, tokenKey, burnAmount) {
-        communityTokensModuleInst.burnTokens(communityId, tokenKey, burnAmount)
+    function computeAirdropFee(communityId, contractKeysAndAmounts, addresses, feeAccountAddress, requestId) {
+        communityTokensModuleInst.computeAirdropFee(
+                    communityId, JSON.stringify(contractKeysAndAmounts),
+                    JSON.stringify(addresses), feeAccountAddress, requestId)
+    }
+
+    function computeDeployFee(communityId, chainId, accountAddress, tokenType, isOwnerDeployment, requestId) {
+        communityTokensModuleInst.computeDeployFee(communityId, chainId, accountAddress, tokenType, isOwnerDeployment, requestId)
+    }
+
+    function computeSetSignerFee(chainId, contractAddress, accountAddress, requestId) {
+        communityTokensModuleInst.computeSetSignerFee(chainId, contractAddress, accountAddress, requestId)
+    }
+
+    /**
+      * walletsAndAmounts - array of following structure is expected:
+      * [
+      *   {
+      *      walletAddress: string
+      *      amount: int
+      *   }
+      * ]
+      */
+    function computeSelfDestructFee(walletsAndAmounts, tokenKey, accountAddress, requestId) {
+        communityTokensModuleInst.computeSelfDestructFee(JSON.stringify(walletsAndAmounts), tokenKey, accountAddress, requestId)
+    }
+
+    function remoteSelfDestructCollectibles(communityId, walletsAndAmounts, tokenKey, accountAddress) {
+        communityTokensModuleInst.selfDestructCollectibles(communityId, JSON.stringify(walletsAndAmounts), tokenKey, accountAddress)
+    }
+
+    function remotelyDestructAndBan(communityId, contactId, tokenKey, accountAddress, deleteMessages) {
+        console.warn("remotelyDestructAndBan, not implemented yet!")
+    }
+
+    function remotelyDestructAndKick(communityId, contactId, tokenKey, accountAddress) {
+        console.warn("remotelyDestructAndKick, not implemented yet!")
+    }
+
+    function burnToken(communityId, tokenKey, burnAmount, accountAddress) {
+        console.assert(typeof burnAmount === "string")
+        communityTokensModuleInst.burnTokens(communityId, tokenKey, burnAmount, accountAddress)
     }
 
     // Airdrop tokens:
-    function airdrop(communityId, airdropTokens, addresses) {
-        communityTokensModuleInst.airdropTokens(communityId, JSON.stringify(airdropTokens), JSON.stringify(addresses))
+    function airdrop(communityId, airdropTokens, addresses, feeAccountAddress) {
+        communityTokensModuleInst.airdropTokens(communityId, JSON.stringify(airdropTokens), JSON.stringify(addresses), feeAccountAddress)
     }
 
-    function computeAirdropFee(communityId, contractKeysAndAmounts, addresses) {
-        communityTokensModuleInst.computeAirdropFee(
-                    communityId, JSON.stringify(contractKeysAndAmounts),
-                    JSON.stringify(addresses))
+    function asyncGetOwnerTokenDetails(communityId) {
+        communityTokensModuleInst.asyncGetOwnerTokenDetails(communityId)
     }
 }

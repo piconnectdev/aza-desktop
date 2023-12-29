@@ -1,4 +1,4 @@
-import Tables, NimQml
+import NimQml
 import ../io_interface as delegate_interface
 import io_interface, view, controller, combined_item, item
 import ../../../../../core/eventemitter
@@ -39,6 +39,7 @@ method getModuleAsVariant*(self: Module): QVariant =
   return self.viewVariant
 
 method refreshNetworks*(self: Module) =
+  var items: seq[Item] = @[]
   var combinedItems: seq[CombinedItem] = @[]
   for n in self.controller.getNetworks():
     var prod = newItem(
@@ -50,6 +51,8 @@ method refreshNetworks*(self: Module) =
         n.prod.chainColor,
         n.prod.rpcURL,
         n.prod.fallbackURL,
+        n.prod.originalRpcURL,
+        n.prod.originalFallbackURL,
         n.prod.blockExplorerURL,
         n.prod.nativeCurrencySymbol
       )
@@ -62,11 +65,17 @@ method refreshNetworks*(self: Module) =
         n.test.chainColor,
         n.test.rpcURL,
         n.test.fallbackURL,
+        n.test.originalRpcURL,
+        n.test.originalFallbackURL,
         n.test.blockExplorerURL,
         n.test.nativeCurrencySymbol
       )
+    if self.controller.areTestNetworksEnabled():
+      items.add(test)
+    else:
+      items.add(prod)
     combinedItems.add(initCombinedItem(prod,test,n.prod.layer))
-  self.view.setItems(combinedItems)
+  self.view.setItems(items, combinedItems)
 
 method load*(self: Module) =
   self.controller.init()
@@ -84,18 +93,22 @@ proc checkIfModuleDidLoad(self: Module) =
 method viewDidLoad*(self: Module) =
   self.checkIfModuleDidLoad()
 
-method areTestNetworksEnabled*(self: Module): bool = 
+proc areTestNetworksEnabled*(self: Module): bool = 
   return self.controller.areTestNetworksEnabled()
 
 method toggleTestNetworksEnabled*(self: Module) = 
   self.controller.toggleTestNetworksEnabled()
   self.refreshNetworks()
 
-method updateNetworkEndPointValues*(self: Module, chainId: int, newMainRpcInput, newFailoverRpcUrl: string) =
-  self.controller.updateNetworkEndPointValues(chainId, newMainRpcInput, newFailoverRpcUrl)
+method toggleIsSepoliaEnabled*(self: Module) = 
+  self.controller.toggleIsSepoliaEnabled()
+  self.refreshNetworks()
 
-method fetchChainIdForUrl*(self: Module, url: string) =
-  self.controller.fetchChainIdForUrl(url)
+method updateNetworkEndPointValues*(self: Module, chainId: int, newMainRpcInput, newFailoverRpcUrl: string, revertToDefault: bool) =
+  self.controller.updateNetworkEndPointValues(chainId, newMainRpcInput, newFailoverRpcUrl, revertToDefault)
 
-method chainIdFetchedForUrl*(self: Module, url: string, chainId: int, success: bool) =
-  self.view.chainIdFetchedForUrl(url, chainId, success)
+method fetchChainIdForUrl*(self: Module, url: string, isMainUrl: bool) =
+  self.controller.fetchChainIdForUrl(url, isMainUrl)
+
+method chainIdFetchedForUrl*(self: Module, url: string, chainId: int, success: bool, isMainUrl: bool) =
+  self.view.chainIdFetchedForUrl(url, chainId, success, isMainUrl)

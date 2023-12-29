@@ -142,6 +142,8 @@
         <file>assets/img/icons/arrow-left.svg</file>
         <file>assets/img/icons/arrow-right.svg</file>
         <file>assets/img/icons/arrow-up.svg</file>
+        <file>assets/img/icons/arrow-top.svg</file>
+        <file>assets/img/icons/arrow-bottom.svg</file>
         <file>assets/img/icons/arrow.svg</file>
         <file>assets/img/icons/audio.svg</file>
         <file>assets/img/icons/backspace.svg</file>
@@ -176,7 +178,7 @@
         <file>assets/img/icons/delete.svg</file>
         <file>assets/img/icons/desktop.svg</file>
         <file>assets/img/icons/discord.svg</file>
-        <file>assets/img/icons/dots-icon.svg</file>        
+        <file>assets/img/icons/dots-icon.svg</file>
         <file>assets/img/icons/double-checkmark.svg</file>
         <file>assets/img/icons/download.svg</file>
         <file>assets/img/icons/edit.svg</file>
@@ -202,6 +204,7 @@
         <file>assets/img/icons/github.svg</file>
         <file>assets/img/icons/group-chat.svg</file>
         <file>assets/img/icons/group.svg</file>
+        <file>assets/img/icons/active-members.svg</file>
         <file>assets/img/icons/help.svg</file>
         <file>assets/img/icons/hide.svg</file>
         <file>assets/img/icons/history.svg</file>
@@ -269,6 +272,7 @@
         <file>assets/img/icons/reply.svg</file>
         <file>assets/img/icons/retail.svg</file>
         <file>assets/img/icons/rotate.svg</file>
+        <file>assets/img/icons/sandwatch.svg</file>
         <file>assets/img/icons/search.svg</file>
         <file>assets/img/icons/secret.svg</file>
         <file>assets/img/icons/security.svg</file>
@@ -10405,5 +10409,7 @@
         <file>assets/twemoji/svg/e50a.svg</file>
         <file>assets/twemoji/LICENSE</file>
         <file>assets/twemoji/twemoji.js</file>
+        <file>assets/img/icons/caution.svg</file>
+        <file>assets/img/icons/crown-off.svg</file>
     </qresource>
 </RCC>

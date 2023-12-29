@@ -1,9 +1,11 @@
 import sugar, sequtils
 import io_interface
-import ../../../../../app_service/service/wallet_account/service as wallet_account_service
-import ../../../../../app_service/service/network/service as network_service
-import ../../../../../app_service/service/token/service as token_service
-import ../../../../../app_service/service/currency/service as currency_service
+import app_service/service/wallet_account/service as wallet_account_service
+import app_service/service/network/service as network_service
+import app_service/service/token/service as token_service
+import app_service/service/currency/service as currency_service
+
+import backend/helpers/token
 
 type
   Controller* = ref object of RootObj
@@ -56,3 +58,12 @@ proc getCurrentCurrency*(self: Controller): string =
 
 proc getCurrencyFormat*(self: Controller, symbol: string): CurrencyFormatDto =
   return self.currencyService.getCurrencyFormat(symbol)
+
+proc areTestNetworksEnabled*(self: Controller): bool =
+  return self.walletAccountService.areTestNetworksEnabled()
+
+proc getTokensByAddress*(self: Controller, address: string): seq[WalletTokenDto] =
+  return self.walletAccountService.getTokensByAddress(address)
+
+proc getCurrencyBalance*(self: Controller, address: string, chainIds: seq[int], currency: string): float64 =
+  return self.walletAccountService.getCurrencyBalance(address, chainIds, currency)

@@ -14,6 +14,7 @@ import StatusQ.Core.Utils 0.1 as StatusQUtils
 import utils 1.0
 
 import shared.panels 1.0
+import shared.popups 1.0
 import shared.controls 1.0
 import shared.controls.chat 1.0
 
@@ -27,10 +28,12 @@ import "../../stores"
 SettingsContentBase {
     id: root
 
-    property DevicesStore devicesStore
+    property var devicesStore
     property ProfileStore profileStore
     property PrivacyStore privacyStore
-    property AdvancedStore advancedStore
+    property var advancedStore
+
+    required property bool isProduction
 
     ColumnLayout {
         id: layout
@@ -167,6 +170,9 @@ SettingsContentBase {
                 spacing: 17
 
                 StatusBaseText {
+                    
+                    objectName: "syncNewDeviceTextLabel"
+
                     Layout.fillWidth: true
                     Layout.topMargin: -8
                     horizontalAlignment: Text.AlignHCenter
@@ -177,6 +183,9 @@ SettingsContentBase {
                 }
 
                 StatusBaseText {
+
+                    objectName: "syncNewDeviceSubTitleTextLabel"
+
                     Layout.fillWidth: true
                     horizontalAlignment: Text.AlignHCenter
                     color: Theme.palette.baseColor1
@@ -216,6 +225,9 @@ SettingsContentBase {
                 }
 
                 StatusButton {
+
+                    objectName: "setupSyncingStatusButton"           
+
                     Layout.alignment: Qt.AlignHCenter
                     normalColor: Theme.palette.primaryColor1
                     hoverColor: Theme.palette.miscColor1;
@@ -237,9 +249,18 @@ SettingsContentBase {
             }
         }
 
+        StatusFlatButton {
+            Layout.alignment: Qt.AlignHCenter
+            text: qsTr("How to get a sync code")
+            icon.name: "info"
+            onClicked: Global.openPopup(getSyncCodeInstructionsPopup)
+        }
+
         StatusButton {
+            objectName: "setupSyncBackupDataButton"
+
             id: backupBtn
-            visible: !production
+            visible: !root.isProduction
             Layout.alignment: Qt.AlignHCenter
             text: qsTr("Backup Data")
             onClicked : {
@@ -252,7 +273,7 @@ SettingsContentBase {
             id: personalizeDevicePopup
 
             SyncDeviceCustomizationPopup {
-                anchors.centerIn: parent
+                destroyOnClose: true
                 devicesStore: root.devicesStore
                 advancedStore: root.advancedStore
             }
@@ -262,9 +283,16 @@ SettingsContentBase {
             id: setupSyncingPopup
 
             SetupSyncingPopup {
-                anchors.centerIn: parent
+                destroyOnClose: true
                 devicesStore: root.devicesStore
                 profileStore: root.profileStore
+            }
+        }
+
+        Component {
+            id: getSyncCodeInstructionsPopup
+            GetSyncCodeInstructionsPopup {
+                destroyOnClose: true
             }
         }
 

@@ -1,13 +1,14 @@
-import NimQml, Tables, json, sequtils, strformat, chronicles, strutils, times, sugar, std/times
+import NimQml, Tables, json, sequtils, strformat, chronicles, strutils, times, std/times
 
 import ../../../app/global/global_singleton
 import ../../../app/core/signals/types
 import ../../../app/core/eventemitter
 import ../../../app/core/tasks/[qt, threadpool]
+
 import ../../common/types as common_types
 import ../../common/conversion as service_conversion
+import ../../common/activity_center
 
-import ../activity_center/service as activity_center_service
 import ../settings/service as settings_service
 import ../network/service as network_service
 import ../visual_identity/service as procs_from_visual_identity_service
@@ -96,7 +97,6 @@ QtObject:
     threadpool: ThreadPool
     networkService: network_service.Service
     settingsService: settings_service.Service
-    activityCenterService: activity_center_service.Service
     contacts: Table[string, ContactDetails] # [contact_id, ContactDetails]
     contactsStatus: Table[string, StatusUpdateDto] # [contact_id, StatusUpdateDto]
     receivedIdentityRequests: Table[string, VerificationRequest] # [from_id, VerificationRequest]
@@ -122,8 +122,7 @@ QtObject:
       events: EventEmitter,
       threadpool: ThreadPool,
       networkService: network_service.Service,
-      settingsService: settings_service.Service,
-      activityCenterService: activity_center_service.Service,
+      settingsService: settings_service.Service
       ): Service =
     new(result, delete)
     result.QObject.setup
@@ -131,7 +130,6 @@ QtObject:
     result.events = events
     result.networkService = networkService
     result.settingsService = settingsService
-    result.activityCenterService = activityCenterService
     result.threadpool = threadpool
     result.contacts = initTable[string, ContactDetails]()
     result.contactsStatus = initTable[string, StatusUpdateDto]()
@@ -450,6 +448,7 @@ QtObject:
       if self.contacts[publicKey].dto.added and not self.contacts[publicKey].dto.removed and contact.added and not contact.removed:
         signal = SIGNAL_CONTACT_UPDATED
     if contact.removed:
+      singletonInstance.globalEvents.showContactRemoved("Contact removed", fmt "You removed {contact.displayName} as a contact", contact.id)
       signal = SIGNAL_CONTACT_REMOVED
 
     self.contacts[publicKey] = self.constructContactDetails(contact)
@@ -471,8 +470,8 @@ QtObject:
         return
 
       self.parseContactsResponse(response)
-      self.activityCenterService.parseActivityCenterResponse(response)
       self.events.emit(SIGNAL_RELOAD_ONE_TO_ONE_CHAT, ReloadOneToOneArgs(sectionId: publicKey))
+      checkAndEmitACNotificationsFromResponse(self.events, response.result{"activityCenterNotifications"})
 
     except Exception as e:
       error "an error occurred while sending contact request", msg = e.msg
@@ -491,8 +490,8 @@ QtObject:
         return
 
       self.parseContactsResponse(response)
-      self.activityCenterService.parseActivityCenterResponse(response)
       self.events.emit(SIGNAL_RELOAD_ONE_TO_ONE_CHAT, ReloadOneToOneArgs(sectionId: publicKey))
+      checkAndEmitACNotificationsFromResponse(self.events, response.result{"activityCenterNotifications"})
 
     except Exception as e:
       error "an error occurred while accepting contact request", msg=e.msg
@@ -511,7 +510,7 @@ QtObject:
         return
 
       self.parseContactsResponse(response)
-      self.activityCenterService.parseActivityCenterResponse(response)
+      checkAndEmitACNotificationsFromResponse(self.events, response.result{"activityCenterNotifications"})
 
     except Exception as e:
       error "an error occurred while dismissing contact request", msg=e.msg
@@ -559,7 +558,7 @@ QtObject:
 
     self.events.emit(SIGNAL_RELOAD_ONE_TO_ONE_CHAT, ReloadOneToOneArgs(sectionId: publicKey))
     self.parseContactsResponse(response)
-    self.activityCenterService.parseActivityCenterResponse(response)
+    checkAndEmitACNotificationsFromResponse(self.events, response.result{"activityCenterNotifications"})
 
   proc ensResolved*(self: Service, jsonObj: string) {.slot.} =
     let jsonObj = jsonObj.parseJson()
@@ -617,15 +616,15 @@ QtObject:
       if not response.error.isNil:
         let msg = response.error.message
         raise newException(RpcException, msg)
-      self.activityCenterService.parseActivityCenterResponse(response)
 
       if self.contacts.hasKey(publicKey):
         self.contacts[publicKey].dto.trustStatus = TrustStatus.Trusted
         self.contacts[publicKey].dto.verificationStatus = VerificationStatus.Trusted
 
-        self.events.emit(SIGNAL_CONTACT_TRUSTED,
-          TrustArgs(publicKey: publicKey, isUntrustworthy: false))
+        self.events.emit(SIGNAL_CONTACT_TRUSTED, TrustArgs(publicKey: publicKey, isUntrustworthy: false))
         self.events.emit(SIGNAL_CONTACT_VERIFIED, ContactArgs(contactId: publicKey))
+        checkAndEmitACNotificationsFromResponse(self.events, response.result{"activityCenterNotifications"})
+
     except Exception as e:
       error "error verified trusted request", msg=e.msg
 
@@ -642,15 +641,15 @@ QtObject:
       if not response.error.isNil:
         let msg = response.error.message
         raise newException(RpcException, msg)
-      self.activityCenterService.parseActivityCenterResponse(response)
 
       if self.contacts.hasKey(publicKey):
         self.contacts[publicKey].dto.trustStatus = TrustStatus.Untrustworthy
         self.contacts[publicKey].dto.verificationStatus = VerificationStatus.Untrustworthy
 
-        self.events.emit(SIGNAL_CONTACT_UNTRUSTWORTHY,
-          TrustArgs(publicKey: publicKey, isUntrustworthy: true))
+        self.events.emit(SIGNAL_CONTACT_UNTRUSTWORTHY, TrustArgs(publicKey: publicKey, isUntrustworthy: true))
         self.events.emit(SIGNAL_CONTACT_VERIFIED, ContactArgs(contactId: publicKey))
+        checkAndEmitACNotificationsFromResponse(self.events, response.result{"activityCenterNotifications"})
+
     except Exception as e:
       error "error verified untrustworthy request", msg=e.msg
 
@@ -715,7 +714,8 @@ QtObject:
       self.saveContact(contact)
 
       self.events.emit(SIGNAL_CONTACT_VERIFICATION_SENT, ContactArgs(contactId: publicKey))
-      self.activityCenterService.parseActivityCenterResponse(response)
+      checkAndEmitACNotificationsFromResponse(self.events, response.result{"activityCenterNotifications"})
+
     except Exception as e:
       error "Error sending verification request", msg = e.msg
 
@@ -738,7 +738,8 @@ QtObject:
       self.saveContact(contact)
 
       self.events.emit(SIGNAL_CONTACT_VERIFICATION_CANCELLED, ContactArgs(contactId: publicKey))
-      self.activityCenterService.parseActivityCenterResponse(response)
+      checkAndEmitACNotificationsFromResponse(self.events, response.result{"activityCenterNotifications"})
+
     except Exception as e:
       error "Error canceling verification request", msg = e.msg
 
@@ -758,9 +759,9 @@ QtObject:
       request.repliedAt = getTime().toUnix * 1000
       self.receivedIdentityRequests[publicKey] = request
 
-      self.events.emit(SIGNAL_CONTACT_VERIFICATION_ACCEPTED,
-        VerificationRequestArgs(verificationRequest: request))
-      self.activityCenterService.parseActivityCenterResponse(response)
+      self.events.emit(SIGNAL_CONTACT_VERIFICATION_ACCEPTED, VerificationRequestArgs(verificationRequest: request))
+      checkAndEmitACNotificationsFromResponse(self.events, response.result{"activityCenterNotifications"})
+
     except Exception as e:
       error "error accepting contact verification request", msg=e.msg
 
@@ -779,18 +780,19 @@ QtObject:
       self.receivedIdentityRequests[publicKey] = request
 
       self.events.emit(SIGNAL_CONTACT_VERIFICATION_DECLINED, ContactArgs(contactId: publicKey))
-      self.activityCenterService.parseActivityCenterResponse(response)
+      checkAndEmitACNotificationsFromResponse(self.events, response.result{"activityCenterNotifications"})
+
     except Exception as e:
       error "error declining contact verification request", msg=e.msg
 
   proc asyncContactInfoLoaded*(self: Service, pubkeyAndRpcResponse: string) {.slot.} =
     let rpcResponseObj = pubkeyAndRpcResponse.parseJson
-    let publicKey = $rpcResponseObj{"publicKey"}
+    let publicKey = rpcResponseObj{"publicKey"}.getStr
     let requestError = rpcResponseObj{"error"}
     var error : string
 
     if requestError.kind != JNull:
-      error = $requestError
+      error = requestError.getStr
     else:
       let responseError = rpcResponseObj{"response"}{"error"}
       if responseError.kind != JNull:

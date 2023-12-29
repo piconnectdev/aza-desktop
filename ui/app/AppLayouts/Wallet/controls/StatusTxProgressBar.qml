@@ -5,15 +5,20 @@ import StatusQ.Core.Theme 0.1
 import StatusQ.Core 0.1
 import StatusQ.Controls 0.1
 
+import utils 1.0
+import AppLayouts.Wallet 1.0
+
 ColumnLayout {
     id: root
 
-    property bool isLayer1: true
+    property int networkLayer: 0
     property bool error: false
+    property bool pending: false
     property int steps: isLayer1 ? 64 : 1
     property int confirmations: 0
     property int confirmationBlocks: isLayer1 ? 4 : 1
     property string chainName
+    property int timestamp: 0
 
     property color fillColor: Theme.palette.blockProgressBarColor
     property color confirmationColor: Theme.palette.successColor1
@@ -22,18 +27,21 @@ ColumnLayout {
     property alias titleText: title.text
     property alias subText: subText.text
 
-    // Below properties only needed when not a mainnet tx
-    property alias progress: progressBar.value
-    property alias duration: progressBar.to
+    readonly property bool isValid: root.networkLayer > 0 && !!root.chainName
+    readonly property double confirmationTimeStamp: WalletUtils.calculateConfirmationTimestamp(root.networkLayer, root.timestamp)
+    readonly property double finalisationTimeStamp: WalletUtils.calculateFinalisationTimestamp(root.networkLayer, root.timestamp)
 
-    QtObject {
-        id: d
-        readonly property bool finalized: isLayer1 ? confirmations >= steps : progress === duration
-        readonly property bool confirmed: confirmations >= confirmationBlocks
-        readonly property int hoursInADay: 24
-    }
+    readonly property bool finalized: (isLayer1 ? confirmations >= steps : progress >= duration) && !error && !pending
+    readonly property bool confirmed: confirmations >= confirmationBlocks && !error && !pending
+
+    readonly property bool isLayer1: networkLayer === 1
+
+    // Below properties only needed when not a mainnet tx
+    property int duration: Constants.time.hoursIn7Days
+    property alias progress: progressBar.value
 
     spacing: 8
+    visible: isValid
 
     StatusBaseText {
         id: title
@@ -43,14 +51,18 @@ ColumnLayout {
         color: Theme.palette.directColor1
         lineHeight: 22
         lineHeightMode: Text.FixedHeight
-        text: error ? qsTr("Failed on %1").arg(root.chainName) :
-                      d.finalized ?
-                          qsTr("Finalised on %1").arg(root.chainName) :
-                          d.confirmed ?
-                              qsTr("Confirmed on %1, finalisation in progress...").arg(root.chainName):
-                              confirmations > 0 ?
-                                  qsTr("Confirmation in progress on %1...").arg(root.chainName) :
-                                  qsTr("Pending on %1...").arg(root.chainName)
+        text: {
+            if (error) {
+                return qsTr("Failed on %1").arg(root.chainName)
+            } else if (pending) {
+                return qsTr("Confirmation in progress on %1...").arg(root.chainName)
+            } else if (root.finalized) {
+                return qsTr("Finalised on %1").arg(root.chainName)
+            } else if (root.confirmed) {
+                return qsTr("Confirmed on %1, finalisation in progress...").arg(root.chainName)
+            }
+            return qsTr("Pending on %1...").arg(root.chainName)
+        }
     }
 
     RowLayout {
@@ -82,7 +94,8 @@ ColumnLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 from: 0
-                to: duration
+                to: root.duration
+                value: root.pending || root.error ? 0 : (Math.floor(Date.now() / 1000) - root.timestamp) / Constants.time.secondsInHour
                 backgroundColor: root.fillColor
                 backgroundBorderColor: "transparent"
                 fillColor: error ? "transparent": Theme.palette.primaryColor1
@@ -99,8 +112,13 @@ ColumnLayout {
         color: Theme.palette.baseColor1
         lineHeight: 18
         lineHeightMode: Text.FixedHeight
-        text: d.finalized && !root.error ? qsTr("In epoch %1").arg(root.confirmations) : d.confirmed && !root.isLayer1 ?
-                                               qsTr("%n day(s) until finality", "", Math.ceil((root.duration - root.progress)/d.hoursInADay)):
-                                               qsTr("%1 / %2 confirmations").arg(root.confirmations).arg(root.steps)
+        text: {
+            if (root.finalized) {
+                return qsTr("In epoch %1").arg(root.confirmations)
+            } else if (root.confirmed && !root.isLayer1) {
+                return qsTr("%n day(s) until finality", "", Math.ceil((root.duration - root.progress) / Constants.time.hoursInDay))
+            }
+            return qsTr("%1 / %2 confirmations").arg(root.confirmations).arg(root.steps)
+        }
     }
 }

@@ -16,6 +16,11 @@ StatusListItem {
     property var radioButtonGroup
     property bool useEnabledRole: true
 
+    // Needed for preferred sharing networks
+    property bool preferredNetworksMode: false
+    property var preferredSharingNetworks: []
+    property bool allChecked: true
+
     signal toggleNetwork(var network, var model, int index)
 
     /// Mirrors Nim's UxEnabledState enum from networks/item.nim
@@ -23,11 +28,6 @@ StatusListItem {
         Enabled,
         AllEnabled,
         Disabled
-    }
-
-    QtObject {
-        id: d
-        property SingleSelectionInfo tmpObject: SingleSelectionInfo { enabled: true }
     }
 
     objectName: model.chainName
@@ -40,7 +40,7 @@ StatusListItem {
         if(!root.singleSelection.enabled) {
             checkBox.nextCheckState()
         } else if(!radioButton.checked) {   // Don't allow uncheck
-            radioButton.toggle()
+            root.toggleNetwork(({chainId: model.chainId, chainName: model.chainName, iconUrl: model.iconUrl}), root.networkModel, model.index)
         }
     }
 
@@ -52,7 +52,10 @@ StatusListItem {
             visible: !root.singleSelection.enabled
 
             checkState: {
-                if(root.useEnabledRole) {
+                if(root.preferredNetworksMode) {
+                    return root.allChecked ? Qt.PartiallyChecked : preferredSharingNetworks.includes(model.chainId.toString()) ? Qt.Checked : Qt.Unchecked
+                }
+                else if(root.useEnabledRole) {
                     return model.isEnabled ? Qt.Checked : Qt.Unchecked
                 } else if(model.enabledState === NetworkSelectItemDelegate.Enabled) {
                     return Qt.Checked
@@ -77,19 +80,8 @@ StatusListItem {
             ButtonGroup.group: root.radioButtonGroup
             checked: root.singleSelection.currentModel === root.networkModel && root.singleSelection.currentIndex === model.index
 
-            property SingleSelectionInfo exchangeObject: null
-            function setNewInfo(networkModel, index) {
-                d.tmpObject.currentModel = networkModel
-                d.tmpObject.currentIndex = index
-                exchangeObject = d.tmpObject
-                d.tmpObject = root.singleSelection
-                root.singleSelection = exchangeObject
-                exchangeObject = null
-            }
-
-            onCheckedChanged: {
-                if(checked && (root.singleSelection.currentModel !== root.networkModel || root.singleSelection.currentIndex !== model.index)) {
-                    setNewInfo(root.networkModel, model.index)
+            onToggled: {
+                if(checked) {
                     root.toggleNetwork(({chainId: model.chainId, chainName: model.chainName, iconUrl: model.iconUrl}), root.networkModel, model.index)
                 }
             }

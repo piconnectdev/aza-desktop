@@ -14,6 +14,8 @@ import shared.panels 1.0
 import AppLayouts.Communities.helpers 1.0
 import AppLayouts.Communities.panels 1.0
 
+import SortFilterProxyModel 0.2
+
 StatusScrollView {
     id: root
 
@@ -22,6 +24,10 @@ StatusScrollView {
 
     // https://bugreports.qt.io/browse/QTBUG-84269
     /* required */ property TokenObject token
+    /* required */ property string feeText
+    /* required */ property string feeErrorText
+    /* required */ property bool isFeeLoading
+
 
     readonly property bool isAssetView: token.type === Constants.TokenType.ERC20
 
@@ -47,15 +53,26 @@ StatusScrollView {
     readonly property bool deploymentCompleted:
         deployState === Constants.ContractTransactionStatus.Completed
 
+    readonly property string feeLabel:
+        isAssetView ? qsTr("Mint asset on %1").arg(token.chainName)
+                    : qsTr("Mint collectible on %1").arg(token.chainName)
+                    
     // Models:
     property var tokenOwnersModel
 
+    // Required for preview mode:
+    property var accounts
     signal mintClicked()
 
     signal airdropRequested(string address)
     signal generalAirdropRequested
 
-    signal remoteDestructRequested(string address)
+    signal viewProfileRequested(string contactId)
+    signal viewMessagesRequested(string contactId)
+
+    signal remoteDestructRequested(string name, string address)
+    signal kickRequested(string name, string contactId, string address)
+    signal banRequested(string name, string contactId, string address)
 
     QtObject {
         id: d
@@ -124,12 +141,55 @@ StatusScrollView {
             }
         }
 
-        StatusButton {
+        FeesBox {
+            id: feesBox
+
+            Layout.fillWidth: true
+            Layout.topMargin: Style.current.padding
+
+            implicitWidth: 0
             visible: root.preview
+
+            accountErrorText: root.feeErrorText
+
+            model: QtObject {
+                readonly property string title: root.feeLabel
+                readonly property string feeText: root.isFeeLoading ?
+                                                      "" : root.feeText
+                readonly property bool error: root.feeErrorText !== ""
+            }
+
+            accountsSelector.model: root.accounts || null
+
+            Component.onCompleted: {
+                const initIndex = StatusQUtils.ModelUtils.indexOf(
+                                    accountsSelector.model, "name",
+                                    token.accountName)
+
+                accountsSelector.currentIndex = (initIndex !== -1) ? initIndex : 0
+
+                accountsSelector.currentIndexChanged.connect(() => {
+                    if (accountsSelector.currentIndex < 0)
+                        return
+
+                    const item = StatusQUtils.ModelUtils.get(
+                                   accountsSelector.model,
+                                   accountsSelector.currentIndex)
+                    token.accountAddress = item.address
+                    token.accountName = item.name
+                })
+            }
+        }
+
+        StatusButton {
             Layout.preferredHeight: 44
             Layout.alignment: Qt.AlignHCenter
             Layout.fillWidth: true
             Layout.topMargin: Style.current.halfPadding
+
+            visible: root.preview
+            enabled: !root.isFeeLoading && root.feeErrorText === ""
+
             text: qsTr("Mint")
 
             onClicked: root.mintClicked()
@@ -141,13 +201,20 @@ StatusScrollView {
             model: root.tokenOwnersModel
             tokenName: root.name
             showRemotelyDestructMenuItem: !root.isAssetView && root.remotelyDestruct
+            isAirdropEnabled: root.deploymentCompleted &&
+                              (token.infiniteSupply || token.remainingTokens > 0)
 
             Layout.topMargin: Style.current.padding
             Layout.fillWidth: true
 
+            onViewProfileRequested: root.viewProfileRequested(contactId)
+            onViewMessagesRequested: root.viewMessagesRequested(contactId)
             onAirdropRequested: root.airdropRequested(address)
             onGeneralAirdropRequested: root.generalAirdropRequested()
-            onRemoteDestructRequested: root.remoteDestructRequested(address)
+            onRemoteDestructRequested: root.remoteDestructRequested(name, address)
+
+            onKickRequested: root.kickRequested(name, contactId, address)
+            onBanRequested: root.banRequested(name, contactId, address)
         }
     }
 }

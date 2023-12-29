@@ -6,6 +6,10 @@ import StatusQ.Core.Utils 0.1
 
 import AppLayouts.Communities.controls 1.0
 
+import Models 1.0
+
+import utils 1.0
+
 Flickable {
     id: root
 
@@ -48,6 +52,36 @@ Flickable {
                     id: content
                     spacing: 20
                     anchors.fill: parent
+
+                    Label {
+                        Layout.leftMargin: 5
+
+                        text: "Permission State:"
+                    }
+                    ColumnLayout {
+                        Layout.leftMargin: 5
+
+                        RadioButton {
+                            text: "Active state"
+                            checked: true
+                            onCheckedChanged: if(checked) PermissionsModel.changePermissionState(root.model, model.index, PermissionTypes.State.Approved)
+                        }
+
+                        RadioButton {
+                            text: "Creating state"
+                            onCheckedChanged: if(checked) PermissionsModel.changePermissionState(root.model, model.index, PermissionTypes.State.AdditionPending)
+                        }
+
+                        RadioButton {
+                            text: "Editing state"
+                            onCheckedChanged: if(checked) PermissionsModel.changePermissionState(root.model, model.index, PermissionTypes.State.UpdatePending)
+                        }
+
+                        RadioButton {
+                            text: "Deleting state"
+                            onCheckedChanged: if(checked) PermissionsModel.changePermissionState(root.model, model.index, PermissionTypes.State.RemovalPending)
+                        }
+                    }
 
                     Repeater {
                         model: holdingsListModel
@@ -100,7 +134,7 @@ Flickable {
                             }
 
                             Button {
-                                enabled: d.newKey && (d.newAmount || d.newType === HoldingTypes.Type.Ens)
+                                enabled: d.newKey && (d.newAmount || d.newType === Constants.TokenType.ENS)
                                 Layout.fillWidth: true
                                 text: "Add new holding"
 

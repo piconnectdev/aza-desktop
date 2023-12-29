@@ -14,6 +14,7 @@ import shared.controls 1.0
 import shared.panels 1.0
 
 import SortFilterProxyModel 0.2
+import utils 1.0
 
 Item {
     id: root
@@ -27,7 +28,7 @@ Item {
 
     property string noDataText: qsTr("No data found")
     property bool showAllTokensMode: false
-
+    property bool showTokenAmount: true
     readonly property bool canGoBack: root.state !== d.depth1_ListState
 
     signal itemClicked(string key, string name, url iconSource)
@@ -75,6 +76,7 @@ Item {
 
         readonly property int filterItemsHeight: 36
         readonly property int filterPopupWidth: 233
+        readonly property int padding: Style.current.halfPadding
 
         // Internal management properties
         property bool isFilterOptionVisible: false
@@ -172,7 +174,16 @@ Item {
                     }
 
                     expression: getCategoryLabelForType(model.category, root.type)
-               }
+                }
+
+                sorters: [
+                    RoleSorter {
+                        roleName: "category"
+                    },
+                    RoleSorter {
+                        roleName: "name"
+                    }
+                ]
             }
         }
 
@@ -255,6 +266,7 @@ Item {
         icon.name: "filter"
 
         anchors.right: parent.right
+        anchors.rightMargin: d.padding
         anchors.bottom: parent.top
         anchors.bottomMargin: 3
 
@@ -384,6 +396,8 @@ Item {
             id: searcher
 
             Layout.fillWidth: true
+            Layout.leftMargin: d.padding
+            Layout.rightMargin: d.padding
             Layout.topMargin: root.state === d.depth1_ListState ? 0 : 8
 
             visible: d.availableData
@@ -426,6 +440,8 @@ Item {
            id: tokenGroupItem
 
            Layout.fillWidth: true
+           Layout.leftMargin: d.padding
+           Layout.rightMargin: d.padding
 
            name: qsTr("Any %1").arg(d.currentItemName)
            iconSource: d.currentItemSource
@@ -450,6 +466,7 @@ Item {
         id: assetsListView
 
         ListDropdownContent {
+            id: assetDelegate
             availableData: d.availableData
             noDataText: root.noDataText
             areHeaderButtonsVisible: root.state === d.depth1_ListState
@@ -474,6 +491,7 @@ Item {
             isFooterButtonVisible: !root.showAllTokensMode && !d.searchMode
                                    && filteredModel.item && d.currentModel.count > filteredModel.item.count
 
+            showTokenAmount: root.showTokenAmount
             onHeaderItemClicked: root.navigateToMintTokenSettings()
             onFooterButtonClicked: root.footerButtonClicked()
 
@@ -482,7 +500,7 @@ Item {
             onImplicitHeightChanged: root.layoutChanged()
 
             Binding on implicitHeight {
-                value: contentHeight
+                value: contentHeight + d.padding
                 //avoid too many changes of the implicit height
                 delayed: true
             }
@@ -493,6 +511,7 @@ Item {
         id: collectiblesListView
 
         ListDropdownContent {
+            id: collectibleDelegate
             availableData: d.availableData
             noDataText: root.noDataText
             areHeaderButtonsVisible: root.state === d.depth1_ListState
@@ -519,6 +538,7 @@ Item {
                                    && filteredModel.item && d.currentModel
                                    && d.currentModel.count > filteredModel.item.count
 
+            showTokenAmount: root.showTokenAmount
             onHeaderItemClicked: root.navigateToMintTokenSettings()
             onFooterButtonClicked: root.footerButtonClicked()
 
@@ -540,7 +560,7 @@ Item {
             }
             onImplicitHeightChanged: root.layoutChanged()
             Binding on implicitHeight {
-                value: contentHeight
+                value: contentHeight + d.padding
                 //avoid too many changes of the implicit height
                 delayed: true
             }

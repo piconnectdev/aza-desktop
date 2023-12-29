@@ -1,8 +1,11 @@
 import json, sequtils, stint, strutils, chronicles
 import ../../../../backend/response_type
+import ../../../../backend/community_tokens_types
 include ../../../common/json_utils
 import ../../../common/conversion
 import ../../community/dto/community
+
+export community_tokens_types
 
 type
   DeployState* {.pure.} = enum
@@ -27,6 +30,8 @@ type
     deployState*: DeployState
     image*: string
     decimals*: int
+    deployer*: string
+    privilegesLevel*: PrivilegesLevel
 
 proc toJsonNode*(self: CommunityTokenDto): JsonNode =
   result = %* {
@@ -44,7 +49,9 @@ proc toJsonNode*(self: CommunityTokenDto): JsonNode =
     "chainId": self.chainId,
     "deployState": self.deployState.int,
     "image": self.image,
-    "decimals": self.decimals
+    "decimals": self.decimals,
+    "deployer": self.deployer,
+    "privilegesLevel": self.privilegesLevel.int,
   }
 
 proc toCommunityTokenDto*(jsonObj: JsonNode): CommunityTokenDto =
@@ -70,18 +77,90 @@ proc toCommunityTokenDto*(jsonObj: JsonNode): CommunityTokenDto =
   result.deployState = intToEnum(deployStateInt, DeployState.Failed)
   discard jsonObj.getProp("image", result.image)
   discard jsonObj.getProp("decimals", result.decimals)
+  discard jsonObj.getProp("deployer", result.deployer)
+  var privilegesLevelInt: int
+  discard jsonObj.getProp("privilegesLevel", privilegesLevelInt)
+  result.privilegesLevel = intToEnum(privilegesLevelInt, PrivilegesLevel.Community)
 
 proc parseCommunityTokens*(response: RpcResponse[JsonNode]): seq[CommunityTokenDto] =
   result = map(response.result.getElems(),
     proc(x: JsonNode): CommunityTokenDto = x.toCommunityTokenDto())
 
-proc supplyByType*(supply: Uint256, tokenType: TokenType): float64 =
+proc parseCommunityTokens*(response: JsonNode): seq[CommunityTokenDto] =
+  result = map(response.getElems(),
+    proc(x: JsonNode): CommunityTokenDto = x.toCommunityTokenDto())
+
+type
+  CommunityTokenAndAmount* = object
+    communityToken*: CommunityTokenDto
+    amount*: Uint256 # for assets the value is converted to wei
+
+type
+  ContractTuple* = tuple
+    chainId: int
+    address: string
+
+proc `%`*(self: ContractTuple): JsonNode =
+  result = %* {
+    "address": self.address,
+    "chainId": self.chainId
+  }
+
+proc toContractTuple*(json: JsonNode): ContractTuple =
+  return (json["chainId"].getInt, json["address"].getStr)
+
+type
+  ChainWalletTuple* = tuple
+    chainId: int
+    address: string
+
+type
+  WalletAndAmount* = object
+    walletAddress*: string
+    amount*: int
+
+type
+  RemoteDestroyTransactionDetails* = object
+    chainId*: int
+    contractAddress*: string
+    addresses*: seq[string]
+
+proc `%`*(self: RemoteDestroyTransactionDetails): JsonNode =
+  result = %* {
+    "contractAddress": self.contractAddress,
+    "chainId": self.chainId,
+    "addresses": self.addresses
+  }
+
+type
+  OwnerTokenDeploymentTransactionDetails* = object
+    ownerToken*: ContractTuple
+    masterToken*: ContractTuple
+    communityId*: string
+
+proc `%`*(self: OwnerTokenDeploymentTransactionDetails): JsonNode =
+  result = %* {
+    "ownerToken": %self.ownerToken,
+    "masterToken": %self.masterToken,
+    "communityId": self.communityId
+  }
+
+proc toOwnerTokenDeploymentTransactionDetails*(jsonObj: JsonNode): OwnerTokenDeploymentTransactionDetails =
+  result = OwnerTokenDeploymentTransactionDetails()
   try:
-    var eths: string
-    if tokenType == TokenType.ERC20:
-      eths = wei2Eth(supply, 18)
-    else:
-      eths = supply.toString(10)
-    return parseFloat(eths)
+    result.ownerToken = (jsonObj["ownerToken"]["chainId"].getInt, jsonObj["ownerToken"]["address"].getStr)
+    result.masterToken = (jsonObj["masterToken"]["chainId"].getInt, jsonObj["masterToken"]["address"].getStr)
+    result.communityId = jsonObj["communityId"].getStr
   except Exception as e:
-    error "Error parsing supply by type ", msg=e.msg, supply=supply, tokenType=tokenType
+    error "Error parsing OwnerTokenDeploymentTransactionDetails json", msg=e.msg
+
+proc toRemoteDestroyTransactionDetails*(json: JsonNode): RemoteDestroyTransactionDetails =
+  return RemoteDestroyTransactionDetails(chainId: json["chainId"].getInt, contractAddress: json["contractAddress"].getStr, addresses: to(json["addresses"], seq[string]))
+
+type
+  ComputeFeeErrorCode* {.pure.} = enum
+    Success,
+    Infura,
+    Balance,
+    Other
+

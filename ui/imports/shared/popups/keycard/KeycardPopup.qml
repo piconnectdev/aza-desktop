@@ -13,8 +13,10 @@ StatusModal {
     property var emojiPopup
 
     width: Constants.keycard.general.popupWidth
-    closePolicy: d.disableActionPopupButtons || d.disableCloseButton? Popup.NoAutoClose : Popup.CloseOnEscape | Popup.CloseOnPressOutside
-    hasCloseButton: !d.disableActionPopupButtons && !d.disableCloseButton
+    closePolicy: root.sharedKeycardModule.forceFlow || d.disableActionPopupButtons || d.disableCloseButton?
+                     Popup.NoAutoClose :
+                     Popup.CloseOnEscape | Popup.CloseOnPressOutside
+    hasCloseButton: !root.sharedKeycardModule.forceFlow && !d.disableActionPopupButtons && !d.disableCloseButton
 
     headerSettings.title: {
         switch (root.sharedKeycardModule.currentState.flowType) {
@@ -30,6 +32,8 @@ StatusModal {
             return qsTr("Factory reset a Keycard")
         case Constants.keycardSharedFlow.authentication:
             return qsTr("Authenticate")
+        case Constants.keycardSharedFlow.sign:
+            return qsTr("Signing")
         case Constants.keycardSharedFlow.unlockKeycard:
             return qsTr("Unlock Keycard")
         case Constants.keycardSharedFlow.displayKeycardContent:
@@ -44,6 +48,16 @@ StatusModal {
             return qsTr("Create a new pairing code")
         case Constants.keycardSharedFlow.createCopyOfAKeycard:
             return qsTr("Create a backup copy of this Keycard")
+        case Constants.keycardSharedFlow.migrateFromKeycardToApp:
+            // in the context of `migrateFromKeycardToApp` flow, `forceFlow` is set to `true` on paired devices
+            if (root.sharedKeycardModule.forceFlow) {
+                return qsTr("Enable password login on this device")
+            }
+            return qsTr("Migrate a keypair from Keycard to Status")
+        case Constants.keycardSharedFlow.migrateFromAppToKeycard:
+            if (root.sharedKeycardModule.forceFlow) {
+                return qsTr("Enable Keycard login on this device")
+            }
         }
 
         return ""

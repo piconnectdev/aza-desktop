@@ -164,6 +164,7 @@ const deleteKeycardAccountsTask*: Task = proc(argEncoded: string) {.gcsafe, nimc
 type
   FetchChainIdForUrlTaskArg* = ref object of QObjectTaskArg
     url: string
+    isMainUrl: bool
 
 const fetchChainIdForUrlTask*: Task = proc(argEncoded: string) {.gcsafe, nimcall.} =
   let arg = decode[FetchChainIdForUrlTaskArg](argEncoded)
@@ -172,12 +173,38 @@ const fetchChainIdForUrlTask*: Task = proc(argEncoded: string) {.gcsafe, nimcall
     arg.finish(%*{
       "success": true,
       "chainId": response.result.getInt,
-      "url": arg.url
+      "url": arg.url,
+      "isMainUrl": arg.isMainUrl
     })
   except Exception as e:
     error "error when fetching chaind id from url: ", message = e.msg
     arg.finish(%*{
       "success": false,
       "chainId": -1,
-      "url": arg.url
+      "url": arg.url,
+      "isMainUrl": arg.isMainUrl
     })
+
+#################################################
+# Async migration of a non profile keycard keypair to the app
+#################################################
+
+type
+  MigrateNonProfileKeycardKeypairToAppTaskArg* = ref object of QObjectTaskArg
+    keyUid: string
+    seedPhrase: string
+    password: string
+
+const migrateNonProfileKeycardKeypairToAppTask*: Task = proc(argEncoded: string) {.gcsafe, nimcall.} =
+  let arg = decode[MigrateNonProfileKeycardKeypairToAppTaskArg](argEncoded)
+  var responseJson = %*{
+    "success": false,
+    "keyUid": arg.keyUid
+  }
+  try:
+    let response = status_go_accounts.migrateNonProfileKeycardKeypairToApp(arg.seedPhrase, arg.password)
+    let success = responseHasNoErrors("migrateNonProfileKeycardKeypairToApp", response)
+    responseJson["success"] = %* success
+  except Exception as e:
+    error "error migrating a non profile keycard keypair: ", message = e.msg
+  arg.finish(responseJson)

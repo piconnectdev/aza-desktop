@@ -25,14 +25,17 @@ method refreshNetworks*(self: AccessInterface) {.base.} =
 method toggleTestNetworksEnabled*(self: AccessInterface) {.base.} = 
   raise newException(ValueError, "No implementation available")
 
+method toggleIsSepoliaEnabled*(self: AccessInterface) {.base.} = 
+  raise newException(ValueError, "No implementation available")
+
 method getModuleAsVariant*(self: AccessInterface): QVariant {.base.} =
   raise newException(ValueError, "No implementation available")
 
-method updateNetworkEndPointValues*(self: AccessInterface, chainId: int, newMainRpcInput, newFailoverRpcUrl: string) {.base.} =
+method updateNetworkEndPointValues*(self: AccessInterface, chainId: int, newMainRpcInput, newFailoverRpcUrl: string, revertToDefault: bool) {.base.} =
   raise newException(ValueError, "No implementation available")
 
-method fetchChainIdForUrl*(self: AccessInterface, url: string) {.base.} =
+method fetchChainIdForUrl*(self: AccessInterface, url: string, isMainUrl: bool) {.base.} =
   raise newException(ValueError, "No implementation available")
 
-method chainIdFetchedForUrl*(self: AccessInterface, url: string, chainId: int, success: bool) {.base.} =
+method chainIdFetchedForUrl*(self: AccessInterface, url: string, chainId: int, success: bool, isMainUrl: bool) {.base.} =
   raise newException(ValueError, "No implementation available")

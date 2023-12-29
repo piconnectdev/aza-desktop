@@ -71,7 +71,7 @@ SplitView {
                 }
 
                 RadioButton {
-                    readonly property string title: ModelsData.descriptions.medium
+                    readonly property string title: ModelsData.descriptions.mediumLoremIpsum
 
                     text: "Very Long"
                 }
@@ -136,3 +136,5 @@ SplitView {
         }
     }
 }
+
+// category: Panels

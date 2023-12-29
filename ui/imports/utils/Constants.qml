@@ -105,6 +105,7 @@ QtObject {
         readonly property int useGeneralMessageForLockedState: 64
         readonly property int maxPUKReached: 128
         readonly property int copyFromAKeycardPartDone: 256
+        readonly property int maxPairingSlotsReached: 512
     }
 
     readonly property QtObject keycardSharedFlow: QtObject {
@@ -122,9 +123,13 @@ QtObject {
         readonly property string changeKeycardPuk: "ChangeKeycardPuk"
         readonly property string changePairingCode: "ChangePairingCode"
         readonly property string createCopyOfAKeycard: "CreateCopyOfAKeycard"
+        readonly property string migrateFromKeycardToApp: "MigrateFromKeycardToApp"
+        readonly property string migrateFromAppToKeycard: "MigrateFromAppToKeycard"
+        readonly property string sign: "Sign"
     }
 
     readonly property QtObject keycardSharedState: QtObject {
+        readonly property string biometrics: "Biometrics"
         readonly property string noPCSCService: "NoPCSCService"
         readonly property string noState: "NoState"
         readonly property string pluginReader: "PluginReader"
@@ -166,9 +171,14 @@ QtObject {
         readonly property string seedPhraseEnterWords: "SeedPhraseEnterWords"
         readonly property string keyPairMigrateSuccess: "KeyPairMigrateSuccess"
         readonly property string keyPairMigrateFailure: "KeyPairMigrateFailure"
-        readonly property string migratingKeyPair: "MigratingKeyPair"
+        readonly property string migrateKeypairToApp: "MigrateKeypairToApp"
+        readonly property string migrateKeypairToKeycard: "MigrateKeypairToKeycard"
+        readonly property string migratingKeypairToApp: "MigratingKeypairToApp"
+        readonly property string migratingKeypairToKeycard: "MigratingKeypairToKeycard"
         readonly property string enterPassword: "EnterPassword"
         readonly property string wrongPassword: "WrongPassword"
+        readonly property string createPassword: "CreatePassword"
+        readonly property string confirmPassword: "ConfirmPassword"
         readonly property string biometricsPasswordFailed: "BiometricsPasswordFailed"
         readonly property string biometricsPinFailed: "BiometricsPinFailed"
         readonly property string biometricsPinInvalid: "BiometricsPinInvalid"
@@ -320,22 +330,34 @@ QtObject {
     }
 
     readonly property QtObject settingsSubsection: QtObject {
-        property int profile: 0
-        property int contacts: 1
-        property int ensUsernames: 2
-        property int messaging: 3
-        property int wallet: 4
-        property int appearance: 5
-        property int language: 6
-        property int notifications: 7
-        property int syncingSettings: 8
-        property int browserSettings: 9
-        property int advanced: 10
-        property int about: 11
-        property int communitiesSettings: 12
-        property int keycard: 13
-        property int signout: 14
-        property int backUpSeed: 15
+        readonly property int profile: 0
+        readonly property int contacts: 1
+        readonly property int ensUsernames: 2
+        readonly property int messaging: 3
+        readonly property int wallet: 4
+        readonly property int appearance: 5
+        readonly property int language: 6
+        readonly property int notifications: 7
+        readonly property int syncingSettings: 8
+        readonly property int browserSettings: 9
+        readonly property int advanced: 10
+        readonly property int about: 11
+        readonly property int communitiesSettings: 12
+        readonly property int keycard: 13
+        readonly property int about_terms: 14 // a subpage under "About"
+        readonly property int about_privacy: 15 // a subpage under "About"
+
+        // special treatment; these do not participate in the main settings' StackLayout
+        readonly property int signout: 16
+        readonly property int backUpSeed: 17
+    }
+
+    readonly property QtObject walletSettingsSubsection: QtObject {
+        readonly property int manageNetworks: 0
+        readonly property int manageAccounts: 1
+        readonly property int manageAssets: 2
+        readonly property int manageCollectibles: 3
+        readonly property int manageTokenLists: 4
     }
 
     readonly property QtObject currentUserStatus: QtObject{
@@ -402,7 +424,7 @@ QtObject {
         readonly property int manageUsers: 2
         readonly property int moderateContent: 3
         readonly property int admin: 4
-        readonly property int tokenMaster: 5 // TODO no real backend for this yet
+        readonly property int tokenMaster: 5
     }
 
     readonly property QtObject permissionType: QtObject{
@@ -471,10 +493,22 @@ QtObject {
         readonly property int nameLengthMax: 20
         readonly property int nameLengthMin: 5
 
+        readonly property QtObject type: QtObject {
+            readonly property int unknown: -1
+            readonly property int profile: 0
+            readonly property int seedImport: 1
+            readonly property int privateKeyImport: 2
+            readonly property int watchOnly: 3 // added just because of UI, impossible to have watch only keypair
+        }
+
         readonly property QtObject operability: QtObject {
             readonly property string nonOperable: "no"        // an account is non operable it is not a keycard account and there is no keystore file for it and no keystore file for the address it is derived from
             readonly property string partiallyOperable: "partially" // an account is partially operable if it is not a keycard account and there is created keystore file for the address it is derived from
             readonly property string fullyOperable: "fully" // an account is fully operable if it is not a keycard account and there is a keystore file for it
+        }
+
+        readonly property QtObject syncedFrom: QtObject {
+            readonly property string backup: "backup" // means an account is coming from backed up data
         }
     }
 
@@ -502,12 +536,12 @@ QtObject {
                 errorMessage: qsTr("Usernames starting with whitespace are not allowed")
             },
             StatusRegularExpressionValidator {
-                regularExpression: /^[a-zA-Z0-9\-_ ]+$/
+                regularExpression: regularExpressions.alphanumericalExpanded
                 errorMessage: errorMessages.alphanumericalExpandedRegExp
             },
             StatusMinLengthValidator {
                 minLength: keypair.nameLengthMin
-                errorMessage: qsTr("Username must be at least %1 characters").arg(keypair.nameLengthMin)
+                errorMessage: qsTr("Username must be at least %n character(s)", "", keypair.nameLengthMin)
             },
             StatusValidator {
                 name: "endsWithSpaceValidator"
@@ -582,6 +616,7 @@ QtObject {
     readonly property QtObject ephemeralNotificationType: QtObject {
         readonly property int normal: 0
         readonly property int success: 1
+        readonly property int danger: 2
     }
 
     readonly property QtObject translationsState: QtObject {
@@ -621,7 +656,7 @@ QtObject {
             readonly property int popupWidth: 640
             readonly property int popupHeight: 500
             readonly property int popupBiggerHeight: 626
-            readonly property int titleHeight: 44
+            readonly property int titleHeight: 60
             readonly property int messageHeight: 48
             readonly property int footerButtonsHeight: 44
             readonly property int loginInfoHeight1: 24
@@ -633,7 +668,6 @@ QtObject {
             readonly property int profile: 0
             readonly property int seedImport: 1
             readonly property int privateKeyImport: 2
-            readonly property int watchOnly: 3
         }
 
         readonly property QtObject shared: QtObject {
@@ -644,7 +678,7 @@ QtObject {
 
     readonly property QtObject regularExpressions: QtObject {
         readonly property var alphanumerical: /^$|^[a-zA-Z0-9]+$/
-        readonly property var alphanumericalExpanded: /^$|^[a-zA-Z0-9\-_ ]+$/
+        readonly property var alphanumericalExpanded: /^$|^[a-zA-Z0-9\-_.\u0020]+$/
         readonly property var alphanumericalWithSpace: /^$|^[a-zA-Z0-9\s]+$/
         readonly property var asciiPrintable:         /^$|^[!-~]+$/
         readonly property var ascii:                  /^$|^[\x00-\x7F]+$/
@@ -654,8 +688,8 @@ QtObject {
 
     readonly property QtObject errorMessages: QtObject {
         readonly property string alphanumericalRegExp: qsTr("Only letters and numbers allowed")
-        readonly property string alphanumericalWithSpaceRegExp: qsTr("Special characters are not allowed")
         readonly property string alphanumericalExpandedRegExp: qsTr("Only letters, numbers, underscores, whitespaces and hyphens allowed")
+        readonly property string alphanumericalWithSpaceRegExp: qsTr("Special characters are not allowed")
         readonly property string asciiRegExp: qsTr("Only letters, numbers and ASCII characters allowed")
     }
 
@@ -726,11 +760,46 @@ QtObject {
         }
     }
 
+    readonly property QtObject keypairImportPopup: QtObject {
+        readonly property int popupWidth: 480
+        readonly property int contentHeight: 626
+        readonly property int footerButtonsHeight: 44
+        readonly property int labelFontSize1: 15
+        readonly property string instructionsLabelForQr: qsTr("How to display the QR code on your other device")
+        readonly property string instructionsLabelForEncryptedKey: qsTr("How to copy the encrypted key from your other device")
+
+        readonly property QtObject mode: QtObject {
+            readonly property int selectKeypair: 1
+            readonly property int selectImportMethod: 2
+            readonly property int importViaSeedPhrase: 3
+            readonly property int importViaPrivateKey: 4
+            readonly property int importViaQr: 5
+            readonly property int exportKeypairQr: 6
+        }
+
+        readonly property QtObject state: QtObject {
+            readonly property string noState: "NoState"
+            readonly property string selectKeypair: "SelectKeypair"
+            readonly property string selectImportMethod: "SelectImportMethod"
+            readonly property string exportKeypair: "ExportKeypair"
+            readonly property string importQr: "ImportQr"
+            readonly property string importSeedPhrase: "ImportSeedPhrase"
+            readonly property string importPrivateKey: "ImportPrivateKey"
+            readonly property string displayInstructions: "DisplayInstructions"
+        }
+    }
+
     readonly property QtObject localPairingAction: QtObject {
         readonly property int actionUnknown: 0
         readonly property int actionConnect: 1
         readonly property int actionPairingAccount: 2
         readonly property int actionSyncDevice: 3
+    }
+
+    readonly property QtObject supportedTokenSources: QtObject {
+        readonly property string uniswap: "Uniswap Labs Default Token List"
+        readonly property string status: "Status Token List"
+        readonly property string custom: "custom"
     }
 
     enum LocalPairingState {
@@ -759,6 +828,7 @@ QtObject {
     readonly property int communityImported: 0
     readonly property int communityImportingInProgress: 1
     readonly property int communityImportingError: 2
+    readonly property int communityImportingCanceled: 3
 
     readonly property int communityChatPublicAccess: 1
     readonly property int communityChatInvitationOnlyAccess: 2
@@ -838,6 +908,7 @@ QtObject {
         readonly property string goerliEtherscan: "https://goerli.etherscan.io"
         readonly property string goerliArbiscan: "https://goerli.arbiscan.io"
         readonly property string goerliOptimistic: "https://goerli-optimism.etherscan.io"
+        readonly property string sepoliaEtherscan: "https://sepolia.etherscan.io/"
 
         readonly property string addressPath: "address"
         readonly property string txPath: "tx"
@@ -861,6 +932,7 @@ QtObject {
     readonly property string waku_test: "wakuv2.test"
     readonly property string status_test: "status.test"
     readonly property string status_prod: "status.prod"
+    readonly property string shards_test: "shards.test"
 
     readonly property int browserSearchEngineNone: 0
     readonly property int browserSearchEngineGoogle: 1
@@ -881,6 +953,7 @@ QtObject {
     readonly property string userLinkPrefix: externalStatusLinkWithHttps + '/u/'
     readonly property string statusLinkPrefix: 'https://status.im/'
     readonly property string statusHelpLinkPrefix: `https://status.app/help/`
+    readonly property string downloadLink: "https://status.im/get"
 
     readonly property int maxUploadFiles: 5
     readonly property double maxUploadFilesizeMB: 10
@@ -888,8 +961,7 @@ QtObject {
     readonly property int maxNumberOfPins: 3
 
     readonly property string dataImagePrefix: "data:image"
-    readonly property var acceptedImageExtensions: [".png", ".jpg", ".jpeg", ".svg", ".gif"]
-    readonly property var acceptedDragNDropImageExtensions: [".png", ".jpg", ".jpeg", ".heif", ".tif", ".tiff"]
+    readonly property var acceptedDragNDropImageExtensions: [".png", ".jpg", ".jpeg"]
 
     readonly property string mentionSpanTag: `<span style="background-color: ${Style.current.mentionBgColor};"><a style="color:${Style.current.mentionColor};text-decoration:none" href='http://'>`
 
@@ -933,7 +1005,9 @@ QtObject {
         ENSRelease,
         ENSSetPubKey,
         StickersBuy,
-        Bridge
+        Bridge,
+        ERC721Transfer,
+        Unknown
     }
 
     enum ErrorType {
@@ -965,7 +1039,14 @@ QtObject {
         NoOne = 0,
         IdVerifiedContacts = 1,
         Contacts = 2,
-        Everyone = 4
+        Everyone = 3
+    }
+
+    enum ShowcaseEntryType {
+        Community = 0,
+        Account = 1,
+        Collectible = 2,
+        Asset = 3
     }
 
     // refers to ContractTransactionStatus and DeployState in Nim
@@ -984,12 +1065,20 @@ QtObject {
         Dismissed = 4
     }
 
-
+    // these are in sync with app_service/common/types.nim
     enum TokenType {
-        Unknown = 0,
+        Native = 0,
         ERC20 = 1, // Asset
         ERC721 = 2, // Collectible
-        ENS = 3
+        ERC1155 = 3,
+        Unknown = 4,
+        ENS = 5
+    }
+
+    enum TokenPrivilegesLevel {
+        Owner = 0,
+        TMaster = 1,
+        Community = 2
     }
 
     // Mirrors src/backend/activity.nim ActivityStatus
@@ -997,7 +1086,7 @@ QtObject {
         Failed,
         Pending,
         Complete,
-        Finished
+        Finalised
     }
 
     // Mirrors src/backend/activity.nim ActivityType
@@ -1008,6 +1097,7 @@ QtObject {
         Swap,
         Bridge,
         ContractDeployment,
+        Mint,
         Sell,
         Destroy // TODO update value when added to backend
     }
@@ -1024,8 +1114,15 @@ QtObject {
         Custom
     }
 
+    readonly property QtObject time: QtObject {
+        readonly property int hoursIn7Days: 168
+        readonly property int hoursInDay: 24
+        readonly property int secondsIn7Days: 604800
+        readonly property int secondsInHour: 3600
+    }
+
     readonly property QtObject walletSection: QtObject {
-        readonly property string cancelledMessage: "cancelled"
+        readonly property string authenticationCanceled: "authenticationCanceled"
     }
 
     // list of symbols for which pngs are stored to avoid
@@ -1057,11 +1154,29 @@ QtObject {
         "GRID", "LISK", "MOD", "PAX", "RAE", "SAI", "ST", "TNT", "WABI"
     ]
 
-    function tokenIcon(symbol) {
+    function tokenIcon(symbol, useDefault=true) {
         if (!!symbol && knownTokenPNGs.indexOf(symbol) !== -1)
             return Style.png("tokens/" + symbol)
 
-        return Style.png("tokens/DEFAULT-TOKEN")
+        if (useDefault)
+            return Style.png("tokens/DEFAULT-TOKEN")
+        return ""
+    }
+
+    function isDefaultTokenIcon(url) {
+        return url.indexOf("DEFAULT-TOKEN") !== -1
+    }
+
+    function getSupportedTokenSourceImage(key, useDefault=true) {
+        if (key === supportedTokenSources.uniswap)
+            return Style.png("tokens/UNI")
+
+        if (key === supportedTokenSources.status)
+            return Style.png("tokens/SNT")
+
+        if (useDefault)
+            return Style.png("tokens/DEFAULT-TOKEN")
+        return ""
     }
 
     // Message outgoing status
@@ -1097,7 +1212,22 @@ QtObject {
         MembershipRequests,
         RejectedMembers,
         BannedMembers
-    }   
+    }
+
+    enum CommunityMembershipRequestState {
+        None = 0,
+        Pending,
+        Accepted,
+        Rejected,
+        AcceptedPending,
+        RejectedPending,
+        Banned,
+        Kicked,
+        BannedPending,
+        UnbannedPending,
+        KickedPending,
+        AwaitingAddress
+    }
 
     readonly property QtObject walletAccountColors: QtObject {
         readonly property string primary: "primary"
@@ -1123,5 +1253,24 @@ QtObject {
         TillUnmuted = 5,
         For1min = 6,
         Unmuted = 7
+    }
+
+    enum LinkPreviewType {
+        NoPreview = 0,
+        Standard = 1,
+        StatusContact = 2,
+        StatusCommunity = 3,
+        StatusCommunityChannel = 4
+    }
+
+    enum StandardLinkPreviewType {
+        Link = 0,
+        Image = 1
+    }
+
+    enum UrlUnfurlingMode {
+        UrlUnfurlingModeAlwaysAsk = 1,
+        UrlUnfurlingModeEnableAll = 2,
+        UrlUnfurlingModeDisableAll = 3
     }
 }

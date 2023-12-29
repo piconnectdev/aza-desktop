@@ -1,7 +1,9 @@
 import Tables, stint
 import ./item
-import ../../../../app_service/service/wallet_account/service as wallet_account_service
-import ../../../../app_service/service/stickers/service as stickers_service
+
+import app_service/service/wallet_account/service as wallet_account_service
+import app_service/service/stickers/service as stickers_service
+from app_service/service/keycard/service import KeycardEvent
 
 type
   AccessInterface* {.pure inheritable.} = ref object of RootObj
@@ -38,6 +40,9 @@ method obtainMarketStickerPacks*(self: AccessInterface) {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method addRecentStickerToList*(self: AccessInterface, sticker: StickerDto) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method clearStickers*(self: AccessInterface) {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method clearStickerPacks*(self: AccessInterface) {.base.} =
@@ -110,5 +115,8 @@ method stickerTransactionConfirmed*(self: AccessInterface, trxType: string, pack
 method stickerTransactionReverted*(self: AccessInterface, trxType: string, packID: string, transactionHash: string) {.base.} =
   raise newException(ValueError, "No implementation available")
 
-method onUserAuthenticated*(self: AccessInterface, password: string) {.base.} =
+method onKeypairAuthenticated*(self: AccessInterface, password: string, pin: string) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method onTransactionSigned*(self: AccessInterface, keycardFlowType: string, keycardEvent: KeycardEvent) {.base.} =
   raise newException(ValueError, "No implementation available")

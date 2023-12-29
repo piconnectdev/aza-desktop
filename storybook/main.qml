@@ -1,6 +1,7 @@
-import QtQuick 2.14
-import QtQuick.Controls 2.14
-import QtQuick.Layouts 1.14
+import QtQuick 2.15
+import QtQuick.Controls 2.15
+import QtQuick.Controls.Universal 2.15
+import QtQuick.Layouts 1.15
 
 import Qt.labs.settings 1.0
 
@@ -8,6 +9,8 @@ import StatusQ 0.1 // https://github.com/status-im/status-desktop/issues/10218
 
 import StatusQ.Core.Theme 0.1
 import Storybook 1.0
+
+import utils 1.0
 
 ApplicationWindow {
     id: root
@@ -25,6 +28,8 @@ ApplicationWindow {
     palette.windowText: Theme.palette.directColor1
     palette.base: Theme.palette.indirectColor1
     font.pixelSize: 13
+
+    onCurrentPageChanged: testsReRunTimer.restart()
 
     QtObject {
         id: d
@@ -78,83 +83,115 @@ ApplicationWindow {
         id: pagesModel
     }
 
-    FigmaLinksSource {
-        id: figmaLinksSource
-
-        filePath: "figma.json"
-    }
-
-    FigmaDecoratorModel {
-        id: figmaModel
-
-        sourceModel: pagesModel
-        figmaLinks: figmaLinksSource.figmaLinks
-    }
-
     HotReloader {
         id: reloader
 
         loader: viewLoader
         enabled: hotReloaderControls.enabled
-        onReloaded: hotReloaderControls.notifyReload()
+
+        onReloaded: {
+            hotReloaderControls.notifyReload()
+            testsReRunTimer.restart()
+        }
+    }
+
+    TestRunnerController {
+        id: testRunnerController
+    }
+
+    Timer {
+        id: testsReRunTimer
+
+        interval: 100
+
+        onTriggered: {
+            if (!settingsLayout.runTestsAutomatically)
+                return
+
+            const testFileName = `tst_${root.currentPage}.qml`
+            const testsCount = testRunnerController.getTestsCount(testFileName)
+
+            if (testsCount === 0)
+                return
+
+            testRunnerController.runTests(testFileName)
+        }
     }
 
     SplitView {
         anchors.fill: parent
 
-        Pane {
+        ColumnLayout {
             SplitView.preferredWidth: 270
 
-            ColumnLayout {
-                width: parent.width
-                height: parent.height
+            Pane {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
 
-                Button {
-                    Layout.fillWidth: true
+                ColumnLayout {
+                    width: parent.width
+                    height: parent.height
 
-                    text: "Settings"
+                    Button {
+                        Layout.fillWidth: true
 
-                    onClicked: settingsPopup.open()
-                }
+                        text: "Settings"
 
-                CheckBox {
-                    id: darkModeCheckBox
+                        onClicked: settingsPopup.open()
+                    }
 
-                    Layout.fillWidth: true
+                    CheckBox {
+                        id: windowAlwaysOnTopCheckBox
 
-                    text: "Dark mode"
+                        Layout.fillWidth: true
 
-                    StatusLightTheme { id: lightTheme }
-                    StatusDarkTheme { id: darkTheme }
+                        text: "Always on top"
+                        onCheckedChanged: {
+                            if (checked)
+                                root.flags |= Qt.WindowStaysOnTopHint
+                            else
+                                root.flags &= ~Qt.WindowStaysOnTopHint
+                        }
+                    }
 
-                    Binding {
-                        target: Theme
-                        property: "palette"
-                        value: darkModeCheckBox.checked ? darkTheme : lightTheme
+                    CheckBox {
+                        id: darkModeCheckBox
+
+                        Layout.fillWidth: true
+
+                        text: "Dark mode"
+                        onCheckedChanged: Style.changeTheme(checked ? Universal.Dark : Universal.Light, !checked)
+                    }
+
+                    HotReloaderControls {
+                        id: hotReloaderControls
+
+                        Layout.fillWidth: true
+
+                        onForceReloadClicked: reloader.forceReload()
+                    }
+
+                    MenuSeparator {
+                        Layout.fillWidth: true
+                    }
+
+                    FilteredPagesList {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+
+                        currentPage: root.currentPage
+                        model: pagesModel
+
+                        onPageSelected: root.currentPage = page
                     }
                 }
+            }
 
-                HotReloaderControls {
-                    id: hotReloaderControls
+            Button {
+                Layout.fillWidth: true
+                text: "Open pages directory"
 
-                    Layout.fillWidth: true
-
-                    onForceReloadClicked: reloader.forceReload()
-                }
-
-                MenuSeparator {
-                    Layout.fillWidth: true
-                }
-
-                FilteredPagesList {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-
-                    currentPage: root.currentPage
-                    model: pagesModel
-
-                    onPageSelected: root.currentPage = page
-                }
+                onClicked: Qt.openUrlExternally(Qt.resolvedUrl(pagesFolder))
             }
         }
 
@@ -196,11 +233,13 @@ ApplicationWindow {
                 figmaPagesCount: currentPageModelItem.object
                                  ? currentPageModelItem.object.figma.count : 0
 
+                testRunnerController: testRunnerController
+
                 Instantiator {
                     id: currentPageModelItem
 
                     model: SingleItemProxyModel {
-                        sourceModel: figmaModel
+                        sourceModel: pagesModel
                         roleName: "title"
                         value: root.currentPage
                     }
@@ -284,12 +323,12 @@ ApplicationWindow {
         modal: true
 
         contentItem: Label {
-            text: `
-Tips:
-    •   For inline components use naming convention of adding
-        "Custom" at the begining (like Custom${root.currentPage})
-    •   For popups set closePolicy to "Popup.NoAutoClose""
-`
+            text: '
+Tips:\n\
+    •   For inline components use naming convention of adding\n\
+        "Custom" at the begining (like Custom'+root.currentPage+')\n\
+    •   For popups set closePolicy to "Popup.NoAutoClose"\n\
+'
         }
     }
 
@@ -308,19 +347,20 @@ Tips:
                 figmaLinksCache: figmaImageLinksCache
             }
 
-            onRemoveLinksRequested: figmaLinksSource.remove(pageTitle, indexes)
-            onAppendLinksRequested: figmaLinksSource.append(pageTitle, links)
-
             onClosing: Qt.callLater(destroy)
         }
     }
 
     Settings {
+        id: settings
+
         property alias currentPage: root.currentPage
         property alias loadAsynchronously: settingsLayout.loadAsynchronously
+        property alias runTestsAutomatically: settingsLayout.runTestsAutomatically
         property alias darkMode: darkModeCheckBox.checked
         property alias hotReloading: hotReloaderControls.enabled
         property alias figmaToken: settingsLayout.figmaToken
+        property alias windowAlwaysOnTop: windowAlwaysOnTopCheckBox.checked
     }
 
     Shortcut {

@@ -20,14 +20,18 @@ QtObject:
       listOfMyContactsVariant: QVariant
       editCategoryChannelsModel: chats_model.Model
       editCategoryChannelsVariant: QVariant
-      loadingHistoryMessagesInProgress: bool 
+      loadingHistoryMessagesInProgress: bool
       tokenPermissionsModel: TokenPermissionsModel
       tokenPermissionsVariant: QVariant
       allTokenRequirementsMet: bool
       requiresTokenPermissionToJoin: bool
       amIMember: bool
       chatsLoaded: bool
-      
+      communityMetrics: string # NOTE: later this should be replaced with QAbstractListModel-based model
+      permissionsCheckOngoing: bool
+      isWaitingOnNewCommunityOwnerToConfirmRequestToRejoin: bool
+      shardingInProgress: bool
+
   proc delete*(self: View) =
     self.model.delete
     self.modelVariant.delete
@@ -64,6 +68,8 @@ QtObject:
     result.amIMember = false
     result.requiresTokenPermissionToJoin = false
     result.chatsLoaded = false
+    result.communityMetrics = "[]"
+    result.isWaitingOnNewCommunityOwnerToConfirmRequestToRejoin = false
 
   proc load*(self: View) =
     self.delegate.viewDidLoad()
@@ -195,6 +201,9 @@ QtObject:
   proc markAllMessagesRead*(self: View, chatId: string) {.slot.} =
     self.delegate.markAllMessagesRead(chatId)
 
+  proc requestMoreMessages*(self: View, chatId: string) {.slot.} =
+    self.delegate.requestMoreMessages(chatId)
+
   proc clearChatHistory*(self: View, chatId: string) {.slot.} =
     self.delegate.clearChatHistory(chatId)
 
@@ -239,24 +248,6 @@ QtObject:
 
   proc createGroupChat*(self: View, communityID: string, groupName: string, pubKeys: string) {.slot.} =
     self.delegate.createGroupChat(communityID, groupName, pubKeys)
-
-  proc requestToJoinCommunityWithAuthentication*(self: View, ensName: string) {.slot.} =
-    self.delegate.requestToJoinCommunityWithAuthentication(ensName, @[], "")
-
-  proc requestToJoinCommunityWithAuthenticationWithSharedAddresses*(self: View, ensName: string,
-      addressesToShare: string, airdropAddress: string) {.slot.} =
-    try:
-      let addressesArray = map(parseJson(addressesToShare).getElems(), proc(x:JsonNode):string = x.getStr())
-      self.delegate.requestToJoinCommunityWithAuthentication(ensName, addressesArray, airdropAddress)
-    except Exception as e:
-      echo "Error requesting to join community with authentication and shared addresses: ", e.msg
-
-  proc editSharedAddressesWithAuthentication*(self: View, addressesToShare: string, airdropAddress: string) {.slot.} =
-    try:
-      let addressesArray = map(parseJson(addressesToShare).getElems(), proc(x:JsonNode):string = x.getStr())
-      self.delegate.editSharedAddressesWithAuthentication(addressesArray, airdropAddress)
-    except Exception as e:
-      echo "Error editing shared addresses with authentication: ", e.msg
 
   proc joinGroupChatFromInvitation*(self: View, groupName: string, chatId: string, adminPK: string) {.slot.} =
     self.delegate.joinGroupChatFromInvitation(groupName, chatId, adminPK)
@@ -303,7 +294,7 @@ QtObject:
 
   proc leaveCommunity*(self: View) {.slot.} =
     self.delegate.leaveCommunity()
-  
+
   proc removeUserFromCommunity*(self: View, pubKey: string) {.slot.} =
     self.delegate.removeUserFromCommunity(pubKey)
 
@@ -311,7 +302,7 @@ QtObject:
     self.delegate.banUserFromCommunity(pubKey)
 
   proc editCommunity*(self: View, name: string, description: string, introMessage: string, outroMessage: string, access: int,
-                      color: string, tags: string, logoJsonData: string, bannerJsonData: string, historyArchiveSupportEnabled: bool, 
+                      color: string, tags: string, logoJsonData: string, bannerJsonData: string, historyArchiveSupportEnabled: bool,
                       pinMessageAllMembersEnabled: bool) {.slot.} =
     self.delegate.editCommunity(name, description, introMessage, outroMessage, access, color, tags,
                                 logoJsonData, bannerJsonData, historyArchiveSupportEnabled, pinMessageAllMembersEnabled)
@@ -325,8 +316,8 @@ QtObject:
   proc setCommunityMuted*(self: View, mutedType: int) {.slot.} =
     self.delegate.setCommunityMuted(mutedType)
 
-  proc inviteUsersToCommunity*(self: View, pubKeysJSON: string, inviteMessage: string): string {.slot.} =
-    result = self.delegate.inviteUsersToCommunity(pubKeysJSON, inviteMessage)
+  proc shareCommunityToUsers*(self: View, pubKeysJSON: string, inviteMessage: string): string {.slot.} =
+    result = self.delegate.shareCommunityToUsers(pubKeysJSON, inviteMessage)
 
   proc createCommunityCategory*(self: View, name: string, channels: string) {.slot.} =
     let channelsSeq = map(parseJson(channels).getElems(), proc(x:JsonNode):string = x.getStr())
@@ -347,12 +338,12 @@ QtObject:
 
   proc reorderCommunityChat*(self: View, categoryId: string, chatId: string, position: int) {.slot} =
     self.delegate.reorderCommunityChat(categoryId, chatId, position)
-    
+
   proc loadingHistoryMessagesInProgressChanged*(self: View) {.signal.}
 
   proc getLoadingHistoryMessagesInProgress*(self: View): bool {.slot.} =
     return self.loadingHistoryMessagesInProgress
-  
+
   QtProperty[bool] loadingHistoryMessagesInProgress:
     read = getLoadingHistoryMessagesInProgress
     notify = loadingHistoryMessagesInProgressChanged
@@ -408,7 +399,7 @@ QtObject:
       return
     self.amIMember = value
     self.amIMemberChanged()
-  
+
   QtProperty[bool] amIMember:
     read = getAmIMember
     notify = amIMemberChanged
@@ -423,14 +414,76 @@ QtObject:
       return
     self.allTokenRequirementsMet = value
     self.allTokenRequirementsMetChanged()
-  
+
   QtProperty[bool] allTokenRequirementsMet:
     read = getAllTokenRequirementsMet
     notify = allTokenRequirementsMetChanged
 
-  proc userAuthenticationCanceled*(self: View) {.signal.}
+  proc getOverviewChartData*(self: View): QVariant {.slot.} =
+    return newQVariant(self.communityMetrics)
 
-  proc authenticateWithCallback*(self: View) {.slot.} =
-    self.delegate.authenticateWithCallback()
-  
-  proc callbackFromAuthentication*(self: View, authenticated: bool) {.signal.}
+  proc overviewChartDataChanged*(self: View) {.signal.}
+
+  QtProperty[QVariant] overviewChartData:
+    read = getOverviewChartData
+    notify = overviewChartDataChanged
+
+  proc setCommunityMetrics*(self: View, communityMetrics: string) =
+    self.communityMetrics = communityMetrics
+    self.overviewChartDataChanged()
+
+  proc collectCommunityMetricsMessagesTimestamps*(self: View, intervals: string) {.slot.} =
+    self.delegate.collectCommunityMetricsMessagesTimestamps(intervals)
+
+  proc collectCommunityMetricsMessagesCount*(self: View, intervals: string) {.slot.} =
+    self.delegate.collectCommunityMetricsMessagesCount(intervals)
+
+  proc getPermissionsCheckOngoing*(self: View): bool {.slot.} =
+    return self.permissionsCheckOngoing
+
+  proc permissionsCheckOngoingChanged*(self: View) {.signal.}
+
+  QtProperty[bool] permissionsCheckOngoing:
+    read = getPermissionsCheckOngoing
+    notify = permissionsCheckOngoingChanged
+
+  proc setPermissionsCheckOngoing*(self: View, value: bool) =
+    if (value == self.permissionsCheckOngoing):
+      return
+    self.permissionsCheckOngoing = value
+    self.permissionsCheckOngoingChanged()
+
+  proc getWaitingOnNewCommunityOwnerToConfirmRequestToRejoin*(self: View): bool {.slot.} =
+    return self.isWaitingOnNewCommunityOwnerToConfirmRequestToRejoin
+
+  proc isWaitingOnNewCommunityOwnerToConfirmRequestToRejoinChanged*(self: View) {.signal.}
+
+  proc setWaitingOnNewCommunityOwnerToConfirmRequestToRejoin*(self: View, value: bool) =
+    if (value == self.isWaitingOnNewCommunityOwnerToConfirmRequestToRejoin):
+      return
+    self.isWaitingOnNewCommunityOwnerToConfirmRequestToRejoin = value
+    self.isWaitingOnNewCommunityOwnerToConfirmRequestToRejoinChanged()
+
+  QtProperty[bool] isWaitingOnNewCommunityOwnerToConfirmRequestToRejoin:
+    read = getWaitingOnNewCommunityOwnerToConfirmRequestToRejoin
+    notify = isWaitingOnNewCommunityOwnerToConfirmRequestToRejoinChanged
+
+  proc getShardingInProgress*(self: View): bool {.slot.} =
+    return self.shardingInProgress
+
+  proc shardingInProgressChanged*(self: View) {.signal.}
+
+  QtProperty[bool] shardingInProgress:
+    read = getShardingInProgress
+    notify = shardingInProgressChanged
+
+  proc setShardingInProgress*(self: View, value: bool) =
+    if (value == self.shardingInProgress):
+      return
+    self.shardingInProgress = value
+    self.shardingInProgressChanged()
+
+  proc setCommunityShard*(self: View, shardIndex: int) {.slot.} =
+    self.setShardingInProgress(true)
+    self.delegate.setCommunityShard(shardIndex)
+

@@ -16,19 +16,37 @@ SplitView {
         description: communityEditor.description
         logoImageData: communityEditor.image
         color: communityEditor.color
+        bannerImageData: communityEditor.banner
 
         editable: communityEditor.isCommunityEditable
-        owned: communityEditor.amISectionAdmin
+        isOwner: communityEditor.amISectionAdmin
         communitySettingsDisabled: !editable
+
+        shardingEnabled: communityEditor.shardingEnabled
+        shardIndex: communityEditor.shardIndex
+
+        isPendingOwnershipRequest: pendingOwnershipSwitch.checked
     }
 
     Pane {
         SplitView.minimumWidth: 300
         SplitView.preferredWidth: 300
 
-        CommunityInfoEditor{
-            id: communityEditor
-            anchors.fill: parent
+        ColumnLayout {
+            CommunityInfoEditor{
+                id: communityEditor
+                anchors.fill: parent
+            }
+
+            Switch {
+                id: pendingOwnershipSwitch
+                text: "Is there a pending transfer ownership request?"
+                checked: true
+            }
         }
     }
 }
+
+// category: Panels
+
+// https://www.figma.com/file/17fc13UBFvInrLgNUKJJg5/Kuba⎜Desktop?type=design&node-id=31229-627216&mode=design&t=KoQOW7vmoNc7f41m-0

@@ -4,7 +4,7 @@ type
   KeyDetails* = object
     address*: string
     publicKey*: string
-    privateKey*: string 
+    privateKey*: string
 
   ApplicationInfo* = object
     initialized*: bool
@@ -89,7 +89,11 @@ proc toCardMetadata(jsonObj: JsonNode): CardMetadata =
 proc toTransactionSignature(jsonObj: JsonNode): TransactionSignature =
   discard jsonObj.getProp(ResponseParamTxSignatureR, result.r)
   discard jsonObj.getProp(ResponseParamTxSignatureS, result.s)
-  discard jsonObj.getProp(ResponseParamTxSignatureV, result.v)
+  var v: int
+  discard jsonObj.getProp(ResponseParamTxSignatureV, v)
+  result.v = "00"
+  if v == 1:
+    result.v = "01"
 
 proc toKeycardEvent(jsonObj: JsonNode): KeycardEvent =
   discard jsonObj.getProp(ResponseParamErrorKey, result.error)
@@ -98,8 +102,10 @@ proc toKeycardEvent(jsonObj: JsonNode): KeycardEvent =
   discard jsonObj.getProp(ResponseParamPINRetries, result.pinRetries)
   discard jsonObj.getProp(ResponseParamPUKRetries, result.pukRetries)
   discard jsonObj.getProp(ResponseParamMasterKeyAddress, result.masterKeyAddress)
-  if jsonObj.getProp(ResponseParamKeyUID, result.keyUid) and not result.keyUid.startsWith("0x"):
-    result.keyUid = "0x" & result.keyUid
+  if jsonObj.getProp(ResponseParamKeyUID, result.keyUid) and
+    result.keyUid.len > 0 and
+    not result.keyUid.startsWith("0x"):
+      result.keyUid = "0x" & result.keyUid
 
   var obj: JsonNode
   if(jsonObj.getProp(ResponseParamAppInfo, obj)):
@@ -130,7 +136,7 @@ proc toKeycardEvent(jsonObj: JsonNode): KeycardEvent =
 
   if(jsonObj.getProp(ResponseParamCardMeta, obj)):
     result.cardMetadata = toCardMetadata(obj)
-  
+
   if jsonObj.getProp(ResponseParamExportedKey, obj):
     if obj.kind == JArray:
       for o in obj:

@@ -1,4 +1,4 @@
-import NimQml, sequtils, strutils, sugar
+import NimQml, sequtils, strutils
 
 import ../../../../../app_service/service/wallet_account/service as wallet_account_service
 
@@ -54,3 +54,15 @@ QtObject:
 
   proc getColorByAddress(self: View, address: string): string {.slot.}=
     return self.accounts.getColorByAddress(address)
+
+  proc isOwnedAccount(self: View, address: string): bool {.slot.} =
+    return self.accounts.isOwnedAccount(address)
+
+  proc updateWalletAccountProdPreferredChains*(self: View, address: string, preferredChainIds: string) {.slot.} =
+    self.delegate.updateWalletAccountProdPreferredChains(address, preferredChainIds)
+
+  proc updateWalletAccountTestPreferredChains*(self: View, address: string, preferredChainIds: string) {.slot.} =
+    self.delegate.updateWalletAccountTestPreferredChains(address, preferredChainIds)
+
+  proc updateWatchAccountHiddenFromTotalBalance*(self: View, address: string, hideFromTotalBalance: bool) {.slot.} =
+    self.delegate.updateWatchAccountHiddenFromTotalBalance(address, hideFromTotalBalance)

@@ -13,11 +13,13 @@ StatusModal {
 
     property alias stackItems: stackLayout.children
     property alias currentIndex: stackLayout.currentIndex
+    property alias replaceLoader: replaceLoader
     property alias replaceItem: replaceLoader.sourceComponent
     property alias subHeaderItem: subHeaderLoader.sourceComponent
 
     readonly property int itemsCount: stackLayout.count
     readonly property var currentItem: stackLayout.currentItem
+    readonly property alias animating: stackLayout.animating
 
     property Item backButton: StatusBackButton {
         visible: replaceItem || stackLayout.currentIndex > 0

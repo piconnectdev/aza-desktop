@@ -1,5 +1,6 @@
 import json, stint, tables
 import ./core, ./response_type
+from ./gen import rpc
 
 export response_type
 
@@ -14,9 +15,6 @@ proc getNativeChainBalance*(chainId: int, address: string): RpcResponse[JsonNode
   let payload = %* [address, "latest"]
   return core.callPrivateRPCWithChainId("eth_getBalance", chainId, payload)
 
-proc sendTransaction*(chainId: int, transactionData: string, password: string): RpcResponse[JsonNode] {.raises: [Exception].} =
-  core.sendTransaction(chainId, transactionData, password)
-
 # This is the replacement of the `call` function
 proc doEthCall*(payload = %* []): RpcResponse[JsonNode] {.raises: [Exception].} =
   core.callPrivateRPC("eth_call", payload)
@@ -28,6 +26,10 @@ proc suggestedFees*(chainId: int): RpcResponse[JsonNode] {.raises: [Exception].}
   let payload = %* [chainId]
   return core.callPrivateRPC("wallet_getSuggestedFees", payload)
 
-proc suggestedRoutes*(account: string, amount: string, token: string, disabledFromChainIDs, disabledToChainIDs, preferredChainIDs: seq[uint64], sendType: int, lockedInAmounts: var Table[string, string]): RpcResponse[JsonNode] {.raises: [Exception].} =
-  let payload = %* [sendType, account, amount, token, disabledFromChainIDs, disabledToChainIDs, preferredChainIDs, 1 , lockedInAmounts]
+proc suggestedRoutes*(accountFrom: string, accountTo: string, amount: string, token: string, disabledFromChainIDs,
+  disabledToChainIDs, preferredChainIDs: seq[int], sendType: int, lockedInAmounts: var Table[string, string]): RpcResponse[JsonNode] {.raises: [Exception].} =
+  let payload = %* [sendType, accountFrom, accountTo, amount, token, disabledFromChainIDs, disabledToChainIDs, preferredChainIDs, 1, lockedInAmounts]
   return core.callPrivateRPC("wallet_getSuggestedRoutes", payload)
+
+rpc(getEstimatedLatestBlockNumber, "wallet"):
+  chainId: int

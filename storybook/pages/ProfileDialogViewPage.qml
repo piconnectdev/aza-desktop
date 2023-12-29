@@ -4,6 +4,7 @@ import QtQuick.Layouts 1.14
 
 import utils 1.0
 import shared.views 1.0
+import shared.stores 1.0
 import mainui 1.0
 
 import StatusQ 0.1
@@ -106,6 +107,7 @@ SplitView {
                 }
             }
         }
+        communityTokensStore: CommunityTokensStore {}
     }
 
     SplitView {
@@ -228,10 +230,6 @@ SplitView {
                                 logs.logEvent("walletStore::setFilterAddress", ["address"], arguments)
                             }
 
-                            function selectCollectible(slug, id) {
-                                logs.logEvent("walletStore::selectCollectible", ["slug", "id"], arguments)
-                            }
-
                             readonly property var accounts: ListModel {
                                 ListElement {
                                     name: "My Status Account"
@@ -290,7 +288,6 @@ SplitView {
                                             symbol: "MANA"
                                         },
                                         changePct24hour: -2.1,
-                                        visibleForNetworkWithPositiveBalance: true
                                     },
                                     {
                                         symbol: "AAVE",
@@ -299,7 +296,6 @@ SplitView {
                                             symbol: "AAVE"
                                         },
                                         changePct24hour: 4.56,
-                                        visibleForNetworkWithPositiveBalance: true
                                     },
                                     {
                                         symbol: "POLY",
@@ -308,7 +304,6 @@ SplitView {
                                             symbol: "POLY"
                                         },
                                         changePct24hour: -11.6789,
-                                        visibleForNetworkWithPositiveBalance: true
                                     },
                                     {
                                         symbol: "CDT",
@@ -317,7 +312,6 @@ SplitView {
                                             symbol: "CDT"
                                         },
                                         changePct24hour: 0,
-                                        visibleForNetworkWithPositiveBalance: true
                                     },
                                     {
                                         symbol: "MKR",
@@ -326,19 +320,17 @@ SplitView {
                                             symbol: "MKR"
                                         },
                                         //changePct24hour: undefined // NB 'undefined' on purpose
-                                        visibleForNetworkWithPositiveBalance: true
                                     },
                                     {
                                         symbol: "InvisibleHere",
                                         enabledNetworkBalance: {},
                                         changePct24hour: 0,
-                                        visibleForNetworkWithPositiveBalance: false
                                     }
                                 ]
                                 Component.onCompleted: append(data)
                             }
 
-                            readonly property var flatCollectibles: ListModel {
+                            readonly property var collectibles: ListModel {
                                 readonly property var data: [
                                     {
                                         //id: 123,
@@ -528,3 +520,16 @@ Say hi, or find me on Twitter, GitHub, or Mastodon."
         }
     }
 }
+
+// category: Views
+
+// https://www.figma.com/file/ibJOTPlNtIxESwS96vJb06/%F0%9F%91%A4-Profile-%7C-Desktop?node-id=733%3A12552
+// https://www.figma.com/file/ibJOTPlNtIxESwS96vJb06/%F0%9F%91%A4-Profile-%7C-Desktop?node-id=682%3A15078
+// https://www.figma.com/file/ibJOTPlNtIxESwS96vJb06/%F0%9F%91%A4-Profile-%7C-Desktop?node-id=682%3A17655
+// https://www.figma.com/file/ibJOTPlNtIxESwS96vJb06/%F0%9F%91%A4-Profile-%7C-Desktop?node-id=682%3A17087
+// https://www.figma.com/file/ibJOTPlNtIxESwS96vJb06/%F0%9F%91%A4-Profile-%7C-Desktop?node-id=4%3A23525
+// https://www.figma.com/file/ibJOTPlNtIxESwS96vJb06/%F0%9F%91%A4-Profile-%7C-Desktop?node-id=4%3A23932
+// https://www.figma.com/file/ibJOTPlNtIxESwS96vJb06/%F0%9F%91%A4-Profile-%7C-Desktop?node-id=4%3A23932&t=h8DUW6Eysawqe5u0-0
+// https://www.figma.com/file/ibJOTPlNtIxESwS96vJb06/%F0%9F%91%A4-Profile-%7C-Desktop?node-id=724%3A15511&t=h8DUW6Eysawqe5u0-0
+// https://www.figma.com/file/ibJOTPlNtIxESwS96vJb06/%F0%9F%91%A4-Profile-%7C-Desktop?node-id=6%3A16845&t=h8DUW6Eysawqe5u0-0
+// https://www.figma.com/file/ibJOTPlNtIxESwS96vJb06/%F0%9F%91%A4-Profile-%7C-Desktop?node-id=4%3A25437&t=h8DUW6Eysawqe5u0-0

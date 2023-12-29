@@ -62,6 +62,11 @@ SplitView {
 
                 token: tokenObject
                 tokenOwnersModel: TokenHoldersModel {}
+                feeText: "0.01"
+                feeErrorText: ""
+                isFeeLoading: false
+
+                accounts: WalletAccountsModel {}
                 
                 onMintClicked: logs.logEvent("CommunityTokenView::onMintClicked")
             }
@@ -260,7 +265,7 @@ SplitView {
 
                             Layout.fillWidth: true
 
-                            text: ModelsData.descriptions.medium
+                            text: ModelsData.descriptions.mediumLoremIpsum
                         }
 
                         Label {
@@ -331,14 +336,14 @@ SplitView {
                         CheckBox {
                             id: transferibleChecker
 
-                            text: "Tranferible"
+                            text: "Tranferable"
                             checked: true
                         }
 
                         CheckBox {
                             id: selfdestructChecker
 
-                            text: "Remote self-desctruct"
+                            text: "Remote self-destruct"
                             checked: true
                         }
                     }
@@ -390,3 +395,10 @@ SplitView {
         }
     }
 }
+
+// category: Views
+
+// https://www.figma.com/file/17fc13UBFvInrLgNUKJJg5/Kuba%E2%8E%9CDesktop?node-id=2934%3A481005&t=Qo2FwPRxvSxbluqB-1
+// https://www.figma.com/file/17fc13UBFvInrLgNUKJJg5/Kuba%E2%8E%9CDesktop?node-id=2934%3A479431&t=Qo2FwPRxvSxbluqB-1
+// https://www.figma.com/file/17fc13UBFvInrLgNUKJJg5/Kuba%E2%8E%9CDesktop?node-id=2934%3A479570&t=Qo2FwPRxvSxbluqB-1
+// https://www.figma.com/file/17fc13UBFvInrLgNUKJJg5/Kuba%E2%8E%9CDesktop?type=design&node-id=29384-568106&t=mAtmLENvQyRJqDGQ-0

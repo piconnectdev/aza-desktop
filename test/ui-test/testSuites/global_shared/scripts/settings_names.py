@@ -25,8 +25,8 @@ class SettingsSubsection(Enum):
     ABOUT: str = "11" + _EXTRA_MENU_ITEM_OBJ_NAME
     COMMUNITY: str = "12" + _APP_MENU_ITEM_OBJ_NAME
     KEYCARD: str = "13" + _MAIN_MENU_ITEM_OBJ_NAME
-    SIGNOUT: str = "14" + _EXTRA_MENU_ITEM_OBJ_NAME
-    BACKUP_SEED: str = "15" + _MAIN_MENU_ITEM_OBJ_NAME
+    SIGNOUT: str = "16" + _EXTRA_MENU_ITEM_OBJ_NAME
+    BACKUP_SEED: str = "17" + _MAIN_MENU_ITEM_OBJ_NAME
 
 # Main:
 navBarListView_Settings_navbar_StatusNavBarTabButton = {"checkable": True, "container": mainWindow_navBarListView_ListView, "objectName": "Settings-navbar", "type": "StatusNavBarTabButton", "visible": True}
@@ -104,6 +104,7 @@ settings_Wallet_AccountView_EditAccountColorRepeater = {"container": statusDeskt
 settings_Wallet_AccountView_AccountName = {"container": statusDesktop_mainWindow, "type": "StatusBaseText", "objectName": "walletAccountViewAccountName"}
 settings_Wallet_AccountView_IconSettings = {"container": statusDesktop_mainWindow, "type": "StatusEmoji", "objectName": "walletAccountViewAccountImage" , "visible": True}
 settings_Wallet_MainView_BackupSeedPhrase = {"container": mainWindow_ScrollView, "objectName": SettingsSubsection.BACKUP_SEED.value, "type": "StatusNavigationListItem", "visible": True}
+settings_Wallet_MainView_AddNewAccountButton = {"container": statusDesktop_mainWindow, "objectName": "settings_Wallet_MainView_AddNewAccountButton", "type": "StatusButton", "visible": True}
 
 generatedAccounts_ListView = {"container": statusDesktop_mainWindow, "objectName": "generatedAccounts", "type": "ListView"}
 
@@ -111,7 +112,7 @@ generatedAccounts_ListView = {"container": statusDesktop_mainWindow, "objectName
 displayMessageLinkPreviewItem = {"container": statusDesktop_mainWindow, "objectName": "displayMessageLinkPreviewsItem", "type": "StatusListItem"}
 linkPreviewSwitch = {"container": statusDesktop_mainWindow, "objectName": "MessagingView_showMessageLinksSwitch", "type": "StatusSwitch", "visible": True}
 imageUnfurlingItem = {"container": statusDesktop_mainWindow, "objectName": "imageUnfurlingItem", "type": "StatusListItem"}
-tenorGifsPreviewSwitchItem = {"container": statusDesktop_mainWindow, "objectName": "MessagingView_sitesListView_StatusListItem_tenor_gifs_subdomain", "type": "StatusListItem"}
+showGifPreviewsSwitch = {"container": settingsContentBase_ScrollView, "id": "showGifPreviewsSwitch", "type": "StatusSwitch", "unnamed": 1, "visible": True}
 contacts_listItem_btn = {"container": statusDesktop_mainWindow, "objectName": "MessagingView_ContactsListItem_btn", "type": "StatusContactRequestsIndicatorListItem"}
 settingsContentBaseScrollView_StatusScrollBar = {"container": settingsContentBase_ScrollView, "occurrence": 3, "type": "StatusScrollBar", "unnamed": 1, "visible": True}
 

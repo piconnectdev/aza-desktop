@@ -6,6 +6,8 @@ import Models 1.0
 import StatusQ.Core.Utils 0.1
 import AppLayouts.Communities.controls 1.0
 
+import utils 1.0
+
 QtObject {
     id: root
 
@@ -14,6 +16,7 @@ QtObject {
             holdingsListModel: root.createHoldingsModel1(),
             channelsListModel: root.createChannelsModel1(),
             permissionType: PermissionTypes.Type.Admin,
+            permissionState: PermissionTypes.State.Approved,
             isPrivate: true,
             tokenCriteriaMet: false
         },
@@ -21,8 +24,26 @@ QtObject {
             holdingsListModel: root.createHoldingsModel2(),
             channelsListModel: root.createChannelsModel2(),
             permissionType: PermissionTypes.Type.Member,
+            permissionState: PermissionTypes.State.Approved,
             isPrivate: false,
             tokenCriteriaMet: true
+        }
+    ]
+
+    readonly property var permissionsModelDataNotMet: [
+        {
+            holdingsListModel: root.createHoldingsModel1(),
+            channelsListModel: root.createChannelsModel1(),
+            permissionType: PermissionTypes.Type.Admin,
+            isPrivate: true,
+            tokenCriteriaMet: false
+        },
+        {
+            holdingsListModel: root.createHoldingsModel1(),
+            channelsListModel: root.createChannelsModel2(),
+            permissionType: PermissionTypes.Type.Member,
+            isPrivate: false,
+            tokenCriteriaMet: false
         }
     ]
 
@@ -31,6 +52,7 @@ QtObject {
             holdingsListModel: root.createHoldingsModel4(),
             channelsListModel: root.createChannelsModel1(),
             permissionType: PermissionTypes.Type.Admin,
+            permissionState: PermissionTypes.State.Approved,
             isPrivate: true
         }
     ]
@@ -40,24 +62,28 @@ QtObject {
             holdingsListModel: root.createHoldingsModel4(),
             channelsListModel: root.createChannelsModel1(),
             permissionType: PermissionTypes.Type.Admin,
+            permissionState: PermissionTypes.State.Approved,
             isPrivate: true
         },
         {
             holdingsListModel: root.createHoldingsModel3(),
             channelsListModel: root.createChannelsModel2(),
             permissionType: PermissionTypes.Type.Member,
+            permissionState: PermissionTypes.State.Approved,
             isPrivate: false
         },
         {
             holdingsListModel: root.createHoldingsModel2(),
             channelsListModel: root.createChannelsModel2(),
             permissionType: PermissionTypes.Type.Member,
+            permissionState: PermissionTypes.State.Approved,
             isPrivate: false
         },
         {
             holdingsListModel: root.createHoldingsModel1(),
             channelsListModel: root.createChannelsModel2(),
             permissionType: PermissionTypes.Type.Member,
+            permissionState: PermissionTypes.State.Approved,
             isPrivate: false
         }
     ]
@@ -67,12 +93,14 @@ QtObject {
             holdingsListModel: root.createHoldingsModel1(),
             channelsListModel: root.createChannelsModel1(),
             permissionType: PermissionTypes.Type.Admin,
+            permissionState: PermissionTypes.State.Approved,
             isPrivate: true
         },
         {
             holdingsListModel: root.createHoldingsModel2(),
             channelsListModel: root.createChannelsModel2(),
             permissionType: PermissionTypes.Type.Member,
+            permissionState: PermissionTypes.State.Approved,
             isPrivate: false
         }
     ]
@@ -82,12 +110,14 @@ QtObject {
             holdingsListModel: root.createHoldingsModel5(),
             channelsListModel: root.createChannelsModel1(),
             permissionType: PermissionTypes.Type.Admin,
+            permissionState: PermissionTypes.State.Approved,
             isPrivate: true
         },
         {
             holdingsListModel: root.createHoldingsModel4(),
             channelsListModel: root.createChannelsModel2(),
             permissionType: PermissionTypes.Type.Member,
+            permissionState: PermissionTypes.State.Approved,
             isPrivate: false
         }
     ]
@@ -97,18 +127,21 @@ QtObject {
             holdingsListModel: root.createHoldingsModel1(),
             channelsListModel: root.createChannelsModel1(),
             permissionType: PermissionTypes.Type.Admin,
+            permissionState: PermissionTypes.State.Approved,
             isPrivate: true
         },
         {
             holdingsListModel: root.createHoldingsModel1b(),
             channelsListModel: root.createChannelsModel2(),
             permissionType: PermissionTypes.Type.Member,
+            permissionState: PermissionTypes.State.Approved,
             isPrivate: false
         },
         {
             holdingsListModel: root.createHoldingsModel2(),
             channelsListModel: root.createChannelsModel2(),
             permissionType: PermissionTypes.Type.Member,
+            permissionState: PermissionTypes.State.Approved,
             isPrivate: false
         }
     ]
@@ -118,24 +151,28 @@ QtObject {
             holdingsListModel: root.createHoldingsModel1(),
             channelsListModel: root.createChannelsModel1(),
             permissionType: PermissionTypes.Type.Admin,
+            permissionState: PermissionTypes.State.Approved,
             isPrivate: true
         },
         {
             holdingsListModel: root.createHoldingsModel2(),
             channelsListModel: root.createChannelsModel2(),
             permissionType: PermissionTypes.Type.Member,
+            permissionState: PermissionTypes.State.Approved,
             isPrivate: false
         },
         {
             holdingsListModel: root.createHoldingsModel3(),
             channelsListModel: root.createChannelsModel2(),
             permissionType: PermissionTypes.Type.Member,
+            permissionState: PermissionTypes.State.Approved,
             isPrivate: false
         },
         {
             holdingsListModel: root.createHoldingsModel5(),
             channelsListModel: root.createChannelsModel2(),
             permissionType: PermissionTypes.Type.Member,
+            permissionState: PermissionTypes.State.Approved,
             isPrivate: false
         }
     ]
@@ -146,8 +183,47 @@ QtObject {
             holdingsListModel: root.createHoldingsModel2b(),
             channelsListModel: root.createChannelsModel2(),
             permissionType: PermissionTypes.Type.Admin,
+            permissionState: PermissionTypes.State.Approved,
             isPrivate: false,
             tokenCriteriaMet: true
+        },
+        {
+            id: "admin2",
+            holdingsListModel: root.createHoldingsModel3(),
+            channelsListModel: root.createChannelsModel2(),
+            permissionType: PermissionTypes.Type.Admin,
+            permissionState: PermissionTypes.State.Approved,
+            isPrivate: false,
+            tokenCriteriaMet: false
+        },
+        {
+            id: "member1",
+            holdingsListModel: root.createHoldingsModel2(),
+            channelsListModel: root.createChannelsModel2(),
+            permissionType: PermissionTypes.Type.Member,
+            permissionState: PermissionTypes.State.Approved,
+            isPrivate: false,
+            tokenCriteriaMet: true
+        },
+        {
+            id: "member2",
+            holdingsListModel: root.createHoldingsModel3(),
+            channelsListModel: root.createChannelsModel2(),
+            permissionType: PermissionTypes.Type.Member,
+            permissionState: PermissionTypes.State.Approved,
+            isPrivate: false,
+            tokenCriteriaMet: false
+        }
+    ]
+
+    readonly property var complexPermissionsModelDataNotMet: [
+        {
+            id: "admin1",
+            holdingsListModel: root.createHoldingsModel1(),
+            channelsListModel: root.createChannelsModel2(),
+            permissionType: PermissionTypes.Type.Admin,
+            isPrivate: false,
+            tokenCriteriaMet: false
         },
         {
             id: "admin2",
@@ -159,15 +235,15 @@ QtObject {
         },
         {
             id: "member1",
-            holdingsListModel: root.createHoldingsModel2(),
+            holdingsListModel: root.createHoldingsModel1(),
             channelsListModel: root.createChannelsModel2(),
             permissionType: PermissionTypes.Type.Member,
             isPrivate: false,
-            tokenCriteriaMet: true
+            tokenCriteriaMet: false
         },
         {
             id: "member2",
-            holdingsListModel: root.createHoldingsModel3(),
+            holdingsListModel: root.createHoldingsModel4(),
             channelsListModel: root.createChannelsModel2(),
             permissionType: PermissionTypes.Type.Member,
             isPrivate: false,
@@ -176,6 +252,99 @@ QtObject {
     ]
 
     readonly property var channelsOnlyPermissionsModelData: [
+        {
+            id: "read1a",
+            holdingsListModel: root.createHoldingsModel1b(),
+            channelsListModel: root.createChannelsModel1(),
+            permissionType: PermissionTypes.Type.Read,
+            permissionState: PermissionTypes.State.Approved,
+            isPrivate: false,
+            tokenCriteriaMet: true
+        },
+        {
+            id: "read1b",
+            holdingsListModel: root.createHoldingsModel1(),
+            channelsListModel: root.createChannelsModel1(),
+            permissionType: PermissionTypes.Type.Read,
+            permissionState: PermissionTypes.State.Approved,
+            isPrivate: false,
+            tokenCriteriaMet: false
+        },
+        {
+            id: "read1c",
+            holdingsListModel: root.createHoldingsModel3(),
+            channelsListModel: root.createChannelsModel1(),
+            permissionType: PermissionTypes.Type.Read,
+            permissionState: PermissionTypes.State.Approved,
+            isPrivate: false,
+            tokenCriteriaMet: false
+        },
+        {
+            id: "read2a",
+            holdingsListModel: root.createHoldingsModel2(),
+            channelsListModel: root.createChannelsModel3(),
+            permissionType: PermissionTypes.Type.Read,
+            permissionState: PermissionTypes.State.Approved,
+            isPrivate: false,
+            tokenCriteriaMet: true
+        },
+        {
+            id: "read2b",
+            holdingsListModel: root.createHoldingsModel5(),
+            channelsListModel: root.createChannelsModel3(),
+            permissionType: PermissionTypes.Type.Read,
+            permissionState: PermissionTypes.State.Approved,
+            isPrivate: false,
+            tokenCriteriaMet: false
+        },
+        {
+            id: "viewAndPost1a",
+            holdingsListModel: root.createHoldingsModel3(),
+            channelsListModel: root.createChannelsModel1(),
+            permissionType: PermissionTypes.Type.ViewAndPost,
+            permissionState: PermissionTypes.State.Approved,
+            isPrivate: false,
+            tokenCriteriaMet: false
+        },
+        {
+            id: "viewAndPost1b",
+            holdingsListModel: root.createHoldingsModel2b(),
+            channelsListModel: root.createChannelsModel1(),
+            permissionType: PermissionTypes.Type.ViewAndPost,
+            permissionState: PermissionTypes.State.Approved,
+            isPrivate: false,
+            tokenCriteriaMet: true
+        },
+        {
+            id: "viewAndPost2a",
+            holdingsListModel: root.createHoldingsModel3(),
+            channelsListModel: root.createChannelsModel3(),
+            permissionType: PermissionTypes.Type.ViewAndPost,
+            permissionState: PermissionTypes.State.Approved,
+            isPrivate: false,
+            tokenCriteriaMet: false
+        },
+        {
+            id: "viewAndPost2b",
+            holdingsListModel: root.createHoldingsModel5(),
+            channelsListModel: root.createChannelsModel3(),
+            permissionType: PermissionTypes.Type.ViewAndPost,
+            permissionState: PermissionTypes.State.Approved,
+            isPrivate: false,
+            tokenCriteriaMet: false
+        },
+        {
+            id: "viewAndPost2c",
+            holdingsListModel: root.createHoldingsModel1(),
+            channelsListModel: root.createChannelsModel3(),
+            permissionType: PermissionTypes.Type.ViewAndPost,
+            permissionState: PermissionTypes.State.Approved,
+            isPrivate: false,
+            tokenCriteriaMet: false
+        }
+    ]
+
+    readonly property var channelsOnlyPermissionsModelDataNotMet: [
         {
             id: "read1a",
             holdingsListModel: root.createHoldingsModel1b(),
@@ -202,15 +371,15 @@ QtObject {
         },
         {
             id: "read2a",
-            holdingsListModel: root.createHoldingsModel2(),
+            holdingsListModel: root.createHoldingsModel1(),
             channelsListModel: root.createChannelsModel3(),
             permissionType: PermissionTypes.Type.Read,
             isPrivate: false,
-            tokenCriteriaMet: true
+            tokenCriteriaMet: false
         },
         {
             id: "read2b",
-            holdingsListModel: root.createHoldingsModel5(),
+            holdingsListModel: root.createHoldingsModel3(),
             channelsListModel: root.createChannelsModel3(),
             permissionType: PermissionTypes.Type.Read,
             isPrivate: false,
@@ -265,6 +434,17 @@ QtObject {
 
         Component.onCompleted: {
             append(permissionsModelData)
+            guard.enabled = true
+        }
+    }
+
+    readonly property ListModel permissionsModelNotMet: ListModel {
+        readonly property ModelChangeGuard guard: ModelChangeGuard {
+            model: root.permissionsModelNotMet
+        }
+
+        Component.onCompleted: {
+            append(permissionsModelDataNotMet)
             guard.enabled = true
         }
     }
@@ -335,6 +515,30 @@ QtObject {
         }
     }
 
+    readonly property var complexCombinedPermissionsModel: ListModel {
+        readonly property ModelChangeGuard guard: ModelChangeGuard {
+            model: root.complexCombinedPermissionsModel
+        }
+
+        Component.onCompleted: {
+            append(complexPermissionsModelData)
+            append(channelsOnlyPermissionsModelData)
+            guard.enabled = true
+        }
+    }
+
+    readonly property var complexCombinedPermissionsModelNotMet: ListModel {
+        readonly property ModelChangeGuard guard: ModelChangeGuard {
+            model: root.complexCombinedPermissionsModelNotMet
+        }
+
+        Component.onCompleted: {
+            append(complexPermissionsModelDataNotMet)
+            append(channelsOnlyPermissionsModelDataNotMet)
+            guard.enabled = true
+        }
+    }
+
     readonly property var complexPermissionsModel: ListModel {
         readonly property ModelChangeGuard guard: ModelChangeGuard {
             model: root.complexPermissionsModel
@@ -342,7 +546,17 @@ QtObject {
 
         Component.onCompleted: {
             append(complexPermissionsModelData)
-            append(channelsOnlyPermissionsModelData)
+            guard.enabled = true
+        }
+    }
+
+    readonly property var complexPermissionsModelNotMet: ListModel {
+        readonly property ModelChangeGuard guard: ModelChangeGuard {
+            model: root.complexPermissionsModelNotMet
+        }
+
+        Component.onCompleted: {
+            append(complexPermissionsModelDataNotMet)
             guard.enabled = true
         }
     }
@@ -358,10 +572,21 @@ QtObject {
         }
     }
 
+    readonly property var channelsOnlyPermissionsModelNotMet: ListModel {
+        readonly property ModelChangeGuard guard: ModelChangeGuard {
+            model: root.channelsOnlyPermissionsModelNotMet
+        }
+
+        Component.onCompleted: {
+            append(channelsOnlyPermissionsModelDataNotMet)
+            guard.enabled = true
+        }
+    }
+
     function createHoldingsModel1() {
         return [
                     {
-                        type: HoldingTypes.Type.Asset,
+                        type: Constants.TokenType.ERC20,
                         key: "zrx",
                         amount: 15,
                         available: false
@@ -372,7 +597,7 @@ QtObject {
     function createHoldingsModel1b() {
         return [
                     {
-                        type: HoldingTypes.Type.Ens,
+                        type: Constants.TokenType.ENS,
                         key: "*.eth",
                         amount: 1,
                         available: true
@@ -383,13 +608,13 @@ QtObject {
     function createHoldingsModel2() {
         return [
                     {
-                        type: HoldingTypes.Type.Collectible,
+                        type: Constants.TokenType.ERC721,
                         key: "Kitty6",
                         amount: 50.25,
                         available: true
                     },
                     {
-                        type: HoldingTypes.Type.Asset,
+                        type: Constants.TokenType.ERC20,
                         key: "Dai",
                         amount: 11,
                         available: true
@@ -400,13 +625,13 @@ QtObject {
     function createHoldingsModel2b() {
         return [
                     {
-                        type: HoldingTypes.Type.Collectible,
+                        type: Constants.TokenType.ERC721,
                         key: "Anniversary2",
                         amount: 1,
                         available: true
                     },
                     {
-                        type: HoldingTypes.Type.Asset,
+                        type: Constants.TokenType.ERC20,
                         key: "snt",
                         amount: 666,
                         available: true
@@ -417,19 +642,19 @@ QtObject {
     function createHoldingsModel3() {
         return [
                     {
-                        type: HoldingTypes.Type.Asset,
+                        type: Constants.TokenType.ERC20,
                         key: "socks",
                         amount: 15,
                         available: true
                     },
                     {
-                        type: HoldingTypes.Type.Collectible,
+                        type: Constants.TokenType.ERC721,
                         key: "Kitty4",
                         amount: 50.25,
                         available: true
                     },
                     {
-                        type: HoldingTypes.Type.Collectible,
+                        type: Constants.TokenType.ERC721,
                         key: "SuperRare",
                         amount: 11,
                         available: false
@@ -440,25 +665,25 @@ QtObject {
     function createHoldingsModel4() {
         return [
                     {
-                        type: HoldingTypes.Type.Asset,
+                        type: Constants.TokenType.ERC20,
                         key: "socks",
                         amount: 15,
                         available: true
                     },
                     {
-                        type: HoldingTypes.Type.Asset,
+                        type: Constants.TokenType.ERC20,
                         key: "snt",
                         amount: 25000,
                         available: true
                     },
                     {
-                        type: HoldingTypes.Type.Ens,
+                        type: Constants.TokenType.ENS,
                         key: "foo.bar.eth",
                         amount: 1,
                         available: false
                     },
                     {
-                        type: HoldingTypes.Type.Asset,
+                        type: Constants.TokenType.ERC20,
                         key: "Amp",
                         amount: 2,
                         available: true
@@ -469,31 +694,31 @@ QtObject {
     function createHoldingsModel5() {
         return [
                     {
-                        type: HoldingTypes.Type.Asset,
+                        type: Constants.TokenType.ERC20,
                         key: "socks",
                         amount: 15,
                         available: true
                     },
                     {
-                        type: HoldingTypes.Type.Asset,
+                        type: Constants.TokenType.ERC20,
                         key: "zrx",
                         amount: 10,
                         available: false
                     },
                     {
-                        type: HoldingTypes.Type.Asset,
+                        type: Constants.TokenType.ERC20,
                         key: "1inch",
                         amount: 25000,
                         available: true
                     },
                     {
-                        type: HoldingTypes.Type.Asset,
+                        type: Constants.TokenType.ERC20,
                         key: "Aave",
                         amount: 100,
                         available: true
                     },
                     {
-                        type: HoldingTypes.Type.Asset,
+                        type: Constants.TokenType.ERC20,
                         key: "Amp",
                         amount: 2,
                         available: true
@@ -525,5 +750,14 @@ QtObject {
                         channelName: "Club VIP"
                     }
                 ]
+    }
+
+    function changePermissionState(model, index, permissionState) {
+        model.get(index).permissionState = permissionState
+    }
+
+    function changeAllPermissionStates(model, permissionState) {
+        for(let i = 0; i < model.count; i++)
+            changePermissionState(model, i, permissionState)
     }
 }

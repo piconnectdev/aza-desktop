@@ -1,24 +1,26 @@
-import NimQml, stint
+import NimQml, stint, json
 
-import ../../../app_service/service/settings/service as settings_service
-import ../../../app_service/service/node_configuration/service as node_configuration_service
-import ../../../app_service/service/contacts/service as contacts_service
-import ../../../app_service/service/chat/service as chat_service
-import ../../../app_service/service/community/service as community_service
-import ../../../app_service/service/message/service as message_service
-import ../../../app_service/service/gif/service as gif_service
-import ../../../app_service/service/mailservers/service as mailservers_service
-import ../../../app_service/service/community_tokens/service as community_token_service
-import ../../../app_service/service/wallet_account/service as wallet_account_service
-import ../../../app_service/service/token/service as token_service
-import ../../../app_service/service/collectible/service as collectible_service
-import ../../../app_service/service/community_tokens/service as community_tokens_service
-from ../../../app_service/common/types import StatusType, ContractTransactionStatus
+import app_service/service/settings/service as settings_service
+import app_service/service/node_configuration/service as node_configuration_service
+import app_service/service/contacts/service as contacts_service
+import app_service/service/chat/service as chat_service
+import app_service/service/community/service as community_service
+import app_service/service/message/service as message_service
+import app_service/service/gif/service as gif_service
+import app_service/service/mailservers/service as mailservers_service
+import app_service/service/community_tokens/service as community_token_service
+import app_service/service/wallet_account/service as wallet_account_service
+import app_service/service/token/service as token_service
+import app_service/service/community_tokens/service as community_tokens_service
+import app_service/service/community_tokens/community_collectible_owner
+import app_service/service/shared_urls/service as urls_service
+from app_service/common/types import StatusType, ContractTransactionStatus, MembershipRequestState, Shard
 
-import ../../global/app_signals
-import ../../core/eventemitter
-import ../../core/notifications/details
-import ../shared_models/section_item
+import app/global/app_signals
+import app/core/eventemitter
+import app/core/notifications/details
+import app/modules/shared_models/section_item
+import app/modules/shared_modules/keycard_popup/module as keycard_shared_module
 
 type
   AccessInterface* {.pure inheritable.} = ref object of RootObj
@@ -74,40 +76,40 @@ method communitySectionDidLoad*(self: AccessInterface) {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method onChannelGroupsLoaded*(
-  self: AccessInterface,
-  channelGroups: seq[ChannelGroupDto],
-  events: EventEmitter,
-  settingsService: settings_service.Service,
-  nodeConfigurationService: node_configuration_service.Service,
-  contactsService: contacts_service.Service,
-  chatService: chat_service.Service,
-  communityService: community_service.Service,
-  messageService: message_service.Service,
-  gifService: gif_service.Service,
-  mailserversService: mailservers_service.Service,
-  walletAccountService: wallet_account_service.Service,
-  tokenService: token_service.Service,
-  collectibleService: collectible_service.Service,
-  communityTokensService: community_tokens_service.Service)
-  {.base.} =
+    self: AccessInterface,
+    channelGroups: seq[ChannelGroupDto],
+    events: EventEmitter,
+    settingsService: settings_service.Service,
+    nodeConfigurationService: node_configuration_service.Service,
+    contactsService: contacts_service.Service,
+    chatService: chat_service.Service,
+    communityService: community_service.Service,
+    messageService: message_service.Service,
+    gifService: gif_service.Service,
+    mailserversService: mailservers_service.Service,
+    walletAccountService: wallet_account_service.Service,
+    tokenService: token_service.Service,
+    communityTokensService: community_tokens_service.Service,
+    sharedUrlsService: urls_service.Service,
+  ) {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method onCommunityDataLoaded*(
-  self: AccessInterface,
-  events: EventEmitter,
-  settingsService: settings_service.Service,
-  nodeConfigurationService: node_configuration_service.Service,
-  contactsService: contacts_service.Service,
-  chatService: chat_service.Service,
-  communityService: community_service.Service,
-  messageService: message_service.Service,
-  gifService: gif_service.Service,
-  mailserversService: mailservers_service.Service,
-  walletAccountService: wallet_account_service.Service,
-  tokenService: token_service.Service,
-  collectibleService: collectible_service.Service,
-  communityTokensService: community_tokens_service.Service)
-  {.base.} =
+    self: AccessInterface,
+    events: EventEmitter,
+    settingsService: settings_service.Service,
+    nodeConfigurationService: node_configuration_service.Service,
+    contactsService: contacts_service.Service,
+    chatService: chat_service.Service,
+    communityService: community_service.Service,
+    messageService: message_service.Service,
+    gifService: gif_service.Service,
+    mailserversService: mailservers_service.Service,
+    walletAccountService: wallet_account_service.Service,
+    tokenService: token_service.Service,
+    communityTokensService: community_tokens_service.Service,
+    sharedUrlsService: urls_service.Service,
+  ){.base.} =
   raise newException(ValueError, "No implementation available")
 
 method onChatsLoadingFailed*(self: AccessInterface) {.base.} =
@@ -142,20 +144,24 @@ method activeSectionSet*(self: AccessInterface, sectionId: string) {.base.} =
 method toggleSection*(self: AccessInterface, sectionType: SectionType) {.base.} =
   raise newException(ValueError, "No implementation available")
 
+method communitySpectated*(self: AccessInterface, communityId: string) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
 method communityJoined*(self: AccessInterface, community: CommunityDto, events: EventEmitter,
-  settingsService: settings_service.Service,
-  nodeConfigurationService: node_configuration_service.Service,
-  contactsService: contacts_service.Service,
-  chatService: chat_service.Service,
-  communityService: community_service.Service,
-  messageService: message_service.Service,
-  gifService: gif_service.Service,
-  mailserversService: mailservers_service.Service,
-  walletAccountService: wallet_account_service.Service,
-  tokenService: token_service.Service,
-  collectibleService: collectible_service.Service,
-  communityTokensService: community_tokens_service.Service,
-  setActive: bool = false,) {.base.} =
+    settingsService: settings_service.Service,
+    nodeConfigurationService: node_configuration_service.Service,
+    contactsService: contacts_service.Service,
+    chatService: chat_service.Service,
+    communityService: community_service.Service,
+    messageService: message_service.Service,
+    gifService: gif_service.Service,
+    mailserversService: mailservers_service.Service,
+    walletAccountService: wallet_account_service.Service,
+    tokenService: token_service.Service,
+    communityTokensService: community_tokens_service.Service,
+    sharedUrlsService: urls_service.Service,
+    setActive: bool = false,
+  ) {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method communityEdited*(self: AccessInterface, community: CommunityDto) {.base.} =
@@ -168,12 +174,6 @@ method communityLeft*(self: AccessInterface, communityId: string) {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method resolvedENS*(self: AccessInterface, publicKey: string, address: string, uuid: string, reason: string) {.base.} =
-  raise newException(ValueError, "No implementation available")
-
-method contactsStatusUpdated*(self: AccessInterface, statusUpdates: seq[StatusUpdateDto]) {.base.} =
-  raise newException(ValueError, "No implementation available")
-
-method contactUpdated*(self: AccessInterface, publicKey: string) {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method mnemonicBackedUp*(self: AccessInterface) {.base.} =
@@ -191,6 +191,10 @@ method displayEphemeralNotification*(self: AccessInterface, title: string, subTi
 
 method displayEphemeralNotification*(self: AccessInterface, title: string, subTitle: string, icon: string, loading: bool,
     ephNotifType: int, url: string, details = NotificationDetails()) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method displayEphemeralWithActionNotification*(self: AccessInterface, title: string, subTitle: string, icon: string, iconColor: string, loading: bool,
+    ephNotifType: int, actionType: int, actionData: string, details = NotificationDetails()) {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method removeEphemeralNotification*(self: AccessInterface, id: int64) {.base.} =
@@ -236,7 +240,10 @@ method getCommunitySectionModule*(self: AccessInterface, communityId: string): Q
 method getAppSearchModule*(self: AccessInterface): QVariant {.base.} =
   raise newException(ValueError, "No implementation available")
 
-method getContactDetailsAsJson*(self: AccessInterface, publicKey: string, getVerificationRequest: bool): string {.base.} =
+method getContactDetailsAsJson*(self: AccessInterface, publicKey: string, getVerificationRequest: bool, getOnlineStatus: bool): string {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method getOwnerTokenAsJson*(self: AccessInterface, communityId: string): string {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method isEnsVerified*(self: AccessInterface, publicKey: string): bool {.base.} =
@@ -258,10 +265,19 @@ method isConnected*(self: AccessInterface): bool {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method onStatusUrlRequested*(self: AccessInterface, action: StatusUrlAction, communityId: string, chatId: string,
-  url: string, userId: string) {.base.} =
+  url: string, userId: string, shard: Shard) {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method getVerificationRequestFrom*(self: AccessInterface, publicKey: string): VerificationRequest {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method getKeycardSharedModuleForAuthenticationOrSigning*(self: AccessInterface): QVariant {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method onDisplayKeycardSharedModuleForAuthenticationOrSigning*(self: AccessInterface) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method onSharedKeycarModuleForAuthenticationOrSigningTerminated*(self: AccessInterface, lastStepInTheCurrentFlow: bool) {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method getKeycardSharedModule*(self: AccessInterface): QVariant {.base.} =
@@ -270,10 +286,18 @@ method getKeycardSharedModule*(self: AccessInterface): QVariant {.base.} =
 method onDisplayKeycardSharedModuleFlow*(self: AccessInterface) {.base.} =
   raise newException(ValueError, "No implementation available")
 
-method onSharedKeycarModuleFlowTerminated*(self: AccessInterface, lastStepInTheCurrentFlow: bool) {.base.} =
+method onSharedKeycarModuleFlowTerminated*(self: AccessInterface, lastStepInTheCurrentFlow: bool,
+  nextFlow: keycard_shared_module.FlowType, forceFlow: bool, nextKeyUid: string, returnToFlow: keycard_shared_module.FlowType) {.base.} =
   raise newException(ValueError, "No implementation available")
 
-method runAuthenticationPopup*(self: AccessInterface, keyUid: string, bip44Paths: seq[string] = @[]) {.base.} =
+method runAuthenticationOrSigningPopup*(self: AccessInterface, flow: keycard_shared_module.FlowType, keyUid: string,
+  bip44Paths: seq[string] = @[], dataToSign: string = "") {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method onSharedKeycarModuleRunningKeycardFlowsPurposeTerminated*(self: AccessInterface, lastStepInTheCurrentFlow: bool) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method checkAndPerformProfileMigrationIfNeeded*(self: AccessInterface) {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method onMyRequestAdded*(self: AccessInterface) {.base.} =
@@ -291,19 +315,37 @@ method tryKeycardSync*(self: AccessInterface, keyUid: string, pin: string) {.bas
 method onSharedKeycarModuleKeycardSyncPurposeTerminated*(self: AccessInterface, lastStepInTheCurrentFlow: bool) {.base.} =
   raise newException(ValueError, "No implementation available")
 
-method onCommunityTokenDeployed*(self: AccessInterface, communityToken: CommunityTokenDto) {.base.} =
+method onCommunityTokenDeploymentStarted*(self: AccessInterface, communityToken: CommunityTokenDto) {.base.} =
   raise newException(ValueError, "No implementation available")
 
-method onCommunityTokenOwnersFetched*(self: AccessInterface, communityId: string, chainId: int, contractAddress: string, owners: seq[CollectibleOwner]) {.base.} =
+method onOwnerTokensDeploymentStarted*(self: AccessInterface, ownerToken: CommunityTokenDto, masterToken: CommunityTokenDto) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method onCommunityTokenOwnersFetched*(self: AccessInterface, communityId: string, chainId: int, contractAddress: string, owners: seq[CommunityCollectibleOwner]) {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method onCommunityTokenDeployStateChanged*(self: AccessInterface, communityId: string, chainId: int, contractAddress: string, deployState: DeployState) {.base.} =
   raise newException(ValueError, "No implementation available")
 
-method onCommunityTokenSupplyChanged*(self: AccessInterface, communityId: string, chainId: int, contractAddress: string, supply: Uint256, remainingSupply: Uint256) {.base.} =
+method onOwnerTokenDeployStateChanged*(self: AccessInterface, communityId: string, chainId: int, ownerContractAddress: string, masterContractAddress: string, deployState: DeployState, transactionHash: string) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method onCommunityTokenSupplyChanged*(self: AccessInterface, communityId: string, chainId: int, contractAddress: string, supply: Uint256, remainingSupply: Uint256, destructedAmount: Uint256) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method onCommunityTokenRemoved*(self: AccessInterface, communityId: string, chainId: int, contractAddress: string) {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method onBurnStateChanged*(self: AccessInterface, communityId: string, chainId: int, contractAddress: string, burnState: ContractTransactionStatus) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method onFinaliseOwnershipStatusChanged*(self: AccessInterface, isPending: bool, communityId: string) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method onRemoteDestructed*(self: AccessInterface, communityId: string, chainId: int, contractAddress: string, addresses: seq[string]) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method onRequestReevaluateMembersPermissionsIfRequired*(self: AccessInterface, communityId: string, chainId: int, contractAddress: string) {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method onAcceptRequestToJoinFailed*(self: AccessInterface, communityId: string, memberKey: string, requestId: string) {.base.} =
@@ -318,6 +360,9 @@ method onAcceptRequestToJoinLoading*(self: AccessInterface, communityId: string,
 method onAcceptRequestToJoinSuccess*(self: AccessInterface, communityId: string, memberKey: string, requestId: string) {.base.} =
   raise newException(ValueError, "No implementation available")
 
+method onMembershipStatusUpdated*(self: AccessInterface, communityId: string, memberPubkey: string, status: MembershipRequestState) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
 method onDeactivateChatLoader*(self: AccessInterface, sectionId: string, chatId: string) {.base.} =
   raise newException(ValueError, "No implementation available")
 
@@ -325,6 +370,33 @@ method windowActivated*(self: AccessInterface) {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method windowDeactivated*(self: AccessInterface) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method communityMembersRevealedAccountsLoaded*(self: AccessInterface, communityId: string, membersRevealedAccounts: MembersRevealedAccounts) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+## Used in test env only, for testing keycard flows
+method registerMockedKeycard*(self: AccessInterface, cardIndex: int, readerState: int, keycardState: int,
+  mockedKeycard: string, mockedKeycardHelper: string) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method pluginMockedReaderAction*(self: AccessInterface) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method unplugMockedReaderAction*(self: AccessInterface) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method insertMockedKeycardAction*(self: AccessInterface, cardIndex: int) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method removeMockedKeycardAction*(self: AccessInterface) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method fakeLoadingScreenFinished*(self: AccessInterface) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method onCommunityTokensDetailsLoaded*(self: AccessInterface, communityId: string,
+    communityTokens: seq[CommunityTokenDto], communityTokenJsonItems: JsonNode) {.base.} =
   raise newException(ValueError, "No implementation available")
 
 # This way (using concepts) is used only for the modules managed by AppController

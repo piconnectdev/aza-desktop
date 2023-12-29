@@ -4,6 +4,7 @@ import QtQuick.Controls 2.14
 import utils 1.0
 import shared.controls 1.0
 
+import StatusQ 0.1
 import StatusQ.Components 0.1
 import StatusQ.Core.Theme 0.1
 import StatusQ.Core 0.1
@@ -16,14 +17,13 @@ Control {
     property alias secondaryText: cryptoBalance.text
     property alias tertiaryText: fiatBalance.text
     property var balances
+    property var networksModel
     property bool isLoading: false
     property string errorTooltipText
     property StatusAssetSettings asset: StatusAssetSettings {
         width: 40
         height: 40
     }
-    property var getNetworkColor: function(chainId){}
-    property var getNetworkIcon: function(chainId){}
     property var formatBalance: function(balance){}
 
     topPadding: Style.current.padding
@@ -76,17 +76,23 @@ Control {
                 loading: root.isLoading
             }
         }
+        /* TODO :: Issue with not being able to see correct balnces after switching assets will be fixed under
+        https://github.com/status-im/status-desktop/issues/12912 */
         Row {
             spacing: Style.current.smallPadding
             anchors.left: parent.left
             anchors.leftMargin: identiconLoader.width
             Repeater {
                 id: chainRepeater
-                model: balances ? balances : null
+                model: LeftJoinModel {
+                    leftModel: root.balances
+                    rightModel: root.networksModel
+                    joinRole: "chainId"
+                }
                 delegate: InformationTag {
                     tagPrimaryLabel.text: root.formatBalance(model.balance)
-                    tagPrimaryLabel.color: root.getNetworkColor(model.chainId)
-                    image.source: Style.svg("tiny/%1".arg(root.getNetworkIcon(model.chainId)))
+                    tagPrimaryLabel.color: model.chainColor
+                    image.source: Style.svg("tiny/%1".arg(model.iconUrl))
                     loading: root.isLoading
                     rightComponent: StatusFlatRoundButton {
                         width: 14

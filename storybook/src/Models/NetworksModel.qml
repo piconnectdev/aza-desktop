@@ -3,19 +3,43 @@ pragma Singleton
 import QtQuick 2.15
 
 QtObject {
+    id: root
 
     readonly property int ethNet: 1
-    readonly property int optimismNet: 2
-    readonly property int arbitrumNet: 3
+    readonly property int optimismNet: 10
+    readonly property int arbitrumNet: 42161
     readonly property int hermezNet: 4
     readonly property int testnetNet: 5
     readonly property int customNet: 6
 
-    readonly property var layer1Networks: ListModel {
+    function getChainName(chainId) {
+        if(chainId === root.ethNet)
+            return "Mainnet"
+
+        if(chainId === root.optimismNet)
+            return "Optimism"
+
+        if(chainId === root.arbitrumNet)
+            return "Arbitrum"
+
+        if(chainId === root.hermezNet)
+            return "Hermez"
+
+        if(chainId === root.testnetNet)
+            return "Goerli"
+
+        if(chainId === root.customNet)
+            return "Custom"
+    }
+
+    component CustomNetworkModel: ListModel {
+        // Simulate Nim's way of providing access to data
         function rowData(index, propName) {
             return get(index)[propName]
         }
+    }
 
+    readonly property var layer1Networks: CustomNetworkModel {
         Component.onCompleted:
             append([
                        {
@@ -31,7 +55,7 @@ QtObject {
                    ])
     }
 
-    readonly property var layer2Networks: ListModel {
+    readonly property var layer2Networks: CustomNetworkModel {
         Component.onCompleted:
             append([
                        {
@@ -57,7 +81,7 @@ QtObject {
                    ])
     }
 
-    readonly property var testNetworks: ListModel {
+    readonly property var testNetworks: CustomNetworkModel {
         Component.onCompleted:
             append([
                        {
@@ -93,12 +117,7 @@ QtObject {
                    ])
     }
 
-    readonly property var enabledNetworks: ListModel {
-        // Simulate Nim's way of providing access to data
-        function rowData(index, propName) {
-            return get(index)[propName]
-        }
-
+    readonly property var enabledNetworks: CustomNetworkModel {
         Component.onCompleted:
             append([
                        {
@@ -170,12 +189,7 @@ QtObject {
                    ])
     }
 
-    readonly property var allNetworks: ListModel {
-        // Simulate Nim's way of providing access to data
-        function rowData(index, propName) {
-            return get(index)[propName]
-        }
-
+    readonly property var allNetworks: CustomNetworkModel {
         Component.onCompleted: append([
             {
                 chainId: 1,
@@ -262,5 +276,263 @@ QtObject {
                 isEnabled: false,
             }]
         )
+    }
+
+    readonly property var mainNetworks: CustomNetworkModel {
+        Component.onCompleted: append([
+                   {
+                       chainId: 1,
+                       chainName: "Ethereum Mainnet",
+                       iconUrl: ModelsData.networks.ethereum,
+                       isActive: true,
+                       isEnabled: true,
+                       shortName: "ETH",
+                       chainColor: "blue",
+                       layer: 1,
+                       isTest: false
+                   },
+                   {
+                       chainId: 10,
+                       chainName: "Optimism",
+                       iconUrl: ModelsData.networks.optimism,
+                       isActive: false,
+                       isEnabled: true,
+                       shortName: "OPT",
+                       chainColor: "red",
+                       layer: 2,
+                       isTest: false
+                   },
+                   {
+                       chainId: 42161,
+                       chainName: "Arbitrum",
+                       iconUrl: ModelsData.networks.arbitrum,
+                       isActive: false,
+                       isEnabled: true,
+                       shortName: "ARB",
+                       chainColor: "purple",
+                       layer: 2,
+                       isTest: false
+                   }
+               ])
+    }
+
+    readonly property var sendFromNetworks: CustomNetworkModel {
+        function updateFromNetworks(paths){
+            reset()
+            for(let i=0; i<paths.length; i++) {
+                for(let k=0; k<count; k++) {
+                    if(paths[i].fromNetwork.toString() === get(k).chainId.toString()) {
+                        get(k).amountIn = paths[i].amountIn
+                        get(k).toNetworks = get(k).toNetworks + ":" + paths[i].toNetwork
+                        get(k).hasGas = true
+                        get(k).locked = paths[i].amountInLocked
+                    }
+                }
+            }
+        }
+        function reset() {
+            for( let j=0; j<count; j++) {
+                get(j).amountIn = ""
+                get(j).toNetworks = ""
+                get(j).hasGas = true
+                get(j).locked = false
+            }
+        }
+        Component.onCompleted: append([
+                   {
+                       chainId: 1,
+                       chainName: "Ethereum Mainnet",
+                       iconUrl: ModelsData.networks.ethereum,
+                       chainColor: "blue",
+                       shortName: "ETH",
+                       layer: 1,
+                       nativeCurrencyDecimals: 18,
+                       nativeCurrencyName: "Ether",
+                       nativeCurrencySymbol: "ETH",
+                       isEnabled: true,
+                       isPreferred: true,
+                       hasGas: true,
+                       tokenBalance: ({
+                            displayDecimals: true,
+                            stripTrailingZeroes: true,
+                            amount: 23333213.234
+                       }),
+                       locked: false,
+                       lockedAmount: "",
+                       amountIn: "",
+                       amountOut: "",
+                       toNetworks: ""
+                    },
+                   {
+                        chainId: 10,
+                        chainName: "Optimism",
+                        iconUrl: ModelsData.networks.optimism,
+                        chainColor: "red",
+                        shortName: "OPT",
+                        layer: 2,
+                        nativeCurrencyDecimals: 18,
+                        nativeCurrencyName: "Ether",
+                        nativeCurrencySymbol: "ETH",
+                        isEnabled: true,
+                        isPreferred: true,
+                        hasGas: true,
+                        tokenBalance: ({
+                            displayDecimals: true,
+                            stripTrailingZeroes: true,
+                            amount: 23333213.234
+                        }),
+                        locked: false,
+                        lockedAmount: "",
+                        amountIn: "",
+                        amountOut: "",
+                        toNetworks: ""
+                   },
+                   {
+                        chainId: 42161,
+                        chainName: "Arbitrum",
+                        iconUrl: ModelsData.networks.arbitrum,
+                        isActive: false,
+                        isEnabled: true,
+                        shortName: "ARB",
+                        chainColor: "purple",
+                        layer: 2,
+                        nativeCurrencyDecimals: 18,
+                        nativeCurrencyName: "Ether",
+                        nativeCurrencySymbol: "ETH",
+                        isEnabled: true,
+                        isPreferred: true,
+                        hasGas: true,
+                        tokenBalance: ({
+                            displayDecimals: true,
+                            stripTrailingZeroes: true,
+                            amount: 23333213.234
+                        }),
+                        locked: false,
+                        lockedAmount: "",
+                        amountIn: "",
+                        amountOut: "",
+                        toNetworks: ""
+                    }
+               ])
+    }
+
+    readonly property var sendToNetworks: CustomNetworkModel {
+        function updateRoutePreferredChains(chainIds) {
+            for( let i=0; i<count; i++) {
+                get(i).isPreferred = false
+                get(i).isEnabled = false
+                if(chainIds.length === 0) {
+                    if(get(i).layer() === 1) {
+                        get(i).isPreferred = true
+                        get(i).isEnabled = true
+                    }
+                }
+                else {
+                    for (let k =0;k<chainIds.split(":").length;k++) {
+                        if(get(i).chainId.toString() === chainIds[k].toString()) {
+                            get(i).isPreferred = true
+                            get(i).isEnabled = true
+                        }
+                    }
+                }
+            }
+        }
+        function updateToNetworks(paths){
+            reset()
+            for(let i=0;i<paths.length;i++) {
+                for( let k=0; k<count; k++) {
+                    if(paths[i].toNetwork.toString() === get(k).chainId.toString()) {
+                        if(!!get(k).amountOut) {
+                            let res = parseInt(get(k).amountOut) + parseInt(paths[i].amountOut)
+                            get(k).amountOut = res.toString()
+                        }
+                        else {
+                            get(k).amountOut = paths[i].amountOut
+                        }
+                    }
+                }
+            }
+        }
+        function reset() {
+            for( let j=0; j<count; j++) {
+                get(j).amountOut = ""
+            }
+        }
+        Component.onCompleted: append([
+                   {
+                       chainId: 1,
+                       chainName: "Ethereum Mainnet",
+                       iconUrl: ModelsData.networks.ethereum,
+                       chainColor: "blue",
+                       shortName: "ETH",
+                       layer: 1,
+                       nativeCurrencyDecimals: 18,
+                       nativeCurrencyName: "Ether",
+                       nativeCurrencySymbol: "ETH",
+                       isEnabled: true,
+                       isPreferred: true,
+                       hasGas: true,
+                       tokenBalance: ({
+                            displayDecimals: true,
+                            stripTrailingZeroes: true,
+                            amount: 23333213.234
+                       }),
+                       locked: false,
+                       lockedAmount: "",
+                       amountIn: "",
+                       amountOut: "",
+                       toNetworks: ""
+                    },
+                   {
+                        chainId: 10,
+                        chainName: "Optimism",
+                        iconUrl: ModelsData.networks.optimism,
+                        chainColor: "red",
+                        shortName: "OPT",
+                        layer: 2,
+                        nativeCurrencyDecimals: 18,
+                        nativeCurrencyName: "Ether",
+                        nativeCurrencySymbol: "ETH",
+                        isEnabled: true,
+                        isPreferred: true,
+                        hasGas: true,
+                        tokenBalance: ({
+                            displayDecimals: true,
+                            stripTrailingZeroes: true,
+                            amount: 23333213.234
+                        }),
+                        locked: false,
+                        lockedAmount: "",
+                        amountIn: "",
+                        amountOut: "",
+                        toNetworks: ""
+                   },
+                   {
+                        chainId: 42161,
+                        chainName: "Arbitrum",
+                        iconUrl: ModelsData.networks.arbitrum,
+                        isActive: false,
+                        isEnabled: true,
+                        shortName: "ARB",
+                        chainColor: "purple",
+                        layer: 2,
+                        nativeCurrencyDecimals: 18,
+                        nativeCurrencyName: "Ether",
+                        nativeCurrencySymbol: "ETH",
+                        isEnabled: true,
+                        isPreferred: true,
+                        hasGas: true,
+                        tokenBalance: ({
+                            displayDecimals: true,
+                            stripTrailingZeroes: true,
+                            amount: 23333213.234
+                        }),
+                        locked: false,
+                        lockedAmount: "",
+                        amountIn: "",
+                        amountOut: "",
+                        toNetworks: ""
+                    }
+               ])
     }
 }

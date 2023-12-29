@@ -101,6 +101,9 @@ method unblockChat*(self: AccessInterface) {.base.} =
 method markAllMessagesRead*(self: AccessInterface) {.base.} =
   raise newException(ValueError, "No implementation available")
 
+method requestMoreMessages*(self: AccessInterface) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
 method markMessageRead*(self: AccessInterface, msgID: string) {.base.} =
   raise newException(ValueError, "No implementation available")
 
@@ -132,4 +135,10 @@ method onUpdateViewOnlyPermissionsSatisfied*(self: AccessInterface, value: bool)
   raise newException(ValueError, "No implementation available")
 
 method onUpdateViewAndPostPermissionsSatisfied*(self: AccessInterface, value: bool) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method setPermissionsCheckOngoing*(self: AccessInterface, value: bool) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method getPermissionsCheckOngoing*(self: AccessInterface): bool {.base.} =
   raise newException(ValueError, "No implementation available")

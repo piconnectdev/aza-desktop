@@ -1,22 +1,21 @@
-import NimQml, Tables, sequtils, sugar
+import NimQml, sequtils, sugar
 
-import ../../../../global/global_singleton
-import ../../../../core/eventemitter
-import ../../../../../app_service/service/token/service as token_service
-import ../../../../../app_service/service/currency/service as currency_service
-import ../../../../../app_service/service/wallet_account/service as wallet_account_service
-import ../../../../../app_service/service/network/service as network_service
-import ../../../../../app_service/service/network_connection/service as network_connection
-import ../../../../../app_service/service/collectible/service as collectible_service
-import ../../../../../app_service/service/node/service as node_service
-import ../../../shared/wallet_utils
-import ../../../shared_models/currency_amount
-import ../../../shared_models/token_model as token_model
-import ../../../shared_models/token_item as token_item
-import ./item as account_item
+import app/global/global_singleton
+import app/core/eventemitter
+import app_service/service/token/service as token_service
+import app_service/service/currency/service as currency_service
+import app_service/service/wallet_account/service as wallet_account_service
+import app_service/service/network/service as network_service
+import app_service/service/network_connection/service as network_connection
+import app_service/service/node/service as node_service
+import app/modules/shared/wallet_utils
+import app/modules/shared_models/token_model as token_model
+import app/modules/shared_models/token_item as token_item
 
 import ./io_interface, ./view, ./controller
 import ../io_interface as delegate_interface
+
+import backend/helpers/token
 
 export io_interface
 
@@ -60,7 +59,7 @@ method load*(self: Module) =
   self.events.on(SIGNAL_WALLET_ACCOUNT_TOKENS_REBUILT) do(e:Args):
     let arg = TokensPerAccountArgs(e)
     self.onTokensRebuilt(arg.hasBalanceCache, arg.hasMarketValuesCache)
-  
+
   self.events.on(SIGNAL_NETWORK_DISCONNECTED) do(e: Args):
     if self.view.getAssetsModel().getCount() == 0:
       self.setLoadingAssets()
@@ -87,16 +86,16 @@ proc setAssetsAndBalance(self: Module, tokens: seq[WalletTokenDto], enabledChain
 
   let items = tokens.map(t => walletTokenToItem(t, chainIds, enabledChainIds, currency, currencyFormat, self.controller.getCurrencyFormat(t.symbol)))
   let totalCurrencyBalanceForAllAssets = tokens.map(t => t.getCurrencyBalance(enabledChainIds, currency)).foldl(a + b, 0.0)
-    
+
   self.view.getAssetsModel().setItems(items)
 
 method filterChanged*(self: Module, addresses: seq[string], chainIds: seq[int]) =
   let walletAccounts = self.controller.getWalletAccountsByAddresses(addresses)
-  
+
   let accountItem = walletAccountToWalletAssetsItem(walletAccounts[0])
   self.view.setData(accountItem)
 
-  if walletAccounts[0].tokens.len == 0 and walletAccounts[0].assetsLoading:
+  if walletAccounts[0].assetsLoading:
     self.setLoadingAssets()
   else:
     let walletTokens = self.controller.getWalletTokensByAddresses(addresses)

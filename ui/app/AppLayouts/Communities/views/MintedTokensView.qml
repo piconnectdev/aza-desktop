@@ -1,9 +1,11 @@
 import QtQuick 2.0
 import QtQuick.Layouts 1.14
 
+import StatusQ.Controls 0.1
 import StatusQ.Core 0.1
 import StatusQ.Components 0.1
 import StatusQ.Core.Theme 0.1
+import StatusQ.Core.Utils 0.1 as StatusQUtils
 
 import SortFilterProxyModel 0.2
 import utils 1.0
@@ -24,6 +26,8 @@ StatusScrollView {
     property int viewWidth: 560 // by design
     property var model
     property string communityName
+    property string communityId
+    property bool anyPrivilegedTokenFailed: false
     readonly property int count: assetsModel.count + collectiblesModel.count
 
     signal itemClicked(string tokenKey,
@@ -32,7 +36,11 @@ StatusScrollView {
                        string accountName,
                        string accountAddress)
 
-    signal mintOwnerTokenClicked
+    signal mintOwnerTokenClicked()
+    signal retryOwnerTokenClicked(string tokenKey,
+                                  int chainId,
+                                  string accountName,
+                                  string accountAddress)
 
     padding: 0
 
@@ -51,14 +59,14 @@ StatusScrollView {
             return ""
         }
 
-        function getRemainingInfo(isOwnerToken, isPrivilegedToken,
+        function getRemainingInfo(isOwnerToken, isTMasterToken,
                                   remainingSupply, supply, isInfiniteSupply) {
             // Owner token use case:
             if(isOwnerToken)
                 return qsTr("1 of 1 (you hodl)")
 
             // TMaster token use case:
-            if(isPrivilegedToken)
+            if(isTMasterToken)
                 return "∞"
 
             // Rest of collectible cases:
@@ -154,7 +162,7 @@ StatusScrollView {
                 id: assetsList
 
                 Layout.fillWidth: true
-                Layout.preferredHeight: childrenRect.height
+                Layout.preferredHeight: contentHeight
 
                 visible: count > 0
                 model: assetsModel
@@ -162,8 +170,8 @@ StatusScrollView {
                 delegate: StatusListItem {
                     height: 64
                     width: mainLayout.width
-                    title: model.name
-                    subTitle: model.symbol
+                    title: model.name ?? ""
+                    subTitle: model.symbol ?? ""
                     asset.name: model.image ? model.image : ""
                     asset.isImage: true
                     components: [
@@ -226,8 +234,8 @@ StatusScrollView {
                     width: collectiblesGrid.cellWidth
                     title: model.name ? model.name : "..."
                     subTitle: deployState === Constants.ContractTransactionStatus.Completed ?
-                                  d.getRemainingInfo(model.isOwner,
-                                                     model.isPrivilegedToken,
+                                  d.getRemainingInfo(model.privilegesLevel === Constants.TokenPrivilegesLevel.Owner,
+                                                     model.privilegesLevel === Constants.TokenPrivilegesLevel.TMaster,
                                                      model.remainingSupply,
                                                      model.supply,
                                                      model.infiniteSupply) :
@@ -238,9 +246,9 @@ StatusScrollView {
                     backgroundColor: "transparent"
                     isLoading: false
                     navigationIconVisible: false
-                    isPrivilegedToken: model.isPrivilegedToken
-                    isOwner: model.isOwner
+                    privilegesLevel: model.privilegesLevel
                     ornamentColor: model.color
+                    communityId: root.communityId
 
                     onClicked: root.itemClicked(model.contractUniqueKey,
                                                 model.chainId, model.chainName,
@@ -255,6 +263,27 @@ StatusScrollView {
                 Layout.preferredHeight: 44
                 visible: collectiblesGrid.count === 0
                 text: qsTr("You currently have no minted collectibles")
+            }
+
+            // Retry button, only in case of Owner or TMaster tokens failure
+            StatusButton {
+                Layout.preferredWidth: 336
+                Layout.preferredHeight: 44
+                Layout.alignment: Qt.AlignLeft
+                Layout.leftMargin: 24
+
+                visible: root.anyPrivilegedTokenFailed
+                text: qsTr("Retry mint")
+
+                onClicked: {
+                    // Get owner token item:
+                    const index = StatusQUtils.ModelUtils.indexOf(root.model, "name", PermissionsHelpers.ownerTokenNameTag + root.communityName)
+                    if(index === -1)
+                        return console.warn("Trying to get Owner Token item but it's not part of the provided model.")
+
+                    const token = StatusQUtils.ModelUtils.get(root.model, index)
+                    root.retryOwnerTokenClicked(token.contractUniqueKey, token.chainId, token.accountName, token.accountAddress)
+                }
             }
         }
     }

@@ -20,32 +20,36 @@ StatusDropdown {
     property var collectiblesModel
     property bool isENSTab: true
     property string noDataText: {
-        if(d.currentHoldingType  ===  HoldingTypes.Type.Asset)
+        if(d.currentHoldingType  ===  Constants.TokenType.ERC20)
             return noDataTextForAssets
-        if(d.currentHoldingType === HoldingTypes.Type.Collectible)
+        if(d.currentHoldingType === Constants.TokenType.ERC721)
             return noDataTextForCollectibles
         return qsTr("No data found")
     }
     property string noDataTextForAssets: qsTr("No assets found")
     property string noDataTextForCollectibles: qsTr("No collectibles found")
 
+    property alias allTokensMode: d.allTokensMode
+
     property var usedTokens: []
     property var usedEnsNames: []
 
     property string assetKey: ""
-    property real assetAmount: 0
+    property string assetAmount: "0"
+    property int assetMultiplierIndex: 0
 
     property string collectibleKey: ""
-    property real collectibleAmount: 1
+    property string collectibleAmount: "1"
 
     property string ensDomainName: ""
+    property bool showTokenAmount: true
 
-    signal addAsset(string key, real amount)
-    signal addCollectible(string key, real amount)
+    signal addAsset(string key, string amount)
+    signal addCollectible(string key, string amount)
     signal addEns(string domain)
 
-    signal updateAsset(string key, real amount)
-    signal updateCollectible(string key, real amount)
+    signal updateAsset(string key, string amount)
+    signal updateCollectible(string key, string amount)
     signal updateEns(string domain)
 
     signal removeClicked
@@ -57,7 +61,7 @@ StatusDropdown {
 
     function openUpdateFlow() {
         d.initialHoldingMode = HoldingTypes.Mode.UpdateOrRemove
-        if(d.currentHoldingType !== HoldingTypes.Type.Ens) {
+        if(d.currentHoldingType !== Constants.TokenType.ENS) {
             if(statesStack.size === 0)
                 statesStack.push(HoldingsDropdown.FlowType.List_Deep1)
 
@@ -71,7 +75,7 @@ StatusDropdown {
     }
 
     function reset() {
-        d.currentHoldingType = HoldingTypes.Type.Asset
+        d.currentHoldingType = Constants.TokenType.ERC20
         d.initialHoldingMode = HoldingTypes.Mode.Add
 
         root.assetKey = ""
@@ -87,16 +91,18 @@ StatusDropdown {
 
         // Internal management properties and signals:
         readonly property var holdingTypes: [
-            HoldingTypes.Type.Asset, HoldingTypes.Type.Collectible, HoldingTypes.Type.Ens
+            Constants.TokenType.ERC20, Constants.TokenType.ERC721, Constants.TokenType.ENS
         ]
         readonly property var tabsModel: [qsTr("Assets"), qsTr("Collectibles"), qsTr("ENS")]
         readonly property var tabsModelNoEns: [qsTr("Assets"), qsTr("Collectibles")]
-        readonly property bool assetsReady: root.assetAmount > 0 && root.assetKey
-        readonly property bool collectiblesReady: root.collectibleAmount > 0 && root.collectibleKey
+
+        readonly property bool assetsReady: root.assetAmount !== "0" && root.assetKey
+        readonly property bool collectiblesReady: root.collectibleAmount !== "0" && root.collectibleKey
+
         readonly property bool ensReady: d.ensDomainNameValid
 
         property int extendedDropdownType: ExtendedDropdownContent.Type.Assets
-        property int currentHoldingType: HoldingTypes.Type.Asset
+        property int currentHoldingType: Constants.TokenType.ERC20
 
         property bool updateSelected: false
 
@@ -118,8 +124,7 @@ StatusDropdown {
         // By design values:
         readonly property int padding: 8
         readonly property int defaultWidth: 289
-        readonly property int extendedContentHeight: 380
-        readonly property int tabBarHeigh: 36
+        readonly property int tabBarHeight: 36
         readonly property int tabBarTextSize: 13
         readonly property int backButtonWidth: 56
         readonly property int backButtonHeight: 24
@@ -128,7 +133,7 @@ StatusDropdown {
 
         function setInitialFlow() {
             statesStack.clear()
-            if(d.currentHoldingType !== HoldingTypes.Type.Ens)
+            if(d.currentHoldingType !== Constants.TokenType.ENS)
                 statesStack.push(HoldingsDropdown.FlowType.List_Deep1)
             else
                 statesStack.push(HoldingsDropdown.FlowType.Selected)
@@ -137,8 +142,8 @@ StatusDropdown {
         function setDefaultAmounts() {
             d.assetAmountText = ""
             d.collectibleAmountText = ""
-            root.assetAmount = 0
-            root.collectibleAmount = 1
+            root.assetAmount = "0"
+            root.collectibleAmount = "1"
         }
 
         function forceLayout() {
@@ -152,9 +157,11 @@ StatusDropdown {
     }
 
     width: d.defaultWidth
-    padding: d.padding
+    leftPadding: 0
+    rightPadding: 0
+    topPadding: d.padding
     bottomInset: d.bottomInset
-    bottomPadding: d.padding + d.bottomInset
+    bottomPadding: d.bottomInset + (loader.sourceComponent == listLayout ? 0 : d.padding)
 
     contentItem: ColumnLayout {
         id: content
@@ -167,6 +174,8 @@ StatusDropdown {
 
             Layout.preferredWidth: d.backButtonWidth
             Layout.preferredHeight: d.backButtonHeight
+            Layout.leftMargin: d.padding
+            Layout.rightMargin: d.padding
             visible: statesStack.size > 1
             spacing: 0
             leftPadding: 4
@@ -180,23 +189,25 @@ StatusDropdown {
             id: tabBar
 
             visible: !backButton.visible
-            Layout.preferredHeight: d.tabBarHeigh
+            Layout.preferredHeight: d.tabBarHeight
             Layout.fillWidth: true
+            Layout.leftMargin: d.padding
+            Layout.rightMargin: d.padding
             currentIndex: d.holdingTypes.indexOf(d.currentHoldingType)
             state: d.currentHoldingType
             states: [
                 State {
-                    name: HoldingTypes.Type.Asset
+                    name: Constants.TokenType.ERC20
                     PropertyChanges {target: loader; sourceComponent: listLayout}
                     PropertyChanges {target: d; extendedDropdownType: ExtendedDropdownContent.Type.Assets}
                 },
                 State {
-                    name: HoldingTypes.Type.Collectible
+                    name: Constants.TokenType.ERC721
                     PropertyChanges {target: loader; sourceComponent: listLayout}
                     PropertyChanges {target: d; extendedDropdownType: ExtendedDropdownContent.Type.Collectibles}
                 },
                 State {
-                    name: HoldingTypes.Type.Ens
+                    name: Constants.TokenType.ENS
                     PropertyChanges {target: loader; sourceComponent: ensLayout}
                 }
             ]
@@ -222,6 +233,8 @@ StatusDropdown {
         Loader {
             id: loader
             Layout.fillWidth: true
+            Layout.leftMargin: loader.sourceComponent == listLayout ? 0 : d.padding
+            Layout.rightMargin: loader.sourceComponent == listLayout ? 0 : d.padding
             Layout.fillHeight: true
             onItemChanged: d.forceLayout()
         }
@@ -232,9 +245,9 @@ StatusDropdown {
                 PropertyChanges {
                     target: loader
                     sourceComponent: {
-                        if (d.currentHoldingType === HoldingTypes.Type.Asset)
+                        if (d.currentHoldingType === Constants.TokenType.ERC20)
                             return assetLayout
-                        if (d.currentHoldingType === HoldingTypes.Type.Collectible)
+                        if (d.currentHoldingType === Constants.TokenType.ERC721)
                             return collectibleLayout
                         return ensLayout
                     }
@@ -275,6 +288,7 @@ StatusDropdown {
             checkedKeys: root.usedTokens.map(entry => entry.key)
             type: d.extendedDropdownType
             showAllTokensMode: d.allTokensMode
+            showTokenAmount: root.showTokenAmount
 
             Binding on showAllTokensMode {
                 value: true
@@ -315,7 +329,20 @@ StatusDropdown {
                 if(d.extendedDropdownType === ExtendedDropdownContent.Type.Assets)
                     root.assetKey = key
                 else
+                {
                     root.collectibleKey = key
+                    const item = PermissionsHelpers.getTokenByKey(root.collectiblesModel, root.collectibleKey)
+
+                    //When the collectible is unique, there is no need for the user to select amount
+                    //Just send the add/update events
+                    if((item.supply && item.supply.toString() === "1")
+                            || (item.remainingSupply && item.remainingSupply.toString() === "1")) {
+                        root.collectibleAmount = "1"
+                        d.updateSelected ? root.updateCollectible(root.collectibleKey, "1")
+                                         : root.addCollectible(root.collectibleKey, "1")
+                        return
+                    }
+                }
 
                 statesStack.push(HoldingsDropdown.FlowType.Selected)
             }
@@ -366,11 +393,13 @@ StatusDropdown {
         TokenPanel {
             id: assetPanel
 
-            readonly property real effectiveAmount: amountValid ? amount : 0
+            readonly property string effectiveAmount: amountValid ? amount : "0"
+            property bool completed: false
 
             tokenName: PermissionsHelpers.getTokenNameByKey(root.assetsModel, root.assetKey)
             tokenShortName: PermissionsHelpers.getTokenShortNameByKey(root.assetsModel, root.assetKey)
             tokenImage: PermissionsHelpers.getTokenIconByKey(root.assetsModel, root.assetKey)
+            tokenAmount: PermissionsHelpers.getTokenRemainingSupplyByKey(root.assetsModel, root.assetKey)
             amountText: d.assetAmountText
             tokenCategoryText: qsTr("Asset")
             addOrUpdateButtonEnabled: d.assetsReady
@@ -393,9 +422,10 @@ StatusDropdown {
                         return
 
                     append({
-                        name:chainName,
+                        name: chainName,
                         icon: chainIcon,
-                        amount: asset.supply,
+                        amount: asset.remainingSupply,
+                        multiplierIndex: asset.multiplierIndex,
                         infiniteAmount: asset.infiniteSupply
                     })
 
@@ -403,7 +433,12 @@ StatusDropdown {
                 }
             }
 
-            onEffectiveAmountChanged: root.assetAmount = effectiveAmount
+            onEffectiveAmountChanged: {
+                if (completed)
+                    root.assetAmount = effectiveAmount
+            }
+
+            onMultiplierIndexChanged: root.assetMultiplierIndex = multiplierIndex
             onAmountTextChanged: d.assetAmountText = amountText
             onAddClicked: root.addAsset(root.assetKey, root.assetAmount)
             onUpdateClicked: root.updateAsset(root.assetKey, root.assetAmount)
@@ -416,8 +451,11 @@ StatusDropdown {
             }
 
             Component.onCompleted: {
-                if (d.assetAmountText.length === 0 && root.assetAmount)
-                    assetPanel.setAmount(root.assetAmount)
+                completed = true
+
+                if (d.assetAmountText.length === 0 && root.assetAmount !== "0")
+                    assetPanel.setAmount(root.assetAmount,
+                                         root.assetMultiplierIndex)
             }
         }
     }
@@ -428,12 +466,13 @@ StatusDropdown {
         TokenPanel {
             id: collectiblePanel
 
-            readonly property real effectiveAmount: amountValid ? amount : 0
+            readonly property string effectiveAmount: amountValid ? amount : "0"
+            property bool completed: false
 
             tokenName: PermissionsHelpers.getTokenNameByKey(root.collectiblesModel, root.collectibleKey)
             tokenShortName: ""
             tokenImage: PermissionsHelpers.getTokenIconByKey(root.collectiblesModel, root.collectibleKey)
-            tokenAmount: PermissionsHelpers.getTokenAmountByKey(root.collectiblesModel, root.collectibleKey)
+            tokenAmount: PermissionsHelpers.getTokenRemainingSupplyByKey(root.collectiblesModel, root.collectibleKey)
             amountText: d.collectibleAmountText
             tokenCategoryText: qsTr("Collectible")
             addOrUpdateButtonEnabled: d.collectiblesReady
@@ -459,7 +498,8 @@ StatusDropdown {
                     append({
                         name:chainName,
                         icon: chainIcon,
-                        amount: collectible.supply,
+                        amount: collectible.remainingSupply,
+                        multiplierIndex: collectible.multiplierIndex,
                         infiniteAmount: collectible.infiniteSupply
                     })
 
@@ -467,13 +507,19 @@ StatusDropdown {
                 }
             }
 
-            onEffectiveAmountChanged: root.collectibleAmount = effectiveAmount
+            onEffectiveAmountChanged: {
+                if (completed)
+                    root.collectibleAmount = effectiveAmount
+            }
+
             onAmountTextChanged: d.collectibleAmountText = amountText
             onAddClicked: root.addCollectible(root.collectibleKey, root.collectibleAmount)
             onUpdateClicked: root.updateCollectible(root.collectibleKey, root.collectibleAmount)
             onRemoveClicked: root.removeClicked()
 
             Component.onCompleted: {
+                completed = true
+
                 if (d.collectibleAmountText.length === 0 && root.collectibleAmount)
                     collectiblePanel.setAmount(root.collectibleAmount)
             }

@@ -9,6 +9,8 @@ import ../../../app/core/eventemitter
 import ../../../backend/eth as status_eth
 import ../../../backend/privacy as status_privacy
 
+import ../../common/utils as common_utils
+
 logScope:
   topics = "privacy-service"
 
@@ -39,21 +41,6 @@ QtObject:
 
   proc init*(self: Service) =
     discard
-
-  proc getLinkPreviewWhitelist*(self: Service): string =
-    try:
-      let response = status_privacy.getLinkPreviewWhitelist()
-
-      if(response.result.kind != JArray):
-        var errMsg = "response is not an array"
-        if(response.result.contains("error")):
-          errMsg = response.result["error"].getStr
-        error "error: ", procName="getLinkPreviewWhitelist", errDesription = errMsg
-        return
-
-      return $(response.result)
-    except Exception as e:
-      error "error: ", procName="removeReaction", errName = e.name, errDesription = e.msg
 
   proc getDefaultAccount(self: Service): string =
     try:
@@ -89,7 +76,7 @@ QtObject:
         return
 
       let loggedInAccount = self.accountsService.getLoggedInAccount()
-      let response = status_privacy.changeDatabasePassword(loggedInAccount.keyUid, password, newPassword)
+      let response = status_privacy.changeDatabasePassword(loggedInAccount.keyUid, common_utils.hashPassword(password), common_utils.hashPassword(newPassword))
 
       if(response.result.contains("error")):
         let errMsg = response.result["error"].getStr
@@ -114,6 +101,9 @@ QtObject:
     if(not self.settingsService.saveMnemonic("")):
       data.success = false
       error "error: ", procName="removeMnemonic", errDesription = "an error occurred removing mnemonic"
+
+  proc mnemonicWasShown*(self: Service) =
+    self.settingsService.mnemonicWasShown()
 
   proc getMnemonicWordAtIndex*(self: Service, index: int): string =
     let mnemonic = self.settingsService.getMnemonic()

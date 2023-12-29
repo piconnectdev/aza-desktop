@@ -20,6 +20,7 @@ StatusMenu {
 
     property var contactsStore
     property bool areTestNetworksEnabled: false
+    property bool isSepoliaEnabled: false
 
     signal openSendModal(address: string)
 
@@ -64,17 +65,19 @@ StatusMenu {
             }
         }
 
-        function refreshShowOnActionsVisiblity(shortChainName) {
-            switch(shortChainName.toLowerCase()) {
-            case Constants.networkShortChainNames.arbiscan.toLowerCase():
-                showOnArbiscanAction.enabled = true
-                break
-            case Constants.networkShortChainNames.optimism.toLowerCase():
-                showOnOptimismAction.enabled = true
-                break
-            default:
-                showOnEtherscanAction.enabled = true
-                break
+        function refreshShowOnActionsVisiblity(shortChainNameList) {
+            for (let i = 0 ; i < shortChainNameList.length ; i++) {
+                switch(shortChainNameList[i].toLowerCase()) {
+                case Constants.networkShortChainNames.arbiscan.toLowerCase():
+                    showOnArbiscanAction.enabled = true
+                    break
+                case Constants.networkShortChainNames.optimism.toLowerCase():
+                    showOnOptimismAction.enabled = true
+                    break
+                default:
+                    showOnEtherscanAction.enabled = true
+                    break
+                }
             }
         }
 
@@ -100,17 +103,17 @@ StatusMenu {
         }
     }
 
-    function openSenderMenu(delegate, address, chainShortName = "") {
+    function openSenderMenu(delegate, address, chainShortNameList = []) {
         d.addressType = TransactionAddressMenu.AddressType.Sender
-        openEthAddressMenu(delegate, address, chainShortName)
+        openEthAddressMenu(delegate, address, chainShortNameList)
     }
 
-    function openReceiverMenu(delegate, address, chainShortName = "") {
+    function openReceiverMenu(delegate, address, chainShortNameList = []) {
         d.addressType = TransactionAddressMenu.AddressType.Receiver
-        openEthAddressMenu(delegate, address, chainShortName)
+        openEthAddressMenu(delegate, address, chainShortNameList)
     }
 
-    function openEthAddressMenu(delegate, address, chainShortName = "") {
+    function openEthAddressMenu(delegate, address, chainShortNameList = []) {
         d.selectedAddress = address
 
         address = address.toLowerCase()
@@ -135,6 +138,7 @@ StatusMenu {
         showOnEtherscanAction.enabled = true
         showOnArbiscanAction.enabled = address.includes(Constants.networkShortChainNames.arbiscan + ":")
         showOnOptimismAction.enabled = address.includes(Constants.networkShortChainNames.optimism + ":")
+        d.refreshShowOnActionsVisiblity(chainShortNameList)
         saveAddressAction.enabled = d.addressName.length === 0
         editAddressAction.enabled = !isWalletAccount && !isContact && d.addressName.length > 0
         sendToAddressAction.enabled = true
@@ -143,18 +147,18 @@ StatusMenu {
         d.openMenu(delegate)
     }
 
-    function openTxMenu(delegate, address, chainShortName="") {
+    function openTxMenu(delegate, address, chainShortNameList=[]) {
         d.addressType = TransactionAddressMenu.AddressType.Tx
         d.selectedAddress = address
-        d.refreshShowOnActionsVisiblity(chainShortName)
+        d.refreshShowOnActionsVisiblity(chainShortNameList)
         d.openMenu(delegate)
     }
 
-    function openContractMenu(delegate, address, chainShortName="", name="") {
+    function openContractMenu(delegate, address, chainShortNameList=[], name="") {
         d.addressType = TransactionAddressMenu.AddressType.Contract
         d.contractName = name
         d.selectedAddress = address
-        d.refreshShowOnActionsVisiblity(chainShortName)
+        d.refreshShowOnActionsVisiblity(chainShortNameList)
         d.openMenu(delegate)
     }
 
@@ -188,7 +192,14 @@ StatusMenu {
         icon.name: "link"
         onTriggered: {
             const type = d.addressType === TransactionAddressMenu.Tx ? Constants.networkExplorerLinks.txPath : Constants.networkExplorerLinks.addressPath
-            const link = areTestNetworksEnabled ? Constants.networkExplorerLinks.goerliEtherscan : Constants.networkExplorerLinks.etherscan
+            let link = Constants.networkExplorerLinks.etherscan
+            if (areTestNetworksEnabled) {
+                if (root.isSepoliaEnabled) {
+                    link = Constants.networkExplorerLinks.sepoliaEtherscan
+                } else {
+                    link = Constants.networkExplorerLinks.goerliEtherscan
+                }
+            }
             Global.openLink("%1/%2/%3".arg(link).arg(type).arg(d.selectedAddress))
         }
     }

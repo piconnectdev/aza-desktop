@@ -15,6 +15,7 @@ import utils 1.0
 
 import shared.controls 1.0
 import shared.popups 1.0
+import shared.popups.send.controls 1.0
 
 import AppLayouts.stores 1.0
 import "../stores"
@@ -23,7 +24,8 @@ StatusModal {
     id: root
 
     property string address: RootStore.selectedReceiveAccount.address
-    property string chainShortNames: ""
+    property string chainShortNames: RootStore.getNetworkShortNames(d.preferredSharingNetworksString)
+    property var preferredSharingNetworksArray: d.preferredSharingNetworksString.split(":").filter(Boolean)
 
     property string description: qsTr("Your Address")
 
@@ -31,7 +33,12 @@ StatusModal {
 
     QtObject {
         id: d
-        property string completeAddressWithNetworkPrefix
+        property string completeAddressWithNetworkPrefix: root.chainShortNames + root.address
+        property string preferredSharingNetworksString: !!RootStore.selectedReceiveAccount ? RootStore.selectedReceiveAccount.preferredSharingChainIds : ""
+        onPreferredSharingNetworksStringChanged: {
+            root.preferredSharingNetworksArray = d.preferredSharingNetworksString.split(":").filter(Boolean)
+            root.chainShortNames = RootStore.getNetworkShortNames(d.preferredSharingNetworksString)
+        }
     }
 
     headerSettings.title: qsTr("Receive")
@@ -48,8 +55,8 @@ StatusModal {
 
             sorters: RoleSorter { roleName: "position"; sortOrder: Qt.AscendingOrder }
         }
-        
         selectedAccount: RootStore.selectedReceiveAccount
+        getNetworkShortNames: RootStore.getNetworkShortNames
         onSelectedIndexChanged: RootStore.switchReceiveAccount(selectedIndex)
     }
 
@@ -99,7 +106,7 @@ StatusModal {
                             tagPrimaryLabel.text: model.shortName
                             tagPrimaryLabel.color: model.chainColor
                             image.source: Style.svg("tiny/" + model.iconUrl)
-                            visible: model.isEnabled
+                            visible: root.preferredSharingNetworksArray.includes(model.chainId.toString())
                             MouseArea {
                                 anchors.fill: parent
                                 cursorShape: root.readOnly ? Qt.ArrowCursor : Qt.PointingHandCursor
@@ -209,7 +216,7 @@ StatusModal {
                                 font.pixelSize: 15
                                 color: chainColor
                                 text: shortName + ":"
-                                visible: model.isEnabled
+                                visible: root.preferredSharingNetworksArray.includes(model.chainId.toString())
                                 onVisibleChanged: {
                                     if (root.readOnly)
                                         return
@@ -258,12 +265,18 @@ StatusModal {
 
             layer1Networks: layer1NetworksClone
             layer2Networks: layer2NetworksClone
+            preferredNetworksMode: true
+            preferredSharingNetworks: root.preferredSharingNetworksArray
+
+            useEnabledRole: false
 
             closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
             onToggleNetwork: (network, networkModel, index) => {
-                network.isEnabled = !network.isEnabled
-            }
+                                 root.preferredSharingNetworksArray = RootStore.processPreferredSharingNetworkToggle(root.preferredSharingNetworksArray, network)
+                             }
+
+            onClosed: RootStore.updateWalletAccountPreferredChains(root.address, root.preferredSharingNetworksArray.join(":"))
 
             CloneModel {
                 id: layer1NetworksClone

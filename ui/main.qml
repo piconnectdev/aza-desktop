@@ -92,6 +92,34 @@ StatusWindow {
     onWidthChanged: Qt.callLater(storeAppState)
     onHeightChanged: Qt.callLater(storeAppState)
 
+    QtObject {
+        id: d
+        property int previousApplicationState: -1
+
+        property var mockedKeycardControllerWindow
+        function runMockedKeycardControllerWindow() {
+            if (localAppSettings.testEnvironment) {
+                if (!!d.mockedKeycardControllerWindow) {
+                    d.mockedKeycardControllerWindow.close()
+                }
+
+                console.info("running mocked keycard lib controller window")
+                var c = Qt.createComponent("qrc:/imports/shared/panels/MockedKeycardLibControllerWindow.qml");
+                if (c.status === Component.Ready) {
+                    d.mockedKeycardControllerWindow = c.createObject(applicationWindow, {
+                                                                         "relatedModule": startupOnboarding.visible?
+                                                                                              startupModule :
+                                                                                              mainModule
+                                                                     })
+                    if (d.mockedKeycardControllerWindow) {
+                        d.mockedKeycardControllerWindow.show()
+                        d.mockedKeycardControllerWindow.requestActivate()
+                    }
+                }
+            }
+        }
+    }
+
     Action {
         shortcut: StandardKey.FullScreen
         onTriggered: {
@@ -147,6 +175,8 @@ StatusWindow {
         function onStartUpUIRaised() {
             applicationWindow.appIsReady = true;
             applicationWindow.storeAppState();
+
+            d.runMockedKeycardControllerWindow()
         }
 
         function onAppStateChanged(state) {
@@ -166,6 +196,9 @@ StatusWindow {
                 // We set main module to the Global singleton once user is logged in and we move to the main app.
                 appLoadingAnimation.active = localAppSettings && localAppSettings.fakeLoadingScreenEnabled
                 appLoadingAnimation.runningProgressAnimation = localAppSettings && localAppSettings.fakeLoadingScreenEnabled
+                if (!appLoadingAnimation.runningProgressAnimation) {
+                    mainModule.fakeLoadingScreenFinished()
+                }
                 Global.userProfile = userProfile
                 Global.appIsReady = true
 
@@ -173,9 +206,6 @@ StatusWindow {
 
                 if(localAccountSensitiveSettings.recentEmojis === "") {
                     localAccountSensitiveSettings.recentEmojis = [];
-                }
-                if (localAccountSensitiveSettings.whitelistedUnfurlingSites === "") {
-                    localAccountSensitiveSettings.whitelistedUnfurlingSites = {};
                 }
                 if (localAccountSensitiveSettings.hiddenCommunityWelcomeBanners === "") {
                     localAccountSensitiveSettings.hiddenCommunityWelcomeBanners = [];
@@ -189,6 +219,8 @@ StatusWindow {
                 Style.changeTheme(localAppSettings.theme, systemPalette.isCurrentSystemThemeDark())
                 Style.changeFontSize(localAccountSensitiveSettings.fontSize)
                 Theme.updateFontSize(localAccountSensitiveSettings.fontSize)
+
+                d.runMockedKeycardControllerWindow()
             } else if(state === Constants.appState.appEncryptionProcess) {
                 loader.sourceComponent = undefined
                 appLoadingAnimation.active = true
@@ -217,6 +249,20 @@ StatusWindow {
                     }
                 }
             }
+        }
+    }
+
+    // On MacOS, explicitely restore the window on activating
+    Connections {
+        target: Qt.application
+        enabled: Qt.platform.os === Constants.mac
+        function onStateChanged() {
+            if (Qt.application.state == d.previousApplicationState
+                && Qt.application.state == Qt.ApplicationActive) {
+                applicationWindow.visible = true
+                applicationWindow.showNormal()
+            }
+            d.previousApplicationState = Qt.application.state
         }
     }
 
@@ -329,6 +375,7 @@ StatusWindow {
 
     Loader {
         id: appLoadingAnimation
+        objectName: "loadingAnimationLoader"
         property bool runningProgressAnimation: false
         anchors.fill: parent
         active: false
@@ -338,6 +385,7 @@ StatusWindow {
             onProgressChanged: {
                 if (progress === 1) {
                     appLoadingAnimation.active = false
+                    mainModule.fakeLoadingScreenFinished()
                 }
             }
         }
@@ -358,15 +406,16 @@ StatusWindow {
 
         onClose: {
             if (loader.sourceComponent != app) {
+                Qt.quit()
+                return
+            }
+
+            if (localAccountSensitiveSettings.quitOnClose) {
                 Qt.quit();
+                return
             }
-            else if (loader.sourceComponent == app) {
-                if (localAccountSensitiveSettings.quitOnClose) {
-                    Qt.quit();
-                } else {
-                    applicationWindow.visible = false;
-                }
-            }
+
+            applicationWindow.visible = false;
         }
 
         onMinimised: {

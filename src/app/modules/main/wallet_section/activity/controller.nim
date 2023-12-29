@@ -3,24 +3,28 @@ import tables, stint, sets
 
 import model
 import entry
+import entry_details
 import recipients_model
+import collectibles_model
+import collectibles_item
 import events_handler
 import status
 
 import web3/conversions
 
 import app/core/eventemitter
-
-import ../transactions/item
-import ../transactions/module as transactions_module
+import app/core/signals/types
 
 import backend/activity as backend_activity
-import backend/backend as backend
-import backend/transactions
 
+import app_service/common/conversion
+import app_service/common/types
 import app_service/service/currency/service as currency_service
 import app_service/service/transaction/service as transaction_service
 import app_service/service/token/service as token_service
+
+import app/modules/shared/wallet_utils
+import app/modules/shared_models/currency_amount
 
 proc toRef*[T](obj: T): ref T =
   new(result)
@@ -28,17 +32,22 @@ proc toRef*[T](obj: T): ref T =
 
 const FETCH_BATCH_COUNT_DEFAULT = 10
 const FETCH_RECIPIENTS_BATCH_COUNT_DEFAULT = 2000
+const FETCH_COLLECTIBLES_BATCH_COUNT_DEFAULT = 2000
 
-# TODO: implement passing of collectibles
+type
+  CollectiblesToTokenConverter* = proc (id: string): backend_activity.Token
+
 QtObject:
   type
     Controller* = ref object of QObject
       model: Model
+
       recipientsModel: RecipientsModel
-      transactionsModule: transactions_module.AccessInterface
+      collectiblesModel: CollectiblesModel
       currentActivityFilter: backend_activity.ActivityFilter
       currencyService: currency_service.Service
       tokenService: token_service.Service
+      activityDetails: ActivityDetails
 
       eventsHandler: EventsHandler
       status: Status
@@ -47,8 +56,13 @@ QtObject:
       filterTokenCodes: HashSet[string]
 
       addresses: seq[string]
+      allAddressesSelected: bool
       # call updateAssetsIdentities after updating chainIds
       chainIds: seq[int]
+
+      requestId: int32
+
+      collectiblesToTokenConverter: CollectiblesToTokenConverter
 
   proc setup(self: Controller) =
     self.QObject.setup
@@ -68,101 +82,63 @@ QtObject:
   QtProperty[QVariant] recipientsModel:
     read = getRecipientsModel
 
-  proc buildMultiTransactionExtraData(self: Controller, metadata: backend_activity.ActivityEntry, item: MultiTransactionDto): ExtraData =
-    # TODO: Use symbols from backendEntry when they're available
-    result.inSymbol = item.toAsset
-    result.inAmount = self.currencyService.parseCurrencyValue(result.inSymbol, metadata.amountIn)
-    result.outSymbol = item.fromAsset
-    result.outAmount = self.currencyService.parseCurrencyValue(result.outSymbol, metadata.amountOut)
+  proc getCollectiblesModel*(self: Controller): QVariant {.slot.} =
+    return newQVariant(self.collectiblesModel)
 
-  proc buildTransactionExtraData(self: Controller, metadata: backend_activity.ActivityEntry, item: ref Item): ExtraData =
-    # TODO: Use symbols from backendEntry when they're available
-    result.inSymbol = item[].getSymbol()
-    result.inAmount = self.currencyService.parseCurrencyValue(result.inSymbol, metadata.amountIn)
-    result.outSymbol = item[].getSymbol()
-    result.outAmount = self.currencyService.parseCurrencyValue(result.outSymbol, metadata.amountOut)
+  QtProperty[QVariant] collectiblesModel:
+    read = getCollectiblesModel
+
+  proc buildMultiTransactionExtraData(self: Controller, metadata: backend_activity.ActivityEntry): ExtraData =
+    if metadata.symbolIn.isSome():
+      result.inAmount = self.currencyService.parseCurrencyValue(metadata.symbolIn.get(), metadata.amountIn)
+    if metadata.symbolOut.isSome():
+      result.outAmount = self.currencyService.parseCurrencyValue(metadata.symbolOut.get(), metadata.amountOut)
+
+  proc buildTransactionExtraData(self: Controller, metadata: backend_activity.ActivityEntry): ExtraData =
+    if metadata.symbolIn.isSome() or metadata.amountIn > 0:
+      result.inAmount = self.currencyService.parseCurrencyValue(metadata.symbolIn.get(""), metadata.amountIn)
+    if metadata.symbolOut.isSome() or metadata.amountOut > 0:
+      result.outAmount = self.currencyService.parseCurrencyValue(metadata.symbolOut.get(""), metadata.amountOut)
 
   proc backendToPresentation(self: Controller, backendEntities: seq[backend_activity.ActivityEntry]): seq[entry.ActivityEntry] =
-    var multiTransactionsIds: seq[int] = @[]
-    var transactionIdentities: seq[backend.TransactionIdentity] = @[]
-    var pendingTransactionIdentities: seq[backend.TransactionIdentity] = @[]
-
-    # Extract metadata required to fetch details
-    # TODO: temporary here to show the working API. Details for each entry will be done as required
-    # on a detail request from UI after metadata is extended to include the required info
+    let amountToCurrencyConvertor = proc(amount: UInt256, symbol: string): CurrencyAmount =
+      return currencyAmountToItem(self.currencyService.parseCurrencyValue(symbol, amount),
+                                self.currencyService.getCurrencyFormat(symbol))
     for backendEntry in backendEntities:
-      case backendEntry.payloadType:
+      var ae: entry.ActivityEntry
+      case backendEntry.getPayloadType():
         of MultiTransaction:
-          multiTransactionsIds.add(backendEntry.id)
-        of SimpleTransaction:
-          transactionIdentities.add(backendEntry.transaction.get())
-        of PendingTransaction:
-          pendingTransactionIdentities.add(backendEntry.transaction.get())
+          let extraData = self.buildMultiTransactionExtraData(backendEntry)
+          ae = entry.newMultiTransactionActivityEntry(backendEntry, extraData, amountToCurrencyConvertor)
+        of SimpleTransaction, PendingTransaction:
+          let extraData = self.buildTransactionExtraData(backendEntry)
+          ae = entry.newTransactionActivityEntry(backendEntry, self.addresses, extraData, amountToCurrencyConvertor)
+      result.add(ae)
 
-    var multiTransactions = initTable[int, MultiTransactionDto]()
-    if len(multiTransactionsIds) > 0:
-      let mts = transaction_service.getMultiTransactions(multiTransactionsIds)
-      for mt in mts:
-        multiTransactions[mt.id] = mt
+  proc fetchTxDetails*(self: Controller, entryIndex: int) {.slot.} =
+    let amountToCurrencyConvertor = proc(amount: UInt256, symbol: string): CurrencyAmount =
+      return currencyAmountToItem(self.currencyService.parseCurrencyValue(symbol, amount),
+                                    self.currencyService.getCurrencyFormat(symbol))
 
-    var transactions = initTable[TransactionIdentity, ref Item]()
-    if len(transactionIdentities) > 0:
-      let response = backend.getTransfersForIdentities(transactionIdentities)
-      let res = response.result
-      if response.error != nil or res.kind != JArray or res.len == 0:
-        error "failed fetching transaction details; err: ", response.error, ", kind: ", res.kind, ", res.len: ", res.len
+    self.activityDetails = nil
+    let entry = self.model.getEntry(entryIndex)
+    if entry == nil:
+      error "failed to find entry with index: ", entryIndex
+      return
 
-      let transactionsDtos = res.getElems().map(x => x.toTransactionDto())
-      let trItems = self.transactionsModule.transactionsToItems(transactionsDtos, @[])
-      for item in trItems:
-        transactions[TransactionIdentity(chainId: item.getChainId(), hash: item.getId(), address: item.getAddress())] = toRef(item)
+    try:
+      self.activityDetails = newActivityDetails(entry.getMetadata(), amountToCurrencyConvertor)
+    except Exception as e:
+      error "error: ", e.msg
+      return
 
-    var pendingTransactions = initTable[TransactionIdentity, ref Item]()
-    if len(pendingTransactionIdentities) > 0:
-      let response = backend.getPendingTransactionsForIdentities(pendingTransactionIdentities)
-      let res = response.result
-      if response.error != nil or res.kind != JArray or res.len == 0:
-        error "failed fetching pending transactions details; err: ", response.error, ", kind: ", res.kind, ", res.len: ", res.len
+  proc getActivityDetails(self: Controller): QVariant {.slot.} =
+    if self.activityDetails == nil:
+      return newQVariant()
+    return newQVariant(self.activityDetails)
 
-      let pendingTransactionsDtos = res.getElems().map(x => x.toPendingTransactionDto())
-      let trItems = self.transactionsModule.transactionsToItems(pendingTransactionsDtos, @[])
-      for item in trItems:
-        pendingTransactions[TransactionIdentity(chainId: item.getChainId(), hash: item.getId(), address: item.getAddress())] = toRef(item)
-
-    # Merge detailed transaction info in order
-    result = newSeqOfCap[entry.ActivityEntry](multiTransactions.len + transactions.len + pendingTransactions.len)
-    var mtIndex = 0
-    var tIndex = 0
-    var ptIndex = 0
-    for backendEntry in backendEntities:
-      case backendEntry.payloadType:
-        of MultiTransaction:
-          let id = multiTransactionsIds[mtIndex]
-          if multiTransactions.hasKey(id):
-            let mt = multiTransactions[id]
-            let extraData = self.buildMultiTransactionExtraData(backendEntry, mt)
-            result.add(entry.newMultiTransactionActivityEntry(mt, backendEntry, extraData))
-          else:
-            error "failed to find multi transaction with id: ", id
-          mtIndex += 1
-        of SimpleTransaction:
-          let identity = transactionIdentities[tIndex]
-          if transactions.hasKey(identity):
-            let tr = transactions[identity]
-            let extraData = self.buildTransactionExtraData(backendEntry, tr)
-            result.add(entry.newTransactionActivityEntry(tr, backendEntry, self.addresses, extraData))
-          else:
-            error "failed to find transaction with identity: ", identity
-          tIndex += 1
-        of PendingTransaction:
-          let identity = pendingTransactionIdentities[ptIndex]
-          if pendingTransactions.hasKey(identity):
-            let tr = pendingTransactions[identity]
-            let extraData = self.buildTransactionExtraData(backendEntry, tr)
-            result.add(entry.newTransactionActivityEntry(tr, backendEntry, self.addresses, extraData))
-          else:
-            error "failed to find pending transaction with identity: ", identity
-          ptIndex += 1
+  QtProperty[QVariant] activityDetails:
+    read = getActivityDetails
 
   proc processResponse(self: Controller, response: JsonNode) =
     defer: self.status.setLoadingData(false)
@@ -176,6 +152,7 @@ QtObject:
       return
 
     let entries = self.backendToPresentation(res.activities)
+
     self.model.setEntries(entries, res.offset, res.hasMore)
 
     if len(entries) > 0:
@@ -184,12 +161,14 @@ QtObject:
   proc updateFilter*(self: Controller) {.slot.} =
     self.status.setLoadingData(true)
     self.status.setIsFilterDirty(false)
+
     self.model.resetModel(@[])
+
     self.eventsHandler.updateSubscribedAddresses(self.addresses)
     self.eventsHandler.updateSubscribedChainIDs(self.chainIds)
     self.status.setNewDataAvailable(false)
 
-    let response = backend_activity.filterActivityAsync(self.addresses, seq[backend_activity.ChainId](self.chainIds), self.currentActivityFilter, 0, FETCH_BATCH_COUNT_DEFAULT)
+    let response = backend_activity.filterActivityAsync(self.requestId, self.addresses, self.allAddressesSelected, seq[backend_activity.ChainId](self.chainIds), self.currentActivityFilter, 0, FETCH_BATCH_COUNT_DEFAULT)
     if response.error != nil:
       error "error fetching activity entries: ", response.error
       self.status.setLoadingData(false)
@@ -198,10 +177,26 @@ QtObject:
   proc loadMoreItems(self: Controller) {.slot.} =
     self.status.setLoadingData(true)
 
-    let response = backend_activity.filterActivityAsync(self.addresses, seq[backend_activity.ChainId](self.chainIds), self.currentActivityFilter, self.model.getCount(), FETCH_BATCH_COUNT_DEFAULT)
+    let response = backend_activity.filterActivityAsync(self.requestId, self.addresses, self.allAddressesSelected, seq[backend_activity.ChainId](self.chainIds), self.currentActivityFilter, self.model.getCount(), FETCH_BATCH_COUNT_DEFAULT)
     if response.error != nil:
       self.status.setLoadingData(false)
       error "error fetching activity entries: ", response.error
+      return
+
+  proc updateCollectiblesModel*(self: Controller) {.slot.} =
+    self.status.setLoadingCollectibles(true)
+    let res = backend_activity.getActivityCollectiblesAsync(self.requestId, self.chainIds, self.addresses, 0, FETCH_COLLECTIBLES_BATCH_COUNT_DEFAULT)
+    if res.error != nil:
+      self.status.setLoadingCollectibles(false)
+      error "error fetching collectibles: ", res.error
+      return
+
+  proc loadMoreCollectibles*(self: Controller) {.slot.} =
+    self.status.setLoadingCollectibles(true)
+    let res = backend_activity.getActivityCollectiblesAsync(self.requestId, self.chainIds, self.addresses, self.collectiblesModel.getCount(), FETCH_COLLECTIBLES_BATCH_COUNT_DEFAULT)
+    if res.error != nil:
+      self.status.setLoadingCollectibles(false)
+      error "error fetching collectibles: ", res.error
       return
 
   proc setFilterTime*(self: Controller, startTimestamp: int, endTimestamp: int) {.slot.} =
@@ -224,7 +219,7 @@ QtObject:
   proc updateStartTimestamp*(self: Controller) {.slot.} =
     self.status.setLoadingStartTimestamp(true)
 
-    let resJson = backend_activity.getOldestActivityTimestampAsync(self.addresses)
+    let resJson = backend_activity.getOldestActivityTimestampAsync(self.requestId, self.addresses)
     if resJson.error != nil:
       self.status.setLoadingStartTimestamp(false)
       error "error requesting oldest activity timestamp: ", resJson.error
@@ -233,6 +228,17 @@ QtObject:
   proc setupEventHandlers(self: Controller) =
     self.eventsHandler.onFilteringDone(proc (jsonObj: JsonNode) =
       self.processResponse(jsonObj)
+    )
+
+    self.eventsHandler.onFilteringUpdateDone(proc (jn: JsonNode) =
+      if jn.kind != JArray:
+        error "expected an array"
+
+      var entries = newSeq[backend_activity.Data](jn.len)
+      for i in 0 ..< jn.len:
+        entries[i] = fromJson(jn[i], backend_activity.Data)
+
+      self.model.updateEntries(entries)
     )
 
     self.eventsHandler.onGetRecipientsDone(proc (jsonObj: JsonNode) =
@@ -257,23 +263,40 @@ QtObject:
       self.status.setStartTimestamp(res.timestamp)
     )
 
+    self.eventsHandler.onGetCollectiblesDone(proc (jsonObj: JsonNode) =
+      defer: self.status.setLoadingCollectibles(false)
+      let res = fromJson(jsonObj, backend_activity.GetCollectiblesResponse)
+
+      if res.errorCode != ErrorCodeSuccess:
+        error "error fetching collectibles: ", res.errorCode
+        return
+
+      try: 
+        let items = res.collectibles.map(header => collectibleToItem(header))
+        self.collectiblesModel.setItems(items, res.offset, res.hasMore)
+      except Exception as e:
+        error "Error converting activity entries: ", e.msg
+    )
+
     self.eventsHandler.onNewDataAvailable(proc () =
       self.status.setNewDataAvailable(true)
     )
 
-  proc newController*(transactionsModule: transactions_module.AccessInterface,
+  proc newController*(requestId: int32,
                       currencyService: currency_service.Service,
                       tokenService: token_service.Service,
-                      events: EventEmitter): Controller =
+                      events: EventEmitter,
+                      collectiblesConverter: CollectiblesToTokenConverter): Controller =
     new(result, delete)
 
+    result.requestId = requestId
     result.model = newModel()
     result.recipientsModel = newRecipientsModel()
-    result.transactionsModule = transactionsModule
+    result.collectiblesModel = newCollectiblesModel()
     result.tokenService = tokenService
     result.currentActivityFilter = backend_activity.getIncludeAllActivityFilter()
 
-    result.eventsHandler = newEventsHandler(events)
+    result.eventsHandler = newEventsHandler(result.requestId, events)
     result.status = newStatus()
 
     result.currencyService = currencyService
@@ -281,7 +304,10 @@ QtObject:
     result.filterTokenCodes = initHashSet[string]()
 
     result.addresses = @[]
+    result.allAddressesSelected = false
     result.chainIds = @[]
+
+    result.collectiblesToTokenConverter = collectiblesConverter
 
     result.setup()
 
@@ -311,6 +337,20 @@ QtObject:
 
     self.currentActivityFilter.counterpartyAddresses = addresses
 
+  proc setFilterCollectibles*(self: Controller, collectiblesArrayJsonString: string) {.slot.} =
+    let collectiblesJson = parseJson(collectiblesArrayJsonString)
+    if collectiblesJson.kind != JArray:
+      error "invalid array of json strings"
+      return
+
+    var collectibles = newSeq[backend_activity.Token]()
+    for i in 0 ..< collectiblesJson.len:
+      let uid = collectiblesJson[i].getStr()
+      let token = self.collectiblesToTokenConverter(uid)
+      collectibles.add(token)
+
+    self.currentActivityFilter.collectibles = collectibles
+
   # Depends on self.filterTokenCodes and self.chainIds, so should be called after updating them
   proc updateAssetsIdentities(self: Controller) =
     var assets = newSeq[backend_activity.Token]()
@@ -318,11 +358,11 @@ QtObject:
       for chainId in self.chainIds:
         let token = self.tokenService.findTokenBySymbol(chainId, tokenCode)
         if token != nil:
-          let tokenType = if token.symbol == "ETH": backend_activity.TokenType.Native else: backend_activity.TokenType.Erc20
+          let tokenType = if token.symbol == "ETH": TokenType.Native else: TokenType.ERC20
           assets.add(backend_activity.Token(
             tokenType: tokenType,
             chainId: backend_activity.ChainId(token.chainId),
-            address: some(token.address)
+            address: some(parseAddress(token.address))
           ))
 
     self.currentActivityFilter.assets = assets
@@ -343,22 +383,40 @@ QtObject:
 
     self.updateAssetsIdentities()
 
-  proc setFilterAddresses*(self: Controller, addresses: seq[string]) =
+  proc setFilterAddresses*(self: Controller, addresses: seq[string], allAddressesSelected: bool) =
     self.addresses = addresses
+    self.allAddressesSelected = allAddressesSelected
+    self.status.setIsFilterDirty(true)
 
-    self.updateStartTimestamp()
+  proc setFilterAddressesJson*(self: Controller, jsonArray: string, allAddressesSelected: bool) {.slot.}  =
+    let addressesJson = parseJson(jsonArray)
+    if addressesJson.kind != JArray:
+      error "invalid array of json strings"
+      return
+
+    var addresses = newSeq[string]()
+    for i in 0 ..< addressesJson.len:
+      if addressesJson[i].kind != JString:
+        error "not string entry in the json adday for index ", i
+        return
+      addresses.add(addressesJson[i].getStr())
+
+    self.setFilterAddresses(addresses, allAddressesSelected)
 
   proc setFilterToAddresses*(self: Controller, addresses: seq[string]) =
     self.currentActivityFilter.counterpartyAddresses = addresses
 
-  proc setFilterChains*(self: Controller, chainIds: seq[int]) =
+  proc setFilterChains*(self: Controller, chainIds: seq[int], allEnabled: bool) =
     self.chainIds = chainIds
+    self.status.setIsFilterDirty(true)
+    self.status.emitFilterChainsChanged()
 
+    self.status.emitFilterChainsChanged()
     self.updateAssetsIdentities()
 
   proc updateRecipientsModel*(self: Controller) {.slot.} =
     self.status.setLoadingRecipients(true)
-    let res = backend_activity.getRecipientsAsync(0, FETCH_RECIPIENTS_BATCH_COUNT_DEFAULT)
+    let res = backend_activity.getRecipientsAsync(self.requestId, self.chainIds, self.addresses, 0, FETCH_RECIPIENTS_BATCH_COUNT_DEFAULT)
     if res.error != nil or res.result.kind != JBool:
       self.status.setLoadingRecipients(false)
       error "error fetching recipients: ", res.error, "; kind ", res.result.kind
@@ -370,7 +428,7 @@ QtObject:
 
   proc loadMoreRecipients(self: Controller) {.slot.} =
     self.status.setLoadingRecipients(true)
-    let res = backend_activity.getRecipientsAsync(self.recipientsModel.getCount(), FETCH_RECIPIENTS_BATCH_COUNT_DEFAULT)
+    let res = backend_activity.getRecipientsAsync(self.requestId, self.chainIds, self.addresses, self.recipientsModel.getCount(), FETCH_RECIPIENTS_BATCH_COUNT_DEFAULT)
     if res.error != nil:
       self.status.setLoadingRecipients(false)
       error "error fetching more recipient entries: ", res.error
@@ -380,18 +438,17 @@ QtObject:
     if res.result.getBool():
       self.status.setLoadingRecipients(false)
 
-  proc updateFilterBase(self: Controller) {.slot.} =
-    self.updateStartTimestamp()
-
   proc getStatus*(self: Controller): QVariant {.slot.} =
     return newQVariant(self.status)
 
   QtProperty[QVariant] status:
     read = getStatus
 
-  proc globalFilterChanged*(self: Controller, addresses: seq[string], chainIds: seq[int]) = 
-    if (self.addresses == addresses and self.chainIds == chainIds):
+  proc globalFilterChanged*(self: Controller, addresses: seq[string], allAddressesSelected: bool, chainIds: seq[int], allChainsEnabled: bool) =
+    if (self.addresses == addresses and self.allAddressesSelected == allAddressesSelected and self.chainIds == chainIds):
       return
-    self.setFilterAddresses(addresses)
-    self.setFilterChains(chainIds)
-    self.status.setIsFilterDirty(true)
+    self.setFilterAddresses(addresses, allAddressesSelected)
+    self.setFilterChains(chainIds, allChainsEnabled)
+
+  proc noLimitTimestamp*(self: Controller): int {.slot.} =
+    return backend_activity.noLimitTimestampForPeriod

@@ -3,9 +3,10 @@ import QtQuick.Controls 2.14
 import QtQuick.Layouts 1.14
 import QtQml.Models 2.14
 
+import StatusQ.Controls 0.1
 import StatusQ.Core 0.1
 import StatusQ.Core.Theme 0.1
-import StatusQ.Controls 0.1
+import StatusQ.Core.Utils 0.1 as SQUtils
 import StatusQ.Popups.Dialog 0.1
 
 import shared.controls 1.0
@@ -149,6 +150,7 @@ StatusDialog {
             StatusButton {
                 visible: !d.responseText
                 text: qsTr("Refuse Verification")
+                objectName: "refuseVerificationButton"
                 onClicked: {
                     root.verificationRefused(d.senderPublicKey)
                     root.close();
@@ -156,10 +158,11 @@ StatusDialog {
             }
             StatusButton {
                 text: qsTr("Send Answer")
+                objectName: "sendAnswerButton"
                 visible: !d.responseText
                 enabled: verificationResponse.text !== ""
                 onClicked: {
-                    root.responseSent(d.senderPublicKey, Utils.escapeHtml(verificationResponse.text))
+                    root.responseSent(d.senderPublicKey, SQUtils.StringUtils.escapeHtml(verificationResponse.text))
                     d.responseText = verificationResponse.text
                     d.responseTimestamp = Date.now()
                 }
@@ -167,6 +170,7 @@ StatusDialog {
             StatusFlatButton {
                 visible: d.responseText
                 text: qsTr("Change answer")
+                objectName: "changeAnswerButton"
                 onClicked: {
                     d.responseText = ""
                 }
@@ -174,6 +178,7 @@ StatusDialog {
             StatusButton {
                 visible: d.responseText
                 text: qsTr("Close")
+                objectName: "closeButton"
                 onClicked: root.close()
             }
         }

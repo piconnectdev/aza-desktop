@@ -30,7 +30,8 @@ QtObject {
         case Constants.keycardSharedState.changingKeycardPin:
         case Constants.keycardSharedState.changingKeycardPuk:
         case Constants.keycardSharedState.changingKeycardPairingCode:
-        case Constants.keycardSharedState.migratingKeyPair:
+        case Constants.keycardSharedState.migratingKeypairToApp:
+        case Constants.keycardSharedState.migratingKeypairToKeycard:
         case Constants.keycardSharedState.creatingAccountNewSeedPhrase:
         case Constants.keycardSharedState.creatingAccountOldSeedPhrase:
         case Constants.keycardSharedState.importingFromKeycard:
@@ -219,6 +220,27 @@ QtObject {
                     }
                     break
 
+                case Constants.keycardSharedFlow.sign:
+                    switch (root.sharedKeycardModule.currentState.stateType) {
+                    case Constants.keycardSharedState.pluginReader:
+                    case Constants.keycardSharedState.readingKeycard:
+                    case Constants.keycardSharedState.insertKeycard:
+                    case Constants.keycardSharedState.keycardInserted:
+                    case Constants.keycardSharedState.wrongPin:
+                    case Constants.keycardSharedState.wrongKeychainPin:
+                    case Constants.keycardSharedState.biometricsReadyToSign:
+                    case Constants.keycardSharedState.maxPinRetriesReached:
+                    case Constants.keycardSharedState.maxPukRetriesReached:
+                    case Constants.keycardSharedState.maxPairingSlotsReached:
+                    case Constants.keycardSharedState.notKeycard:
+                    case Constants.keycardSharedState.wrongKeycard:
+                    case Constants.keycardSharedState.biometricsPinFailed:
+                    case Constants.keycardSharedState.biometricsPinInvalid:
+                    case Constants.keycardSharedState.enterPin:
+                        return true
+                    }
+                    break
+
                 case Constants.keycardSharedFlow.unlockKeycard:
                     switch (root.sharedKeycardModule.currentState.stateType) {
                     case Constants.keycardSharedState.pluginReader:
@@ -366,11 +388,22 @@ QtObject {
                         break
                     }
                     break
+
+                case Constants.keycardSharedFlow.migrateFromKeycardToApp:
+                    switch (root.sharedKeycardModule.currentState.stateType) {
+                    case Constants.keycardSharedState.migrateKeypairToApp:
+                    case Constants.keycardSharedState.enterSeedPhrase:
+                    case Constants.keycardSharedState.wrongSeedPhrase:
+                    case Constants.keycardSharedState.createPassword:
+                    case Constants.keycardSharedState.confirmPassword:
+                        return !root.sharedKeycardModule.forceFlow
+                    }
+                    break
                 }
 
                 return false
             }
-            enabled: !root.disableActionPopupButtons
+            enabled: !root.sharedKeycardModule.forceFlow && !root.disableActionPopupButtons
             onClicked: {
                 root.cancelBtnClicked();
             }
@@ -395,6 +428,32 @@ QtObject {
 
                         case Constants.keycardSharedState.biometricsPasswordFailed:
                             return qsTr("Use password instead")
+
+                        case Constants.keycardSharedState.enterPin:
+                        case Constants.keycardSharedState.wrongPin:
+                            return qsTr("Use biometrics")
+
+                        case Constants.keycardSharedState.pluginReader:
+                        case Constants.keycardSharedState.insertKeycard:
+                        case Constants.keycardSharedState.keycardInserted:
+                        case Constants.keycardSharedState.readingKeycard:
+                        case Constants.keycardSharedState.biometricsReadyToSign:
+                        case Constants.keycardSharedState.notKeycard:
+                        case Constants.keycardSharedState.biometricsPinFailed:
+                        case Constants.keycardSharedState.wrongKeycard:
+                        case Constants.keycardSharedState.keycardEmpty:
+                            return qsTr("Use PIN")
+
+                        case Constants.keycardSharedState.biometricsPinInvalid:
+                            return qsTr("Update PIN")
+                        }
+                    }
+                    break
+
+                case Constants.keycardSharedFlow.sign:
+                    if (userProfile.usingBiometricLogin) {
+
+                        switch (root.sharedKeycardModule.currentState.stateType) {
 
                         case Constants.keycardSharedState.enterPin:
                         case Constants.keycardSharedState.wrongPin:
@@ -458,6 +517,24 @@ QtObject {
                         return qsTr("View imported accounts in Wallet")
                     }
                     break
+
+                case Constants.keycardSharedFlow.migrateFromKeycardToApp:
+                    switch (root.sharedKeycardModule.currentState.stateType) {
+                    case Constants.keycardSharedState.biometrics:
+                        return qsTr("I prefer to use my password")
+
+                    case Constants.keycardSharedState.keyPairMigrateSuccess:
+                        if (!root.sharedKeycardModule.migratingProfileKeyPair())
+                            return qsTr("Factory reset this Keycard")
+                    }
+                    break
+
+                case Constants.keycardSharedFlow.migrateFromAppToKeycard:
+                    switch (root.sharedKeycardModule.currentState.stateType) {
+                    case Constants.keycardSharedState.biometrics:
+                        return qsTr("I prefer to use my PIN")
+                    }
+                    break
                 }
 
                 return ""
@@ -472,6 +549,19 @@ QtObject {
                 switch (root.sharedKeycardModule.currentState.flowType) {
 
                 case Constants.keycardSharedFlow.authentication:
+                    if (userProfile.usingBiometricLogin) {
+                        switch (root.sharedKeycardModule.currentState.stateType) {
+                        case Constants.keycardSharedState.pluginReader:
+                        case Constants.keycardSharedState.insertKeycard:
+                        case Constants.keycardSharedState.notKeycard:
+                        case Constants.keycardSharedState.wrongKeycard:
+                        case Constants.keycardSharedState.keycardEmpty:
+                            return false
+                        }
+                    }
+                    break
+
+                case Constants.keycardSharedFlow.sign:
                     if (userProfile.usingBiometricLogin) {
                         switch (root.sharedKeycardModule.currentState.stateType) {
                         case Constants.keycardSharedState.pluginReader:
@@ -575,9 +665,11 @@ QtObject {
                             return qsTr("Unlock Keycard")
                         return qsTr("Next")
 
-                    case Constants.keycardSharedState.migratingKeyPair:
-                    case Constants.keycardSharedState.keyPairMigrateFailure:
+                    case Constants.keycardSharedState.migratingKeypairToKeycard:
                         return qsTr("Done")
+
+                    case Constants.keycardSharedState.keyPairMigrateFailure:
+                        return qsTr("Close app")
 
                     case Constants.keycardSharedState.keyPairMigrateSuccess:
                         if (root.sharedKeycardModule.migratingProfileKeyPair())
@@ -729,6 +821,7 @@ QtObject {
 
                     case Constants.keycardSharedState.keycardEmpty:
                     case Constants.keycardSharedState.factoryResetSuccess:
+                    case Constants.keycardSharedState.wrongKeycard:
                         return qsTr("Done")
                     }
                     break
@@ -760,6 +853,38 @@ QtObject {
                         return qsTr("Update PIN & authenticate")
 
                     case Constants.keycardSharedState.biometricsPasswordFailed:
+                    case Constants.keycardSharedState.biometricsPinFailed:
+                    case Constants.keycardSharedState.biometricsPinInvalid:
+                        return qsTr("Try biometrics again")
+
+                    case Constants.keycardSharedState.maxPinRetriesReached:
+                    case Constants.keycardSharedState.maxPukRetriesReached:
+                    case Constants.keycardSharedState.maxPairingSlotsReached:
+                        return qsTr("Unlock Keycard")
+
+                    }
+                    break
+
+                case Constants.keycardSharedFlow.sign:
+                    switch (root.sharedKeycardModule.currentState.stateType) {
+
+                    case Constants.keycardSharedState.pluginReader:
+                    case Constants.keycardSharedState.readingKeycard:
+                    case Constants.keycardSharedState.insertKeycard:
+                    case Constants.keycardSharedState.keycardInserted:
+                    case Constants.keycardSharedState.wrongPin:
+                    case Constants.keycardSharedState.notKeycard:
+                    case Constants.keycardSharedState.biometricsReadyToSign:
+                    case Constants.keycardSharedState.wrongKeycard:
+                    case Constants.keycardSharedState.enterPin:
+                        return qsTr("Sign")
+
+                    case Constants.keycardSharedState.keycardEmpty:
+                        return qsTr("Done")
+
+                    case Constants.keycardSharedState.wrongKeychainPin:
+                        return qsTr("Update PIN & authenticate")
+
                     case Constants.keycardSharedState.biometricsPinFailed:
                     case Constants.keycardSharedState.biometricsPinInvalid:
                         return qsTr("Try biometrics again")
@@ -989,6 +1114,63 @@ QtObject {
                         return qsTr("Factory reset this Keycard")
                     }
                     break
+
+                case Constants.keycardSharedFlow.migrateFromKeycardToApp:
+                    switch (root.sharedKeycardModule.currentState.stateType) {
+                    case Constants.keycardSharedState.migrateKeypairToApp:
+                    case Constants.keycardSharedState.enterSeedPhrase:
+                    case Constants.keycardSharedState.wrongSeedPhrase:
+                        return qsTr("Next")
+
+                    case Constants.keycardSharedState.migratingKeypairToApp:
+                        return qsTr("Done")
+
+                    case Constants.keycardSharedState.createPassword:
+                        return qsTr("Create Password")
+
+                    case Constants.keycardSharedState.confirmPassword:
+                        return qsTr("Finalize Status Password Creation")
+
+                    case Constants.keycardSharedState.keyPairMigrateFailure:
+                        return qsTr("Close App")
+
+                    case Constants.keycardSharedState.biometrics:
+                        return qsTr("Yes, use Touch ID")
+
+                    case Constants.keycardSharedState.keyPairMigrateSuccess:
+                        if (root.sharedKeycardModule.migratingProfileKeyPair())
+                            return qsTr("Restart App & Sign In Using Your New Password")
+                        return qsTr("Done")
+                    }
+                    break
+
+                case Constants.keycardSharedFlow.migrateFromAppToKeycard:
+                    switch (root.sharedKeycardModule.currentState.stateType) {
+                    case Constants.keycardSharedState.migrateKeypairToKeycard:
+                    case Constants.keycardSharedState.pinVerified:
+                        return qsTr("Next")
+
+                    case Constants.keycardSharedState.notKeycard:
+                    case Constants.keycardSharedState.wrongKeycard:
+                    case Constants.keycardSharedState.keycardEmpty:
+                    case Constants.keycardSharedState.keycardEmptyMetadata:
+                        return qsTr("Try again")
+
+                    case Constants.keycardSharedState.maxPinRetriesReached:
+                    case Constants.keycardSharedState.maxPukRetriesReached:
+                    case Constants.keycardSharedState.maxPairingSlotsReached:
+                        return qsTr("Unlock Keycard")
+
+                    case Constants.keycardSharedState.biometrics:
+                        return qsTr("Yes, use Touch ID")
+
+                    case Constants.keycardSharedState.keyPairMigrateFailure:
+                        return qsTr("Close App")
+
+                    case Constants.keycardSharedState.keyPairMigrateSuccess:
+                        return qsTr("Restart App & Sign In Using Your Keycard")
+                    }
+                    break
                 }
 
                 return ""
@@ -1088,6 +1270,20 @@ QtObject {
                     }
                     break
 
+                case Constants.keycardSharedFlow.sign:
+                    switch (root.sharedKeycardModule.currentState.stateType) {
+
+                    case Constants.keycardSharedState.pluginReader:
+                    case Constants.keycardSharedState.insertKeycard:
+                    case Constants.keycardSharedState.wrongPin:
+                    case Constants.keycardSharedState.wrongKeychainPin:
+                    case Constants.keycardSharedState.notKeycard:
+                    case Constants.keycardSharedState.wrongKeycard:
+                    case Constants.keycardSharedState.enterPin:
+                        return root.primaryButtonEnabled
+                    }
+                    break
+
                 case Constants.keycardSharedFlow.unlockKeycard:
                     switch (root.sharedKeycardModule.currentState.stateType) {
 
@@ -1130,6 +1326,16 @@ QtObject {
                         return root.primaryButtonEnabled
                     }
                     break
+
+                case Constants.keycardSharedFlow.migrateFromKeycardToApp:
+                    switch (root.sharedKeycardModule.currentState.stateType) {
+
+                    case Constants.keycardSharedState.enterSeedPhrase:
+                    case Constants.keycardSharedState.createPassword:
+                    case Constants.keycardSharedState.confirmPassword:
+                        return root.primaryButtonEnabled
+                    }
+                    break
                 }
 
                 return true
@@ -1161,6 +1367,24 @@ QtObject {
                         case Constants.keycardSharedState.keycardInserted:
                         case Constants.keycardSharedState.readingKeycard:
                         case Constants.keycardSharedState.biometricsPasswordFailed:
+                        case Constants.keycardSharedState.biometricsPinFailed:
+                        case Constants.keycardSharedState.biometricsPinInvalid:
+                        case Constants.keycardSharedState.biometricsReadyToSign:
+                        case Constants.keycardSharedState.notKeycard:
+                        case Constants.keycardSharedState.wrongKeycard:
+                            return "touch-id"
+                        }
+                    }
+                    break
+
+                case Constants.keycardSharedFlow.sign:
+                    if (userProfile.usingBiometricLogin) {
+                        switch (root.sharedKeycardModule.currentState.stateType) {
+
+                        case Constants.keycardSharedState.pluginReader:
+                        case Constants.keycardSharedState.insertKeycard:
+                        case Constants.keycardSharedState.keycardInserted:
+                        case Constants.keycardSharedState.readingKeycard:
                         case Constants.keycardSharedState.biometricsPinFailed:
                         case Constants.keycardSharedState.biometricsPinInvalid:
                         case Constants.keycardSharedState.biometricsReadyToSign:

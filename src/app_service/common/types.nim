@@ -53,9 +53,38 @@ type MemberRole* {.pure} = enum
   ManageUsers
   ModerateContent
   Admin
+  TokenMaster
+
+# TODO: consider refactor MembershipRequestState to MembershipState and use both for request to join and kick/ban actions
+# Issue: https://github.com/status-im/status-desktop/issues/11842
+type MembershipRequestState* {.pure} = enum
+  None = 0,
+  Pending = 1,
+  Accepted = 2,
+  Declined = 3,
+  AcceptedPending = 4,
+  DeclinedPending = 5,
+  Banned = 6,
+  Kicked = 7,
+  BannedPending = 8,
+  UnbannedPending = 9,
+  KickedPending = 10,
+  AwaitingAddress = 11,
 
 type
   ContractTransactionStatus* {.pure.} = enum
     Failed,
     InProgress,
     Completed
+
+type Shard* = ref object
+  cluster*: int
+  index*: int
+
+type TokenType* {.pure.} = enum
+  Native = 0
+  ERC20 = 1,
+  ERC721 = 2,
+  ERC1155 = 3,
+  Unknown = 4,
+  ENS = 5

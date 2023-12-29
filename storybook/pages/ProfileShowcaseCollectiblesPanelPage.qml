@@ -6,6 +6,7 @@ import StatusQ.Core.Utils 0.1 as CoreUtils
 
 import mainui 1.0
 import AppLayouts.Profile.panels 1.0
+import shared.stores 1.0
 
 import utils 1.0
 
@@ -22,73 +23,99 @@ SplitView {
     Popups {
         popupParent: root
         rootStore: QtObject {}
+        communityTokensStore: CommunityTokensStore {}
     }
 
     ListModel {
         id: collectiblesModel
+
         readonly property var data: [
             {
-                id: 123,
+                uid: "123",
                 name: "SNT",
-                description: "",
                 collectionName: "Super Nitro Toluen (with pink bg)",
                 backgroundColor: "pink",
                 imageUrl: ModelsData.collectibles.custom,
-                permalink: "green",
                 isLoading: false
             },
             {
-                id: 34545656768,
+                uid: "34545656768",
                 name: "Kitty 1",
-                description: "",
                 collectionName: "Kitties",
                 backgroundColor: "",
                 imageUrl: ModelsData.collectibles.kitty1Big,
-                permalink: "",
                 isLoading: false
             },
             {
-                id: 123456,
+                uid: "123456",
                 name: "Kitty 2",
-                description: "",
                 collectionName: "",
                 backgroundColor: "",
                 imageUrl: ModelsData.collectibles.kitty2Big,
-                permalink: "",
                 isLoading: false
             },
             {
-                id: 12345645459537432,
+                uid: "12345645459537432",
                 name: "",
-                description: "Kitty 3 description",
                 collectionName: "Super Kitties",
                 backgroundColor: "oink",
                 imageUrl: ModelsData.collectibles.kitty3Big,
-                permalink: "",
                 isLoading: false
             },
             {
-                id: 691,
+                uid: "691",
                 name: "KILLABEAR",
-                description: "Please note that weapons are not yet reflected in the rarity stats.",
                 collectionName: "KILLABEARS",
                 backgroundColor: "#807c56",
                 imageUrl: "https://assets.killabears.com/content/killabears/img/691-e81f892696a8ae700e0dbc62eb072060679a2046d1ef5eb2671bdb1fad1f68e3.png",
-                permalink: "https://opensea.io/assets/ethereum/0xc99c679c50033bbc5321eb88752e89a93e9e83c5/691",
                 isLoading: true
             },
             {
-                id: 8876,
+                uid: "8876",
                 name: "AIORBIT",
                 description: "",
                 collectionName: "AIORBIT (Animated SVG)",
                 backgroundColor: "",
                 imageUrl: "https://dl.openseauserdata.com/cache/originImage/files/8b14ef530b28853445c27d6693c4e805.svg",
-                permalink: "https://opensea.io/assets/ethereum/0xba66a7c5e1f89a542e3108e3df155a9bf41ac824/8876",
                 isLoading: false
             }
         ]
         Component.onCompleted: append(data)
+    }
+
+    ListModel {
+        id: inShowcaseCollectiblesModel
+
+        signal baseModelFilterConditionsMayHaveChanged()
+
+        function setVisibilityByIndex(index, visibility) {
+            if (visibility === Constants.ShowcaseVisibility.NoOne) {
+                remove(index)
+            } else {
+                 get(index).showcaseVisibility = visibility
+            }
+        }
+
+        function setVisibility(uid, visibility) {
+            for (let i = 0; i < count; ++i) {
+                if (get(i).uid === uid) {
+                    setVisibilityByIndex(i, visibility)
+                }
+            }
+        }
+
+        function hasItemInShowcase(uid) {
+            for (let i = 0; i < count; ++i) {
+                if (get(i).uid === uid) {
+                    return true
+                }
+            }
+            return false
+        }
+
+        function upsertItemJson(item) {
+            append(JSON.parse(item))
+        }
     }
 
     StatusScrollView { // wrapped in a ScrollView on purpose; to simulate SettingsContentBase.qml
@@ -98,6 +125,7 @@ SplitView {
             id: showcasePanel
             width: 500
             baseModel: collectiblesModel
+            showcaseModel: inShowcaseCollectiblesModel
         }
     }
 
@@ -115,3 +143,9 @@ SplitView {
         }
     }
 }
+
+// category: Panels
+
+// https://www.figma.com/file/idUoxN7OIW2Jpp3PMJ1Rl8/%E2%9A%99%EF%B8%8F-Settings-%7C-Desktop?node-id=14609-235560&t=RkXAEv3G6mp3EUvl-0
+// https://www.figma.com/file/idUoxN7OIW2Jpp3PMJ1Rl8/%E2%9A%99%EF%B8%8F-Settings-%7C-Desktop?node-id=14729-235696&t=RkXAEv3G6mp3EUvl-0
+// https://www.figma.com/file/idUoxN7OIW2Jpp3PMJ1Rl8/%E2%9A%99%EF%B8%8F-Settings-%7C-Desktop?node-id=14729-237604&t=RkXAEv3G6mp3EUvl-0

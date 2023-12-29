@@ -1,4 +1,4 @@
-import NimQml, tables, json, re, sequtils, strformat, strutils, chronicles, times, oids
+import NimQml, tables, json, re, sequtils, strformat, strutils, chronicles, times, oids, uuids
 
 import ../../../app/core/tasks/[qt, threadpool]
 import ../../../app/core/signals/types
@@ -17,9 +17,11 @@ import ./dto/reaction as reaction_dto
 import ../chat/dto/chat as chat_dto
 import ./dto/pinned_message_update as pinned_msg_update_dto
 import ./dto/removed_message as removed_msg_dto
+import ./dto/urls_unfurling_plan
 import ./dto/link_preview
 import ./message_cursor
 
+import ../../common/activity_center
 import ../../common/message as message_common
 import ../../common/conversion as service_conversion
 
@@ -57,9 +59,11 @@ const SIGNAL_MESSAGE_DELIVERED* = "messageDelivered"
 const SIGNAL_MESSAGE_EDITED* = "messageEdited"
 const SIGNAL_ENVELOPE_SENT* = "envelopeSent"
 const SIGNAL_ENVELOPE_EXPIRED* = "envelopeExpired"
-const SIGNAL_MESSAGE_LINK_PREVIEW_DATA_LOADED* = "messageLinkPreviewDataLoaded"
 const SIGNAL_RELOAD_MESSAGES* = "reloadMessages"
 const SIGNAL_URLS_UNFURLED* = "urlsUnfurled"
+const SIGNAL_GET_MESSAGE_FINISHED* = "getMessageFinished"
+const SIGNAL_URLS_UNFURLING_PLAN_READY* = "urlsUnfurlingPlanReady"
+const SIGNAL_MESSAGE_MARKED_AS_UNREAD* = "messageMarkedAsUnread"
 
 include async_tasks
 
@@ -87,6 +91,12 @@ type
     messageId*: string
     actionInitiatedBy*: string
 
+  MessageMarkMessageAsUnreadArgs* = ref object of Args
+    chatId*: string
+    messageId*: string
+    messagesCount*: int
+    messagesWithMentionsCount*: int
+
   MessagesMarkedAsReadArgs* = ref object of Args
     chatId*: string
     allMessagesMarked*: bool
@@ -104,6 +114,7 @@ type
   MessageDeletedArgs* =  ref object of Args
     chatId*: string
     messageId*: string
+    deletedBy*: string
 
   MessageDeliveredArgs* = ref object of Args
     chatId*: string
@@ -119,12 +130,13 @@ type
     chatId*: string
     message*: MessageDto
 
-  LinkPreviewDataArgs* = ref object of Args
-    response*: JsonNode
-    uuid*: string
+  UrlsUnfurlingPlanDataArgs* = ref object of Args
+    plan*: UrlsUnfurlingPlan
+    requestUuid*: string
 
-  LinkPreviewV2DataArgs* = ref object of Args
+  LinkPreviewDataArgs* = ref object of Args
     linkPreviews*: Table[string, LinkPreview]
+    requestUuid*: string
 
   ReloadMessagesArgs* = ref object of Args
     communityId*: string
@@ -132,6 +144,12 @@ type
   FirstUnseenMessageLoadedArgs* = ref object of Args
     chatId*: string
     messageId*: string
+
+  GetMessageResult* = ref object of Args
+    requestId*: UUID
+    messageId*: string
+    message*: MessageDto
+    error*: string
 
 QtObject:
   type Service* = ref object of QObject
@@ -338,7 +356,7 @@ QtObject:
 
   proc handleDeletedMessagesUpdate(self: Service, deletedMessages: seq[RemovedMessageDto]) =
     for dm in deletedMessages:
-      let data = MessageDeletedArgs(chatId: dm.chatId, messageId: dm.messageId)
+      let data = MessageDeletedArgs(chatId: dm.chatId, messageId: dm.messageId, deletedBy: dm.deletedBy)
       self.events.emit(SIGNAL_MESSAGE_DELETION, data)
 
   proc handleEmojiReactionsUpdate(self: Service, emojiReactions: seq[ReactionDto]) =
@@ -408,14 +426,19 @@ QtObject:
     self.events.on(SignalType.DiscordCommunityImportFinished.event) do(e: Args):
       var receivedData = DiscordCommunityImportFinishedSignal(e)
       self.handleMessagesReload(receivedData.communityId)
+    
+    self.events.on(SignalType.DiscordChannelImportFinished.event) do(e: Args):
+      var receivedData = DiscordChannelImportFinishedSignal(e)
+      self.resetMessageCursor(receivedData.channelId)
+      self.asyncLoadMoreMessagesForChat(receivedData.channelId)
 
   proc getTransactionDetails*(self: Service, message: MessageDto): (string, string) =
     let networksDto = self.networkService.getNetworks()
-    var token = newTokenDto(networksDto[0].nativeCurrencyName, networksDto[0].chainId, parseAddress(ZERO_ADDRESS), networksDto[0].nativeCurrencySymbol, networksDto[0].nativeCurrencyDecimals, true)
+    var token = self.tokenService.findTokenByAddress(networksDto[0].chainId, ZERO_ADDRESS)
 
     if message.transactionParameters.contract != "":
       for networkDto in networksDto:
-        let tokenFound = self.tokenService.findTokenByAddress(networkDto, parseAddress(message.transactionParameters.contract))
+        let tokenFound = self.tokenService.findTokenByAddress(networkDto.chainId, message.transactionParameters.contract)
         if tokenFound == nil:
           continue
 
@@ -491,9 +514,11 @@ QtObject:
     if(responseObj.getProp("reactions", reactionsArr)):
       reactions = map(reactionsArr.getElems(), proc(x: JsonNode): ReactionDto = x.toReactionDto())
 
-    let data = MessagesLoadedArgs(chatId: chatId,
-    messages: messages,
-    reactions: reactions)
+    let data = MessagesLoadedArgs(
+      chatId: chatId,
+      messages: messages,
+      reactions: reactions,
+    )
 
     self.events.emit(SIGNAL_MESSAGES_LOADED, data)
 
@@ -563,19 +588,71 @@ QtObject:
     except Exception as e:
       error "error: ", procName="pinUnpinMessage", errName = e.name, errDesription = e.msg
 
-  proc fetchMessageByMessageId*(self: Service, chatId: string, messageId: string):
-      tuple[message: MessageDto, error: string] =
-    try:
-      let msgResponse = status_go.fetchMessageByMessageId(messageId)
-      if(msgResponse.error.isNil):
-        result.message = msgResponse.result.toMessageDto()
+  proc asyncMarkMessageAsUnread*(self: Service, chatId: string, messageId: string) =
+    if (chatId.len == 0):
+      error "empty chat id", procName="markAllMessagesRead"
+      return
 
-      if(result.message.id.len == 0):
+    let arg = AsyncMarkMessageAsUnreadTaskArg(
+      tptr: cast[ByteAddress](asyncMarkMessageAsUnreadTask),
+      vptr: cast[ByteAddress](self.vptr),
+      slot: "onAsyncMarkMessageAsUnread",
+      messageId: messageId,
+      chatId: chatId
+    )
+    self.threadpool.start(arg)
+
+  proc getMessageByMessageId*(self: Service, messageId: string): GetMessageResult =
+    try:
+      result = GetMessageResult()
+      let msgResponse = status_go.getMessageByMessageId(messageId)
+      if not msgResponse.error.isNil:
+        let error = Json.decode($msgResponse.error, RpcError)
+        raise newException(RpcException, "Error resending chat message: " & error.message)
+
+      result.message = msgResponse.result.toMessageDto()
+      if result.message.id.len == 0:
         result.error = "message with id: " & messageId & " doesn't exist"
         return
     except Exception as e:
       result.error = e.msg
-      error "error: ", procName="fetchMessageByMessageId", errName = e.name, errDesription = e.msg
+      error "error: ", procName="getMessageByMessageId", errName = e.name, errDesription = e.msg
+
+  proc onAsyncGetMessageById*(self: Service, response: string) {.slot.} =
+    try:
+      let responseObj = response.parseJson
+      if responseObj.kind != JObject:
+        raise newException(RpcException, "getMessageById response is not an json object")
+
+      var signalData = GetMessageResult(
+        requestId: parseUUID(responseObj["requestId"].getStr),
+        messageId: responseObj["messageId"].getStr,
+        error: responseObj["error"].getStr,
+      )
+      
+      if signalData.error == "":
+        signalData.message = responseObj["message"].toMessageDto()
+
+      if signalData.message.id.len == 0:
+        signalData.error = "message doesn't exist"
+
+      self.events.emit(SIGNAL_GET_MESSAGE_FINISHED, signalData)
+
+    except Exception as e:
+      error "response processing failed", procName="asyncGetMessageByMessageId", errName = e.name, errDesription = e.msg
+      self.events.emit(SIGNAL_GET_MESSAGE_FINISHED, GetMessageResult( error: e.msg ))
+
+  proc asyncGetMessageById*(self: Service, messageId: string): UUID =
+    let requestId = genUUID()
+    let arg = AsyncGetMessageByMessageIdTaskArg(
+      tptr: cast[ByteAddress](asyncGetMessageByMessageIdTask),
+      vptr: cast[ByteAddress](self.vptr),
+      slot: "onAsyncGetMessageById",
+      requestId: $requestId,
+      messageId: messageId,
+    )
+    self.threadpool.start(arg)
+    return requestId
 
   proc finishAsyncSearchMessagesWithError*(self: Service, chatId, errorMessage: string) =
     error "error: ", procName="onAsyncSearchMessages", errDescription = errorMessage
@@ -655,6 +732,9 @@ QtObject:
 
   proc onMarkAllMessagesRead*(self: Service, response: string) {.slot.} =
     let responseObj = response.parseJson
+    if (responseObj.kind != JObject):
+      self.finishAsyncSearchMessagesWithError("", "mark all messages read response is not an json object")
+      return
 
     var error: string
     discard responseObj.getProp("error", error)
@@ -667,6 +747,7 @@ QtObject:
 
     let data = MessagesMarkedAsReadArgs(chatId: chatId, allMessagesMarked: true)
     self.events.emit(SIGNAL_MESSAGES_MARKED_AS_READ, data)
+    checkAndEmitACNotificationsFromResponse(self.events, responseObj{"activityCenterNotifications"})
 
   proc markAllMessagesRead*(self: Service, chatId: string) =
     if (chatId.len == 0):
@@ -681,6 +762,43 @@ QtObject:
     )
 
     self.threadpool.start(arg)
+
+  proc onAsyncMarkMessageAsUnread*(self: Service, response: string) {.slot.} =
+    try:
+      let responseObj = response.parseJson
+
+      if responseObj.kind != JObject:
+        raise newException(RpcException, "markMessageAsUnread response is not a json object")
+
+      var error: string
+      discard responseObj.getProp("error", error)
+
+      if error.len > 0:
+        error "error: ", procName="onAsyncMarkMessageAsUnread", errDescription=error
+        return
+
+      var chatId, messageId: string
+      var count, countWithMentions: int
+
+      discard responseObj.getProp("chatId", chatId)
+      discard responseObj.getProp("messageId", messageId)
+      discard responseObj.getProp("messagesCount", count)
+      discard responseObj.getProp("messagesWithMentionsCount", countWithMentions)
+
+      let data = MessageMarkMessageAsUnreadArgs(
+        chatId: chatId,
+        messageId: messageId,
+        messagesCount: count,
+        messagesWithMentionsCount: countWithMentions
+      )
+
+      self.chatService.updateUnreadMessage(chatId, count, countWithMentions)
+
+      self.events.emit(SIGNAL_MESSAGE_MARKED_AS_UNREAD, data)
+      checkAndEmitACNotificationsFromResponse(self.events, responseObj{"activityCenterNotifications"})
+
+    except Exception as e:
+      error "error: ", procName="markMessageAsUnread", errName = e.name, errDesription = e.msg
 
   proc onMarkCertainMessagesRead*(self: Service, response: string) {.slot.} =
     let responseObj = response.parseJson
@@ -710,12 +828,13 @@ QtObject:
     discard responseObj.getProp("countWithMentions", countWithMentions)
 
     let data = MessagesMarkedAsReadArgs(
-      chatId: chatId, 
+      chatId: chatId,
       allMessagesMarked: false,
       messagesIds: messagesIds,
       messagesCount: count,
       messagesWithMentionsCount: countWithMentions)
     self.events.emit(SIGNAL_MESSAGES_MARKED_AS_READ, data)
+    checkAndEmitACNotificationsFromResponse(self.events, responseObj{"activityCenterNotifications"})
 
   proc markCertainMessagesRead*(self: Service, chatId: string, messagesIds: seq[string]) =
     if (chatId.len == 0):
@@ -764,32 +883,6 @@ QtObject:
     except Exception as e:
       error "error: ", procName="onGetFirstUnseenMessageIdFor", errName = e.name, errDesription = e.msg
 
-  proc onAsyncGetLinkPreviewData*(self: Service, response: string) {.slot.} =
-    let responseObj = response.parseJson
-    if (responseObj.kind != JObject):
-      info "expected response is not a json object", methodName="onAsyncGetLinkPreviewData"
-      return
-
-    let args = LinkPreviewDataArgs(
-      response: responseObj["previewData"], 
-      uuid: responseObj["uuid"].getStr()
-    )
-    self.events.emit(SIGNAL_MESSAGE_LINK_PREVIEW_DATA_LOADED, args)
-
-  proc asyncGetLinkPreviewData*(self: Service, links: string, uuid: string, whiteListedSites: string, whiteListedImgExtensions: string, unfurlImages: bool): string =
-    let arg = AsyncGetLinkPreviewDataTaskArg(
-      tptr: cast[ByteAddress](asyncGetLinkPreviewDataTask),
-      vptr: cast[ByteAddress](self.vptr),
-      slot: "onAsyncGetLinkPreviewData",
-      links: links,
-      whiteListedUrls: whiteListedSites,
-      whiteListedImgExtensions: whiteListedImgExtensions,
-      unfurlImages: unfurlImages,
-      uuid: uuid
-    )
-    self.threadpool.start(arg)
-    return $genOid()
-
   proc getTextUrls*(self: Service, text: string): seq[string] =
     try:
       let response = status_go.getTextUrls(text)
@@ -801,8 +894,42 @@ QtObject:
     except Exception as e:
       error "getTextUrls failed", errName = e.name, errDesription = e.msg
 
-  proc onAsyncUnfurlUrlsFinished*(self: Service, response: string) {.slot.}=
+  proc getTextURLsToUnfurl*(self: Service, text: string): UrlsUnfurlingPlan =
+    try:
+      let response = status_go.getTextURLsToUnfurl(text)
+      return toUrlUnfurlingPlan(response.result)
+    except Exception as e:
+      error "getTextURLsToUnfurl failed", errName = e.name, errDesription = e.msg
 
+  proc onAsyncGetTextURLsToUnfurl*(self: Service, responseString: string) {.slot.} =
+    let response = responseString.parseJson()
+    if response.kind != JObject:
+      warn "expected response is not a json object", methodName = "onAsyncGetTextURLsToUnfurl"
+      return
+    let errMessage = response{"error"}.getStr()
+    if errMessage != "":
+      error "asyncGetTextURLsToUnfurl failed", errMessage
+      return
+
+    let args = UrlsUnfurlingPlanDataArgs(
+      plan: toUrlUnfurlingPlan(response{"response"}),
+      requestUuid: response{"requestUuid"}.getStr
+    )
+    self.events.emit(SIGNAL_URLS_UNFURLING_PLAN_READY, args)
+
+  proc asyncGetTextURLsToUnfurl*(self: Service, text: string): string =
+    let uuid = $genUUID()
+    let arg = AsyncGetTextURLsToUnfurlTaskArg(
+      tptr: cast[ByteAddress](asyncGetTextURLsToUnfurlTask),
+      vptr: cast[ByteAddress](self.vptr),
+      slot: "onAsyncGetTextURLsToUnfurl",
+      text: text,
+      requestUuid: uuid,
+    )
+    self.threadpool.start(arg)
+    return uuid
+
+  proc onAsyncUnfurlUrlsFinished*(self: Service, response: string) {.slot.}=
     let responseObj = response.parseJson
     if responseObj.kind != JObject:
       warn "expected response is not a json object", methodName = "onAsyncUnfurlUrlsFinished"
@@ -818,33 +945,45 @@ QtObject:
     if responseObj.getProp("requestedUrls", requestedUrlsArr):
       requestedUrls = map(requestedUrlsArr.getElems(), proc(x: JsonNode): string = x.getStr)
 
-    var linkPreviewsArr: JsonNode
+    let unfurlResponse = responseObj["response"]
+
     var linkPreviews: Table[string, LinkPreview]
-    if responseObj.getProp("response", linkPreviewsArr):
+    var linkPreviewsArr: JsonNode
+    var statusLinkPreviewsArr: JsonNode
+
+    if unfurlResponse.getProp("linkPreviews", linkPreviewsArr):
       for element in linkPreviewsArr.getElems():
-        let linkPreview = element.toLinkPreview()
+        let linkPreview = element.toLinkPreview(true)
+        linkPreviews[linkPreview.url] = linkPreview
+
+    if unfurlResponse.getProp("statusLinkPreviews", statusLinkPreviewsArr):
+      for element in statusLinkPreviewsArr.getElems():
+        let linkPreview = element.toLinkPreview(false)
         linkPreviews[linkPreview.url] = linkPreview
 
     for url in requestedUrls:
       if not linkPreviews.hasKey(url):
         linkPreviews[url] = initLinkPreview(url)
 
-    let args = LinkPreviewV2DataArgs(
-      linkPreviews: linkPreviews
+    let args = LinkPreviewDataArgs(
+      linkPreviews: linkPreviews,
+      requestUuid: responseObj["requestUuid"].getStr
     )
     self.events.emit(SIGNAL_URLS_UNFURLED, args)
 
-
-  proc asyncUnfurlUrls*(self: Service, urls: seq[string]) =
+  proc asyncUnfurlUrls*(self: Service, urls: seq[string]): string =
     if len(urls) == 0:
-      return
+      return ""
+    let uuid = $genUUID()
     let arg = AsyncUnfurlUrlsTaskArg(
       tptr: cast[ByteAddress](asyncUnfurlUrlsTask),
       vptr: cast[ByteAddress](self.vptr),
       slot: "onAsyncUnfurlUrlsFinished",
-      urls: urls
+      urls: urls,
+      requestUuid: uuid,
     )
     self.threadpool.start(arg)
+    return uuid
 
 # See render-inline in status-mobile/src/status_im/ui/screens/chat/message/message.cljs
 proc renderInline(self: Service, parsedText: ParsedText, communityChats: seq[ChatDto]): string =
@@ -926,7 +1065,11 @@ proc deleteMessage*(self: Service, messageId: string) =
       error "error: ", procName="deleteMessage", errDesription = "there is no set chat id or message id in response"
       return
 
-    let data = MessageDeletedArgs(chatId: chat_Id, messageId: message_Id)
+    let data = MessageDeletedArgs(
+      chatId: chat_Id,
+      messageId: message_Id,
+      deletedBy: singletonInstance.userProfile.getPubKey(),
+    )
     self.events.emit(SIGNAL_MESSAGE_DELETION, data)
 
   except Exception as e:

@@ -1,11 +1,9 @@
-import sugar, sequtils, tables
+import sugar, sequtils
 import io_interface
 import ../../../../../app_service/service/wallet_account/service as wallet_account_service
 import ../../../../../app_service/service/network/service as network_service
 import ../../../../../app_service/service/currency/service as currency_service
 import ../../../../../app_service/service/currency/dto as currency_dto
-
-import ../../../shared_modules/keycard_popup/io_interface as keycard_shared_module
 
 type
   Controller* = ref object of RootObj
@@ -58,3 +56,18 @@ proc getWalletAccount*(self: Controller, address: string): WalletAccountDto =
 
 proc updateAccount*(self: Controller, address: string, accountName: string, colorId: string, emoji: string) =
   discard self.walletAccountService.updateWalletAccount(address, accountName, colorId, emoji)
+
+proc updateWalletAccountProdPreferredChains*(self: Controller, address, preferredChainIds: string) =
+  discard self.walletAccountService.updateWalletAccountProdPreferredChains(address, preferredChainIds)
+
+proc updateWalletAccountTestPreferredChains*(self: Controller, address, preferredChainIds: string) =
+  discard self.walletAccountService.updateWalletAccountTestPreferredChains(address, preferredChainIds)
+
+proc areTestNetworksEnabled*(self: Controller): bool =
+  return self.walletAccountService.areTestNetworksEnabled()
+
+proc getCurrencyBalance*(self: Controller, address: string, chainIds: seq[int], currency: string): float64 =
+  return self.walletAccountService.getCurrencyBalance(address, chainIds, currency)
+
+proc updateWatchAccountHiddenFromTotalBalance*(self: Controller, address: string, hideFromTotalBalance: bool) =
+  discard self.walletAccountService.updateWatchAccountHiddenFromTotalBalance(address, hideFromTotalBalance)

@@ -106,8 +106,8 @@ Item {
                 }
 
                 Item {
-                    implicitWidth: messageContentsLayout.implicitWidth
-                    implicitHeight: messageContentsLayout.implicitHeight
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: messageContentsLayout.implicitHeight
 
                     ColumnLayout {
                         id: messageContentsLayout
@@ -174,8 +174,9 @@ Item {
 
                     MouseArea {
                         anchors.fill: parent
+                        enabled: !root.replyDetails.messageDeleted && root.replyDetails.sender.id
                         hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
+                        cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                         onClicked: {
                             root.messageClicked(mouse)
                         }

@@ -6,19 +6,19 @@ import internal/[state, state_factory]
 import models/generated_account_item as gen_acc_item
 import models/login_account_item as login_acc_item
 import models/fetching_data_model as fetch_model
-import ../../../constants as main_constants
-import ../../global/global_singleton
-import ../../global/app_translatable_constants as atc
-import ../../core/eventemitter
+import constants as main_constants
+import app/global/global_singleton
+import app/global/app_translatable_constants as atc
+import app/core/eventemitter
 
-import ../../../app_service/service/keychain/service as keychain_service
-import ../../../app_service/service/accounts/service as accounts_service
-import ../../../app_service/service/general/service as general_service
-import ../../../app_service/service/profile/service as profile_service
-import ../../../app_service/service/keycard/service as keycard_service
-import ../../../app_service/service/devices/service as devices_service
+import app_service/service/keychain/service as keychain_service
+import app_service/service/accounts/service as accounts_service
+import app_service/service/general/service as general_service
+import app_service/service/profile/service as profile_service
+import app_service/service/keycard/service as keycard_service
+import app_service/service/devices/service as devices_service
 
-import ../shared_modules/keycard_popup/module as keycard_shared_module
+import app/modules/shared_modules/keycard_popup/module as keycard_shared_module
 
 export io_interface
 
@@ -81,7 +81,16 @@ proc newModule*[T](delegate: T,
   result.controller = controller.newController(result, events, generalService, accountsService, keychainService,
   profileService, keycardService, devicesService)
 
+{.push warning[Deprecated]: off.}
+
 method delete*[T](self: Module[T]) =
+  self.view.delete
+  self.viewVariant.delete
+  self.controller.delete
+  if not self.keycardSharedModule.isNil:
+    self.keycardSharedModule.delete
+
+method onAppLoaded*[T](self: Module[T]) =
   singletonInstance.engine.setRootContextProperty("startupModule", newQVariant())
   self.view.delete
   self.view = nil
@@ -326,10 +335,11 @@ method emitObtainingPasswordSuccess*[T](self: Module[T], password: string) =
 
 method finishAppLoading*[T](self: Module[T]) =
   self.delegate.finishAppLoading()
+  self.delegate.appReady()
 
-method checkFetchingStatusAndProceedWithAppLoading*[T](self: Module[T]) =
+method checkFetchingStatusAndProceed*[T](self: Module[T]) =
   if self.view.fetchingDataModel().isEntityLoaded(FetchingFromWakuProfile):
-    self.delegate.finishAppLoading()
+    self.finishAppLoading()
     return
   let currStateObj = self.view.currentStartupStateObj()
   if currStateObj.isNil:
@@ -375,7 +385,7 @@ method startAppAfterDelay*[T](self: Module[T]) =
   if not self.view.fetchingDataModel().allMessagesLoaded():
     let currStateObj = self.view.currentStartupStateObj()
     if currStateObj.isNil:
-      error "cannot determine current startup state"
+      error "cannot determine current startup state", procName="startAppAfterDelay"
       quit() # quit the app
     self.view.setCurrentStartupState(newProfileFetchingState(currStateObj.flowType(), nil))
   self.moveToStartupState()
@@ -392,10 +402,22 @@ proc logoutAndDisplayError[T](self: Module[T], error: string, errType: StartupEr
   self.moveToStartupState()
   self.emitAccountLoginError(error)
 
+method onProfileConverted*[T](self: Module[T], success: bool) =
+  if not success:
+    self.logoutAndDisplayError("", StartupErrorType.ConvertToRegularAccError)
+    return
+  let currStateObj = self.view.currentStartupStateObj()
+  if currStateObj.isNil:
+    error "cannot determine current startup state", procName="onProfileConverted"
+    quit() # quit the app
+  self.delegate.logout()
+  self.moveToStartupState()
+  self.view.setCurrentStartupState(newLoginKeycardConvertedToRegularAccountState(currStateObj.flowType(), nil))
+
 method onNodeLogin*[T](self: Module[T], error: string) =
   let currStateObj = self.view.currentStartupStateObj()
   if currStateObj.isNil:
-    error "cannot determine current startup state"
+    error "cannot determine current startup state", procName="onNodeLogin"
     quit() # quit the app
 
   if error.len == 0:
@@ -404,26 +426,22 @@ method onNodeLogin*[T](self: Module[T], error: string) =
         self.prepareAndInitFetchingData()
         self.controller.connectToFetchingFromWakuEvents()
         self.delayStartingApp()
-        let err = self.delegate.userLoggedIn(recoverAccount = true)
+        let err = self.delegate.userLoggedIn()
         if err.len > 0:
           self.logoutAndDisplayError(err, StartupErrorType.UnknownType)
           return
     elif currStateObj.flowType() == state.FlowType.LostKeycardConvertToRegularAccount:
-        let err = self.controller.convertToRegularAccount()
-        if err.len > 0:
-          self.logoutAndDisplayError(err, StartupErrorType.ConvertToRegularAccError)
-          return
-        self.delegate.logout()
-        self.view.setCurrentStartupState(newLoginKeycardConvertedToRegularAccountState(currStateObj.flowType(), nil))
+      self.controller.convertKeycardProfileKeypairToRegular()
+      return
     else:
-      let err = self.delegate.userLoggedIn(recoverAccount = false)
+      let err = self.delegate.userLoggedIn()
       if err.len > 0:
         self.logoutAndDisplayError(err, StartupErrorType.UnknownType)
         return
       if currStateObj.flowType() != FlowType.AppLogin:
         let images = self.controller.storeIdentityImage()
         self.accountsService.updateLoggedInAccount(self.getDisplayName, images)
-      self.delegate.finishAppLoading()
+      self.finishAppLoading()
   else:
     self.moveToStartupState()
     if currStateObj.flowType() == state.FlowType.AppLogin:
@@ -545,3 +563,22 @@ method onReencryptionProcessFinished*[T](self: Module[T]) =
       self.moveToStartupState()
       return
   self.moveToLoadingAppState()
+
+## Used in test env only, for testing keycard flows
+method registerMockedKeycard*[T](self: Module[T], cardIndex: int, readerState: int, keycardState: int,
+  mockedKeycard: string, mockedKeycardHelper: string) =
+  self.keycardService.registerMockedKeycard(cardIndex, readerState, keycardState, mockedKeycard, mockedKeycardHelper)
+
+method pluginMockedReaderAction*[T](self: Module[T]) =
+  self.keycardService.pluginMockedReaderAction()
+
+method unplugMockedReaderAction*[T](self: Module[T]) =
+  self.keycardService.unplugMockedReaderAction()
+
+method insertMockedKeycardAction*[T](self: Module[T], cardIndex: int) =
+  self.keycardService.insertMockedKeycardAction(cardIndex)
+
+method removeMockedKeycardAction*[T](self: Module[T]) =
+  self.keycardService.removeMockedKeycardAction()
+
+{.pop.}

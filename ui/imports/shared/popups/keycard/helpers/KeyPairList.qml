@@ -8,25 +8,19 @@ import SortFilterProxyModel 0.2
 Item {
     id: root
 
-    property var sharedKeycardModule
-    property bool filterProfilePair: false
     property var keyPairModel
     property ButtonGroup buttonGroup
+    property bool disableSelectionForKeypairsWithNonDefaultDerivationPath: true
+    property bool displayRadioButtonForSelection: true
+    property bool useTransparentItemBackgroundColor: false
+    property string optionLabel: ""
+    property alias modelFilters: proxyModel.filters
 
-    signal keyPairSelected()
-
-    QtObject {
-        id: d
-        readonly property string profilePairTypeValue: Constants.keycard.keyPairType.profile
-    }
+    signal keyPairSelected(string keyUid)
 
     SortFilterProxyModel {
         id: proxyModel
         sourceModel: root.keyPairModel
-        filters: ExpressionFilter {
-            expression: model.keyPair.pairType == d.profilePairTypeValue
-            inverted: !root.filterProfilePair
-        }
     }
 
     ListView {
@@ -37,10 +31,13 @@ Item {
         delegate: KeyPairItem {
             width: ListView.view.width
 
-            sharedKeycardModule: root.sharedKeycardModule
+            label: root.optionLabel
             buttonGroup: root.buttonGroup
             usedAsSelectOption: true
-            canBeSelected: !model.keyPair.containsPathOutOfTheDefaultStatusDerivationTree()
+            canBeSelected: !root.disableSelectionForKeypairsWithNonDefaultDerivationPath ||
+                           !model.keyPair.containsPathOutOfTheDefaultStatusDerivationTree()
+            displayRadioButtonForSelection: root.displayRadioButtonForSelection
+            useTransparentItemBackgroundColor: root.useTransparentItemBackgroundColor
 
             keyPairType: model.keyPair.pairType
             keyPairKeyUid: model.keyPair.keyUid
@@ -51,7 +48,7 @@ Item {
             keyPairAccounts: model.keyPair.accounts
 
             onKeyPairSelected: {
-                root.keyPairSelected()
+                root.keyPairSelected(model.keyPair.keyUid)
             }
         }
     }

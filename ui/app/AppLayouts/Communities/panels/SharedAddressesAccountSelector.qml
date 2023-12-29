@@ -18,8 +18,10 @@ StatusListView {
     property var uniquePermissionTokenKeys
 
     // read/write properties
-    property string selectedAirdropAddress: selectedSharedAddresses.length ? selectedSharedAddresses[0] : ""
-    property var selectedSharedAddresses: count ? ModelUtils.modelToFlatArray(model, "address") : []
+    property string selectedAirdropAddress
+    property var selectedSharedAddresses: []
+
+    signal addressesChanged()
 
     leftMargin: d.absLeftMargin
     topMargin: Style.current.padding
@@ -47,6 +49,9 @@ StatusListView {
 
     spacing: Style.current.halfPadding
     delegate: StatusListItem {
+        readonly property string address: model.address.toLowerCase()
+
+        id: listItem
         width: ListView.view.width - ListView.view.leftMargin - ListView.view.rightMargin
         statusListItemTitle.font.weight: Font.Medium
         title: model.name
@@ -81,11 +86,11 @@ StatusListView {
             StatusBaseText {
                 anchors.verticalCenter: parent.verticalCenter
                 font.pixelSize: Theme.tertiaryTextFontSize
-                text: LocaleUtils.currencyAmountToLocaleString(enabledNetworkBalance)
+                text: LocaleUtils.currencyAmountToLocaleString(model.enabledNetworkBalance)
             }
         }
 
-        asset.color: !!model.colorId ? Utils.getColorForId(model.colorId): ""
+        asset.color: !!model.color ? model.color : ""
         asset.emoji: model.emoji
         asset.name: !model.emoji ? "filled-account": ""
         asset.letterSize: 14
@@ -100,11 +105,12 @@ StatusListView {
                 icon.color: hovered ? Theme.palette.primaryColor3 :
                                       checked ? Theme.palette.primaryColor1 : disabledTextColor
                 checkable: true
-                checked: model.address === root.selectedAirdropAddress
+                checked: listItem.address === root.selectedAirdropAddress.toLowerCase()
                 enabled: shareAddressCheckbox.checked && root.selectedSharedAddresses.length > 1 // last cannot be unchecked
                 visible: shareAddressCheckbox.checked
                 opacity: enabled ? 1.0 : 0.3
-                onCheckedChanged: if (checked) root.selectedAirdropAddress = model.address
+                onCheckedChanged: if (checked) root.selectedAirdropAddress = listItem.address
+                onToggled: root.addressesChanged()
 
                 StatusToolTip {
                     text: qsTr("Use this address for any Community airdrops")
@@ -117,23 +123,25 @@ StatusListView {
                 ButtonGroup.group: d.addressesGroup
                 anchors.verticalCenter: parent.verticalCenter
                 checkable: true
-                checked: root.selectedSharedAddresses.includes(model.address)
+                checked: root.selectedSharedAddresses.some((address) => address.toLowerCase() === listItem.address )
                 enabled: !(root.selectedSharedAddresses.length === 1 && checked) // last cannot be unchecked
                 onToggled: {
                     // handle selected addresses
-                    const index = root.selectedSharedAddresses.indexOf(model.address)
+                    const index = root.selectedSharedAddresses.findIndex((address) => address.toLowerCase() === listItem.address)
                     const selectedSharedAddressesCopy = Object.assign([], root.selectedSharedAddresses) // deep copy
                     if (index === -1) {
-                        selectedSharedAddressesCopy.push(model.address)
+                        selectedSharedAddressesCopy.push(listItem.address)
                     } else {
                         selectedSharedAddressesCopy.splice(index, 1)
                     }
                     root.selectedSharedAddresses = selectedSharedAddressesCopy
 
                     // switch to next available airdrop address when unchecking
-                    if (!checked && model.address === root.selectedAirdropAddress) {
+                    if (!checked && listItem.address === root.selectedAirdropAddress.toLowerCase()) {
                         d.selectFirstAvailableAirdropAddress()
                     }
+
+                    root.addressesChanged()
                 }
             }
         ]

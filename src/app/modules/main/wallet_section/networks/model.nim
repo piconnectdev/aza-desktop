@@ -1,5 +1,6 @@
-import NimQml, Tables, strutils, strformat, sequtils
+import NimQml, Tables, strutils, strformat, sequtils, sugar
 
+import app_service/service/network/types
 import ./item
 
 const EXPLORER_TX_PREFIX* = "/tx/"
@@ -193,7 +194,7 @@ QtObject:
 
   proc getLayer1Network*(self: Model, testNet: bool): int =
     for item in self.items:
-      if item.getLayer() == 1 and item.getIsTest() == testNet:
+      if item.getLayer() == NETWORK_LAYER_1 and item.getIsTest() == testNet:
         return item.getChainId()
     return 0
 
@@ -241,8 +242,15 @@ QtObject:
 
     return (chainIds, enable)
 
-  proc getAllNetworksSupportedPrefix*(self: Model): string =
+  proc getNetworkShortNames*(self: Model, preferredNetworks: string): string =
     var networkString = ""
-    for item in self.items:
-      networkString = networkString & item.getShortName() & ':'
+    let networks = preferredNetworks.split(":")
+    for nw in networks:
+      for item in self.items:
+        if $item.getChainId() == nw:
+          networkString = networkString & item.getShortName() & ':'
+          break
     return networkString
+
+  proc getAllNetworksChainIds*(self: Model): string =
+    return self.items.map(x => x.getChainId()).join(":")

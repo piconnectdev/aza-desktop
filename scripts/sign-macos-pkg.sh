@@ -17,7 +17,7 @@ CODESIGN_OPTS_EXTRA=("${@}")
 
 function clean_up {
     STATUS=$?
-    if [[ "${STATUS}" -eq 0 ]]; then
+    if [[ "${STATUS}" -ne 0 ]]; then
         echo -e "\n###### ERROR: See above for details."
     fi
     set +e
@@ -55,7 +55,7 @@ if [[ -n "${MACOS_KEYCHAIN_FILE}" ]]; then
     echo -e "\n### Storing original keychain search list..."
     # We want to restore the normal keychains and ignore Jenkis created ones
     ORIG_KEYCHAIN_LIST=$(security list-keychains | grep -v -e "^/private" -e "secretFiles" | xargs)
-    
+
     # The keychain file needs to be locked afterwards
     trap clean_up EXIT ERR
 
@@ -80,15 +80,5 @@ codesign ${CODESIGN_OPTS[@]} "${TARGET}"
 
 echo -e "\n### Verifying signature..."
 codesign --verify --strict=all --deep --verbose=4 "${TARGET}"
-
-echo -e "\n### Assessing Gatekeeper validation..."
-if [[ -d "${TARGET}" ]]; then
-    spctl --assess --type execute --verbose=2 "${TARGET}"
-else
-    echo "WARNING: The 'open' type security assesment is disabled due to lack of 'Notarization'"
-    # Issue: https://github.com/status-im/status-mobile/pull/9172
-    # Details: https://developer.apple.com/documentation/security/notarizing_your_app_before_distribution
-    #spctl --assess --type open --context context:primary-signature --verbose=2 "${OBJECT}"
-fi
 
 echo -e "\n###### DONE"

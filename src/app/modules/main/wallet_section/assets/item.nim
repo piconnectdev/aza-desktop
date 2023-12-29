@@ -1,5 +1,4 @@
 import strformat
-import ../../../shared_models/currency_amount
 
 type
   Item* = object
@@ -17,7 +16,7 @@ proc initItem*(
   result.hasMarketValuesCache = hasMarketValuesCache
 
 proc `$`*(self: Item): string =
-  result = fmt"""WalletAccountItem(
+  result = fmt"""WalletAssetItem(
     assetsLoading: {self.assetsLoading},
     hasBalanceCache: {self.hasBalanceCache},
     hasMarketValuesCache: {self.hasMarketValuesCache},

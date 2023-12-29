@@ -10,6 +10,24 @@ import AppLayouts.Communities.popups 1.0
 SplitView {
     Logs { id: logs }
 
+    ListModel {
+        id: accountsModel
+
+        ListElement {
+            name: "Test account"
+            emoji: "😋"
+            address: "0x7F47C2e18a4BBf5487E6fb082eC2D9Ab0E6d7240"
+            color: "red"
+        }
+
+        ListElement {
+            name: "Another account - generated"
+            emoji: "🚗"
+            address: "0x7F47C2e98a4BBf5487E6fb082eC2D9Ab0E6d8888"
+            color: "blue"
+        }
+    }
+
     SplitView {
         orientation: Qt.Vertical
         SplitView.fillWidth: true
@@ -26,21 +44,52 @@ SplitView {
                 anchors.centerIn: parent
                 text: "Reopen"
 
-                onClicked: dialog.open()
+                onClicked: burnTokensPopup.open()
             }
 
             BurnTokensPopup {
-                id: dialog
+                id: burnTokensPopup
 
                 anchors.centerIn: parent
+                visible: true
+                modal: false
+                closePolicy: Popup.NoAutoClose
+
                 communityName: editorCommunity.text
                 tokenName: editorToken.text
                 remainingTokens: editorAmount.text
+                multiplierIndex: assetButton.checked ? 18 : 0
                 isAsset: assetButton.checked
-                tokenSource: assetButton.checked ? ModelsData.assets.socks :  ModelsData.collectibles.kitty1Big
+                tokenSource: assetButton.checked
+                             ? ModelsData.assets.socks
+                             : ModelsData.collectibles.kitty1Big
+                accounts: accountsModel
+                chainName: "Optimism"
 
                 onBurnClicked: logs.logEvent("BurnTokensPopup::onBurnClicked --> Burn amount: " + burnAmount)
                 onCancelClicked: logs.logEvent("BurnTokensPopup::onCancelClicked")
+                feeText: "0.0015 ETH ($75.43)"
+                feeErrorText: ""
+                isFeeLoading: false
+
+                onSelectedAccountAddressChanged: {
+                    burnTokensPopup.isFeeLoading = true
+                    timer.delay(2000, () => burnTokensPopup.isFeeLoading = false)
+                }
+                onAmountToBurnChanged: {
+                    burnTokensPopup.isFeeLoading = true
+                    timer.delay(2000, () => burnTokensPopup.isFeeLoading = false)
+                }
+            }
+
+            Timer {
+                id: timer
+                function delay(ms, callback) {
+                    timer.interval = ms
+                    timer.repeat = false
+                    timer.triggered.connect(callback)
+                    timer.start()
+                }
             }
         }
 
@@ -59,6 +108,7 @@ SplitView {
         SplitView.preferredWidth: 300
 
         ColumnLayout {
+            anchors.fill: parent
 
             Label {
                 Layout.fillWidth: true
@@ -67,8 +117,8 @@ SplitView {
 
             TextField {
                 id: editorCommunity
-                background: Rectangle { border.color: 'lightgrey' }
-                Layout.preferredWidth: 200
+
+                Layout.fillWidth: true
                 text: "Community lovers"
             }
 
@@ -81,8 +131,8 @@ SplitView {
 
             TextField {
                 id: editorToken
-                background: Rectangle { border.color: 'lightgrey' }
-                Layout.preferredWidth: 200
+
+                Layout.fillWidth: true
                 text: "Anniversary"
             }
 
@@ -95,8 +145,8 @@ SplitView {
 
             TextField {
                 id: editorAmount
-                background: Rectangle { border.color: 'lightgrey' }
-                Layout.preferredWidth: 200
+
+                Layout.fillWidth: true
                 text: "123"
             }
 
@@ -119,8 +169,14 @@ SplitView {
 
                 text: "Collectible"
             }
+
+            Item {
+                Layout.fillHeight: true
+            }
         }
     }
 }
 
+// category: Popups
 
+// https://www.figma.com/file/qHfFm7C9LwtXpfdbxssCK3/Kuba%E2%8E%9CDesktop---Communities?type=design&node-id=35082-612599&mode=design&t=XTDQ4GeU1k9LPuVK-0

@@ -45,6 +45,7 @@ SplitView {
 
 Nemo enim 😋 ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit, sed quia consequuntur magni dolores eos qui ratione voluptatem sequi nesciunt.".arg(dialog.name)
                 loginType: ctrlLoginType.currentIndex
+                requirementsCheckPending: false
 
                 walletAccountsModel: WalletAccountsModel {}
                 permissionsModel: dialog.accessType === Constants.communityChatOnRequestAccess ? PermissionsModel.complexPermissionsModel
@@ -52,8 +53,13 @@ Nemo enim 😋 ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit,
                 assetsModel: AssetsModel {}
                 collectiblesModel: CollectiblesModel {}
 
-                onJoined: logs.logEvent("CommunityIntroDialog::onJoined", ["airdropAddress", "sharedAddresses"], arguments)
                 onCancelMembershipRequest: logs.logEvent("CommunityIntroDialog::onCancelMembershipRequest()")
+
+                onPrepareForSigning: logs.logEvent("CommunityIntroDialog::onPrepareForSigning", ["airdropAddress", "sharedAddresses"], arguments)
+                onJoinCommunity: logs.logEvent("CommunityIntroDialog::onJoinCommunity")
+                onSignSharedAddressesForAllNonKeycardKeypairs: logs.logEvent("CommunityIntroDialog::onSignSharedAddressesForAllNonKeycardKeypairs")
+                onSignSharedAddressesForKeypair: logs.logEvent("CommunityIntroDialog::onSignSharedAddressesForKeypair", ["keyUid"], arguments)
+                onSharedAddressesUpdated: logs.logEvent("CommunityIntroDialog::onSharedAddressesUpdated", ["sharedAddresses"], arguments)
             }
         }
 
@@ -173,3 +179,6 @@ Nemo enim 😋 ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit,
     }
 }
 
+// category: Popups
+
+// https://www.figma.com/file/17fc13UBFvInrLgNUKJJg5/Kuba%E2%8E%9CDesktop?node-id=31461%3A563897&mode=dev

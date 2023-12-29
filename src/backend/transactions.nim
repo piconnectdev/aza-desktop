@@ -1,8 +1,10 @@
-import json, stint, json_serialization
+import Tables, json, stint, json_serialization, strformat
 
 import ../app_service/service/eth/dto/transaction
 import ./core as core
-import ../app_service/common/utils
+
+type
+  TransactionsSignatures* = Table[string, tuple[r: string, s: string, v: string]]
 
 # mirrors the MultiTransactionType from status-go, services/wallet/transfer/transaction.go
 type
@@ -41,6 +43,19 @@ const EventNonArchivalNodeDetected*: string = "non-archival-node-detected"
 const EventPendingTransactionUpdate*: string = "pending-transaction-update"
 const EventMTTransactionUpdate*: string = "multi-transaction-update"
 
+proc `$`*(self: MultiTransactionDto): string =
+  return fmt"""MultiTransactionDto(
+    id:{self.id},
+    timestamp:{self.timestamp},
+    fromAddress:{self.fromAddress},
+    toAddress:{self.toAddress},
+    fromAsset:{self.fromAsset},
+    toAsset:{self.toAsset},
+    fromAmount:{self.fromAmount},
+    toAmount:{self.toAmount},
+    multiTxType:{self.multiTxType}
+  )"""
+
 proc getTransactionByHash*(chainId: int, hash: string): RpcResponse[JsonNode] {.raises: [Exception].} =
   core.callPrivateRPCWithChainId("eth_getTransactionByHash", chainId, %* [hash])
 
@@ -61,8 +76,16 @@ proc fetchCryptoServices*(): RpcResponse[JsonNode] {.raises: [Exception].} =
   result = core.callPrivateRPC("wallet_getCryptoOnRamps", %* [])
 
 proc createMultiTransaction*(multiTransactionCommand: MultiTransactionCommandDto, data: seq[TransactionBridgeDto], password: string): RpcResponse[JsonNode] {.raises: [Exception].} =
-  let payload = %* [multiTransactionCommand, data, hashPassword(password)]
+  let payload = %* [multiTransactionCommand, data, password]
   result = core.callPrivateRPC("wallet_createMultiTransaction", payload)
+
+proc proceedWithTransactionsSignatures*(signatures: TransactionsSignatures): RpcResponse[JsonNode] {.raises: [Exception].} =
+  var data = %* {}
+  for key, value in signatures:
+    data[key] = %* { "r": value.r, "s": value.s, "v": value.v }
+
+  var payload = %* [data]
+  result = core.callPrivateRPC("wallet_proceedWithTransactionsSignatures", payload)
 
 proc getMultiTransactions*(transactionIDs: seq[int]): RpcResponse[JsonNode] {.raises: [Exception].} =
   let payload = %* [transactionIDs]

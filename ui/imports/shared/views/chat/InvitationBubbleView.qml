@@ -15,18 +15,17 @@ import shared.popups 1.0
 Control {
     id: root
 
-    implicitWidth: d.invitedCommunity || loading ? 270 /*by design*/ : 0
+    implicitWidth: d.invitedCommunity || d.loading ? 270 /*by design*/ : 0
     padding: 1
 
     property var store
     property string communityId
-    property bool loading: false
 
     QtObject {
         id: d
 
         property var invitedCommunity
-    
+
         readonly property string communityName:         !!d.invitedCommunity ? d.invitedCommunity.name : ""
         readonly property string communityDescription:  !!d.invitedCommunity ? d.invitedCommunity.description : ""
         readonly property string communityImage:        !!d.invitedCommunity ? d.invitedCommunity.image : ""
@@ -39,12 +38,15 @@ Control {
         readonly property int margin: 12
         readonly property int radius: Style.current.padding
 
+        readonly property bool loading: !d.invitedCommunity
+
         function getCommunity() {
             try {
                 const communityJson = root.store.getSectionByIdJson(communityId)
 
                 if (!communityJson) {
-                    root.store.requestCommunityInfo(communityId)
+                    // we don't have the shard info, so we will try to fetch it on waku
+                    root.store.requestCommunityInfo(communityId, -1, -1)
                     return null
                 }
 
@@ -135,7 +137,7 @@ Control {
                     isImage: true
                 }
 
-                visible: !root.loading
+                visible: d.communityColor && d.communityName
             }
 
             ColumnLayout {
@@ -143,8 +145,8 @@ Control {
 
                 StatusBaseText {
                     Layout.fillWidth: true
-
-                    text: root.loading ? qsTr("Community data not loaded yet.") : d.communityName
+                    objectName: "communityName"
+                    text: d.communityName
                     font.weight: Font.Bold
                     wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                     font.pixelSize: 17
@@ -153,16 +155,16 @@ Control {
 
                 StatusBaseText {
                     Layout.fillWidth: true
-
-                    text: root.loading ? qsTr("Please wait for the unfurl to show") : d.communityDescription
+                    objectName: "communityDescription"
+                    text: d.communityDescription
                     wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                     color: Theme.palette.directColor1
                 }
 
                 StatusBaseText {
                     Layout.fillWidth: true
-
-                    text: root.loading ? "" : qsTr("%n member(s)", "", d.communityNbMembers)
+                    objectName: "communityMembers"
+                    text: qsTr("%n member(s)", "", d.communityNbMembers)
                     font.pixelSize: 13
                     font.weight: Font.Medium
                     color: Theme.palette.baseColor1
@@ -187,12 +189,13 @@ Control {
                 height: (parent.height+d.radius)
                 anchors.top: parent.top
                 anchors.topMargin: -d.radius
-                loading: root.loading
+                loading: d.loading
                 radius: d.radius - 1 // We do -1, otherwise there's a gap between border and button
                 contentItem: Item {
                     StatusBaseText {
                         anchors.centerIn: parent
                         anchors.verticalCenterOffset: d.radius/2
+                        visible: !joinBtn.loading
                         font: joinBtn.font
                         color: joinBtn.enabled ? joinBtn.textColor : joinBtn.disabledTextColor
                         text: qsTr("Go to Community")

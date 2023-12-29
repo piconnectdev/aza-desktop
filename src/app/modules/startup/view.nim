@@ -69,7 +69,7 @@ QtObject:
     result.loginAccountsModel = login_acc_model.newModel()
     result.loginAccountsModelVariant = newQVariant(result.loginAccountsModel)
     result.remainingAttempts = -1
-    result.localPairingStatus = newLocalPairingStatus()
+    result.localPairingStatus = newLocalPairingStatus(PairingType.AppSync, LocalPairingMode.Receiver)
 
     signalConnect(result.currentStartupState, "backActionClicked()", result, "onBackActionClicked()", 2)
     signalConnect(result.currentStartupState, "primaryActionClicked()", result, "onPrimaryActionClicked()", 2)
@@ -373,3 +373,20 @@ QtObject:
 
   proc validateLocalPairingConnectionString*(self: View, connectionString: string): string {.slot.} =
     return self.delegate.validateLocalPairingConnectionString(connectionString)
+
+  ## Used in test env only, for testing keycard flows
+  proc registerMockedKeycard*(self: View, cardIndex: int, readerState: int, keycardState: int,
+  mockedKeycard: string, mockedKeycardHelper: string) {.slot.} =
+    self.delegate.registerMockedKeycard(cardIndex, readerState, keycardState, mockedKeycard, mockedKeycardHelper)
+
+  proc pluginMockedReaderAction*(self: View) {.slot.} =
+    self.delegate.pluginMockedReaderAction()
+
+  proc unplugMockedReaderAction*(self: View) {.slot.} =
+    self.delegate.unplugMockedReaderAction()
+
+  proc insertMockedKeycardAction*(self: View, cardIndex: int) {.slot.} =
+    self.delegate.insertMockedKeycardAction(cardIndex)
+
+  proc removeMockedKeycardAction*(self: View) {.slot.} =
+    self.delegate.removeMockedKeycardAction()

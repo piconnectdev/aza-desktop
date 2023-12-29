@@ -1,16 +1,18 @@
 import NimQml, Tables, sequtils, strutils, sugar
 
-import ../../../../global/global_singleton
-import ../../../../core/eventemitter
-import ../../../../../app_service/service/wallet_account/service as wallet_account_service
-import ../../../../../app_service/service/network/service as network_service
-import ../../../../../app_service/service/token/service as token_service
-import ../../../../../app_service/service/currency/service as currency_service
-import ../../../shared/wallet_utils
-import ../../../shared_models/token_model as token_model
+import app/global/global_singleton
+import app/core/eventemitter
+import app_service/service/wallet_account/service as wallet_account_service
+import app_service/service/network/service as network_service
+import app_service/service/token/service as token_service
+import app_service/service/currency/service as currency_service
+import app/modules/shared/wallet_utils
+import app/modules/shared_models/token_model as token_model
 
 import ./io_interface, ./view, ./controller
 import ../io_interface as delegate_interface
+
+import backend/helpers/token
 
 export io_interface
 
@@ -66,19 +68,21 @@ proc switchAccount*(self: Module, accountIndex: int) =
   let keycardAccount = self.controller.isKeycardAccount(walletAccount)
   let currency = self.controller.getCurrentCurrency()
   let enabledChainIds = self.controller.getEnabledChainIds()
-
+  let areTestNetworksEnabled = self.controller.areTestNetworksEnabled()
   let currencyFormat = self.controller.getCurrencyFormat(currency)
+  let currencyBalance = self.controller.getCurrencyBalance(walletAccount.address, enabledChainIds, currency)
+  let tokens = self.controller.getTokensByAddress(walletAccount.address)
 
   let accountItem = walletAccountToWalletAccountsItem(
     walletAccount,
     keycardAccount,
-    enabledChainIds,
-    currency,
+    currencyBalance,
     currencyFormat,
+    areTestNetworksEnabled
   )
 
   self.view.setData(accountItem)
-  self.setAssets(walletAccount.tokens)
+  self.setAssets(tokens)
 
 method load*(self: Module) =
   singletonInstance.engine.setRootContextProperty("browserSectionCurrentAccount", newQVariant(self.view))
@@ -130,7 +134,10 @@ proc onTokensRebuilt(self: Module, accountsTokens: OrderedTable[string, seq[Wall
 proc onCurrencyFormatsUpdated(self: Module) =
   # Update assets
   let walletAccount = self.controller.getWalletAccount(self.currentAccountIndex)
-  self.setAssets(walletAccount.tokens)
+  if walletAccount.isNil:
+    return
+  let tokens = self.controller.getTokensByAddress(walletAccount.address)
+  self.setAssets(tokens)
 
 method findTokenSymbolByAddress*(self: Module, address: string): string =
   return self.controller.findTokenSymbolByAddress(address)

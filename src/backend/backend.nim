@@ -40,7 +40,9 @@ type
     layer* {.serializedFieldName("layer").}: int
     chainName* {.serializedFieldName("chainName").}: string
     rpcURL* {.serializedFieldName("rpcUrl").}: string
+    originalRpcURL* {.serializedFieldName("originalRpcUrl").}: string
     fallbackURL* {.serializedFieldName("fallbackUrl").}: string
+    originalFallbackURL* {.serializedFieldName("originalFallbackURL").}: string
     blockExplorerURL* {.serializedFieldName("blockExplorerUrl").}: string
     iconURL* {.serializedFieldName("iconUrl").}: string
     nativeCurrencyName* {.serializedFieldName("nativeCurrencyName").}: string
@@ -60,6 +62,21 @@ type
   ActivityCenterCountRequest* = ref object of RootObj
     activityTypes* {.serializedFieldName("activityTypes").}: seq[int]
     readType* {.serializedFieldName("readType").}: int
+
+  TokenPreferences* = ref object of RootObj
+    key* {.serializedFieldName("key").}: string
+    position* {.serializedFieldName("position").}: int
+    groupPosition* {.serializedFieldName("groupPosition").}: int
+    visible* {.serializedFieldName("visible").}: bool
+    communityId* {.serializedFieldName("communityId").}: string
+
+proc fromJson*(t: JsonNode, T: typedesc[TokenPreferences]): TokenPreferences {.inline.} =
+  result = TokenPreferences()
+  discard t.getProp("key", result.key)
+  discard t.getProp("position", result.position)
+  discard t.getProp("groupPosition", result.groupPosition)
+  discard t.getProp("visible", result.visible)
+  discard t.getProp("communityId", result.communityId)
 
 rpc(clientVersion, "web3"):
   discard
@@ -93,13 +110,11 @@ rpc(checkConnected, "wallet"):
 rpc(getTokens, "wallet"):
   chainId: int
 
-rpc(getTokensBalancesForChainIDs, "wallet"):
-  chainIds: seq[int]
-  accounts: seq[string]
-  tokens: seq[string]
+rpc(getTokenList, "wallet"):
+  discard
 
-rpc(getPendingTransactionsByChainIDs, "wallet"):
-  chainIds: seq[int]
+rpc(getPendingTransactions, "wallet"):
+  discard
 
 type
   TransactionIdentity* = ref object
@@ -133,11 +148,12 @@ rpc(getTransfersForIdentities, "wallet"):
 rpc(getWalletToken, "wallet"):
   accounts: seq[string]
 
+rpc(fetchMarketValues, "wallet"):
+  symbols: seq[string]
+  currency: string
+
 rpc(startWallet, "wallet"):
   discard
-
-rpc(updateVisibleTokens, "wallet"):
-  symbols: seq[string]
 
 rpc(getTransactionEstimatedTime, "wallet"):
   chainId: int
@@ -169,6 +185,9 @@ rpc(acceptActivityCenterNotifications, "wakuext"):
   ids: seq[string]
 
 rpc(dismissActivityCenterNotifications, "wakuext"):
+  ids: seq[string]
+
+rpc(deleteActivityCenterNotifications, "wakuext"):
   ids: seq[string]
 
 rpc(hasUnseenActivityCenterNotifications, "wakuext"):
@@ -266,6 +285,12 @@ rpc(moveWalletAccount, "accounts"):
   fromPosition: int
   toPosition: int
 
+rpc(updateTokenPreferences, "accounts"):
+  preferences: seq[TokenPreferences]
+
+rpc(getTokenPreferences, "accounts"):
+  discard
+
 rpc(updateKeypairName, "accounts"):
   keyUid: string
   name: string
@@ -289,7 +314,7 @@ rpc(getName, "ens"):
 
 rpc(getBalanceHistory, "wallet"):
   chainIds: seq[int]
-  address: string
+  addresses: seq[string]
   tokenSymbol: string
   currencySymbol: string
   timeInterval: int
@@ -298,4 +323,7 @@ rpc(getCachedCurrencyFormats, "wallet"):
   discard
 
 rpc(fetchAllCurrencyFormats, "wallet"):
+  discard
+
+rpc(hasPairedDevices, "accounts"):
   discard

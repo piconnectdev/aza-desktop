@@ -2,14 +2,11 @@ import QtQuick 2.14
 import QtQuick.Controls 2.14
 
 import AppLayouts.Profile.controls 1.0
-
 import StatusQ.Core 0.1
-
 import utils 1.0
 
-import Storybook 1.0
-
 import Models 1.0
+import Storybook 1.0
 
 SplitView {
     id: root
@@ -46,10 +43,11 @@ SplitView {
             delegate: WalletKeyPairDelegate {
                 width: parent.width
                 keyPair: model.keyPair
-                chainShortNames: d.walletStore.getAllNetworksSupportedString()
                 userProfilePublicKey: d.walletStore.userProfilePublicKey
                 onGoToAccountView: console.warn("onGoToAccountView ::")
             }
         }
     }
 }
+
+// category: Wallet

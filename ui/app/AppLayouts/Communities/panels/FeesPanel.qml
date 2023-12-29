@@ -22,10 +22,15 @@ Control {
 
     property alias placeholderText: placeholderText.text
 
+    property bool highlightFees: count === 1
+
     property Item footer
 
     states: State {
-        when: root.footer
+        // Setting condition on root.footer doesn't work for some configurations (macOS or specific qt version)
+        // Setting when directly to true seems to be relable option because ParentChange and PropertyChanges tolerate target set to null
+        // when: root.footer
+        when: true
 
         ParentChange {
             target: root.footer
@@ -42,7 +47,7 @@ Control {
     QtObject {
         id: d
 
-        readonly property int delegateHeight: 28
+        readonly property int placeholderHeight: 24
     }
 
     contentItem: ColumnLayout {
@@ -52,10 +57,10 @@ Control {
             id: placeholderText
 
             Layout.fillWidth: true
-            Layout.preferredHeight: Math.max(implicitHeight, d.delegateHeight)
+            Layout.preferredHeight: Math.max(implicitHeight,
+                                             d.placeholderHeight)
 
             visible: repeater.count === 0
-
             font.pixelSize: Style.current.primaryTextFontSize
             wrapMode: Text.Wrap
             color: Theme.palette.baseColor1
@@ -67,13 +72,11 @@ Control {
 
             FeeRow {
                 Layout.fillWidth: true
-                Layout.preferredHeight: Math.max(implicitHeight,
-                                                 d.delegateHeight)
 
                 title: model.title
                 feeText: model.feeText
                 errorFee: !!model.error
-                highlightFee: repeater.count === 1
+                highlightFee: root.highlightFees
             }
         }
     }

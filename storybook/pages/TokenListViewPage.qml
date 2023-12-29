@@ -4,7 +4,7 @@ import QtQuick.Controls 2.15
 import Models 1.0
 import Storybook 1.0
 
-import shared.views 1.0
+import shared.popups.send.views 1.0
 
 SplitView {
     orientation: Qt.Vertical
@@ -23,11 +23,9 @@ SplitView {
 
             width: 400
 
-            getNetworkIcon: function(chainId) {
-                return "network/Network=Optimism"
-            }
-
             assets: WalletAssetsModel {}
+            collectibles: WalletNestedCollectiblesModel {}
+            networksModel: NetworksModel.allNetworks
         }
     }
 
@@ -38,3 +36,5 @@ SplitView {
         SplitView.fillWidth: true
     }
 }
+
+// category: Views

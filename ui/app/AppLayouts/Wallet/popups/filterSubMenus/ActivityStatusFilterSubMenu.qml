@@ -57,7 +57,7 @@ StatusMenu {
     ActivityTypeCheckBox {
         id: buyCheckbox
         title: qsTr("Complete")
-        assetSettings.name: Style.svg("transaction/verified")
+        assetSettings.name: Style.svg("transaction/confirmed")
         assetSettings.color: "transparent"
         buttonGroup: typeButtonGroup
         allChecked: root.allChecked
@@ -73,7 +73,7 @@ StatusMenu {
         assetSettings.color: "transparent"
         buttonGroup: typeButtonGroup
         allChecked: root.allChecked
-        type: Constants.TransactionStatus.Finished
+        type: Constants.TransactionStatus.Finalised
         checked: root.allChecked || statusFilters.includes(type)
         onActionTriggered: root.actionTriggered(type)
     }

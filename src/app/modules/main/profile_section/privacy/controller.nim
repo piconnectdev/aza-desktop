@@ -1,5 +1,5 @@
 import io_interface
-import uuids
+import uuids, chronicles
 
 import ../../../../../constants as main_constants
 import ../../../../global/global_singleton
@@ -70,11 +70,12 @@ proc init*(self: Controller) =
     var args = OperationSuccessArgs(e)
     self.delegate.onPasswordChanged(args.success, args.errorMsg)
 
+  self.events.on(SIGNAL_URL_UNFURLING_MODE_UPDATED) do(e: Args):
+    var args = UrlUnfurlingModeArgs(e)
+    self.delegate.onUrlUnfurlingModeUpdated(args.value.int)
+
 proc isMnemonicBackedUp*(self: Controller): bool =
   return self.privacyService.isMnemonicBackedUp()
-
-proc getLinkPreviewWhitelist*(self: Controller): string =
-  return self.privacyService.getLinkPreviewWhitelist()
 
 proc changePassword*(self: Controller, password: string, newPassword: string) =
   self.privacyService.changePassword(password, newPassword)
@@ -85,6 +86,9 @@ proc getMnemonic*(self: Controller): string =
 proc removeMnemonic*(self: Controller) =
   self.privacyService.removeMnemonic()
 
+proc mnemonicWasShown*(self: Controller) =
+  self.settingsService.mnemonicWasShown()
+
 proc getMnemonicWordAtIndex*(self: Controller, index: int): string =
   return self.privacyService.getMnemonicWordAtIndex(index)
 
@@ -94,10 +98,18 @@ proc getMessagesFromContactsOnly*(self: Controller): bool =
 proc setMessagesFromContactsOnly*(self: Controller, value: bool): bool =
   return self.settingsService.saveMessagesFromContactsOnly(value)
 
+proc urlUnfurlingMode*(self: Controller): int =
+  return int(self.settingsService.urlUnfurlingMode())
+
+proc setUrlUnfurlingMode*(self: Controller, value: int) =
+  let mode = toUrlUnfurlingMode(value)
+  if not self.settingsService.saveUrlUnfurlingMode(mode):
+    error "failed to save url unfurling mode setting", value
+
 proc validatePassword*(self: Controller, password: string): bool =
   return self.privacyService.validatePassword(password)
 
-method getPasswordStrengthScore*(self: Controller, password, userName: string): int =
+proc getPasswordStrengthScore*(self: Controller, password, userName: string): int =
   return self.generalService.getPasswordStrengthScore(password, userName)
 
 proc storeToKeychain*(self: Controller, data: string) =

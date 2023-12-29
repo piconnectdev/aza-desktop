@@ -20,6 +20,13 @@ type ActivityCenterNotificationType* {.pure.}= enum
   CommunityKicked = 9,
   ContactVerification = 10
   ContactRemoved = 11
+  NewKeypairAddedToPairedDevice = 12
+  OwnerTokenReceived = 13
+  OwnershipReceived = 14
+  OwnershipLost = 15
+  SetSignerFailed = 16
+  SetSignerDeclined = 17
+  ShareAccounts = 18
 
 type ActivityCenterGroup* {.pure.}= enum
   All = 0,
@@ -41,7 +48,9 @@ type ActivityCenterMembershipStatus* {.pure.}= enum
   Idle = 0,
   Pending = 1,
   Accepted = 2,
-  Declined = 3
+  Declined = 3,
+  AcceptedPending = 4,
+  DeclinedPending = 5,
 
 type ActivityCenterNotificationDto* = ref object of RootObj
   id*: string # ID is the id of the chat, for public chats it is the name e.g. status, for one-to-one is the hex encoded public key and for group chats is a random uuid appended with the hex encoded pk of the creator of the chat
@@ -54,6 +63,7 @@ type ActivityCenterNotificationDto* = ref object of RootObj
   notificationType*: ActivityCenterNotificationType
   message*: MessageDto
   replyMessage*: MessageDto
+  albumMessages*: seq[MessageDto]
   timestamp*: int64
   read*: bool
   dismissed*: bool
@@ -114,13 +124,18 @@ proc toActivityCenterNotificationDto*(jsonObj: JsonNode): ActivityCenterNotifica
   discard jsonObj.getProp("accepted", result.accepted)
 
   if jsonObj.contains("message") and jsonObj{"message"}.kind != JNull:
-    result.message = jsonObj{"message"}.toMessageDto()
+    result.message = jsonObj["message"].toMessageDto()
   elif result.notificationType == ActivityCenterNotificationType.NewOneToOne and
     jsonObj.contains("lastMessage") and jsonObj{"lastMessage"}.kind != JNull:
-    result.message = jsonObj{"lastMessage"}.toMessageDto()
+    result.message = jsonObj["lastMessage"].toMessageDto()
 
   if jsonObj.contains("replyMessage") and jsonObj{"replyMessage"}.kind != JNull:
-    result.replyMessage = jsonObj{"replyMessage"}.toMessageDto()
+    result.replyMessage = jsonObj["replyMessage"].toMessageDto()
+
+  if jsonObj.contains("albumMessages") and jsonObj{"albumMessages"}.kind != JNull:
+    let jsonAlbum = jsonObj["albumMessages"]
+    for msg in jsonAlbum:
+      result.albumMessages.add(toMessageDto(msg))
 
 proc parseActivityCenterNotifications*(rpcResult: JsonNode): (string, seq[ActivityCenterNotificationDto]) =
   var notifs: seq[ActivityCenterNotificationDto] = @[]
@@ -142,7 +157,14 @@ proc activityCenterNotificationTypesByGroup*(group: ActivityCenterGroup) : seq[i
         ActivityCenterNotificationType.CommunityMembershipRequest.int,
         ActivityCenterNotificationType.CommunityKicked.int,
         ActivityCenterNotificationType.ContactVerification.int,
-        ActivityCenterNotificationType.ContactRemoved.int
+        ActivityCenterNotificationType.ContactRemoved.int,
+        ActivityCenterNotificationType.NewKeypairAddedToPairedDevice.int,
+        ActivityCenterNotificationType.OwnerTokenReceived.int,
+        ActivityCenterNotificationType.OwnershipReceived.int,
+        ActivityCenterNotificationType.SetSignerFailed.int,
+        ActivityCenterNotificationType.SetSignerDeclined.int,
+        ActivityCenterNotificationType.OwnershipLost.int,
+        ActivityCenterNotificationType.ShareAccounts.int
       ]
     of ActivityCenterGroup.Mentions:
       return @[ActivityCenterNotificationType.Mention.int]

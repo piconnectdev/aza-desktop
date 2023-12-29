@@ -18,10 +18,10 @@ method isLoaded*(self: AccessInterface): bool {.base.} =
 method getModuleAsVariant*(self: AccessInterface): QVariant {.base.} =
   raise newException(ValueError, "No implementation available")
 
-method sendChatMessage*(self: AccessInterface, msg: string, replyTo: string, contentType: int) {.base.} =
+method sendChatMessage*(self: AccessInterface, msg: string, replyTo: string, contentType: int, linkPreviews: seq[LinkPreview]) {.base.} =
   raise newException(ValueError, "No implementation available")
 
-method sendImages*(self: AccessInterface, imagePathsJson: string, msg: string, replyTo: string): string {.base.} =
+method sendImages*(self: AccessInterface, imagePathsJson: string, msg: string, replyTo: string, linkPreviews: seq[LinkPreview]): string {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method requestAddressForTransaction*(self: AccessInterface, fromAddress: string, amount: string, tokenAddress: string) {.base.} =
@@ -96,10 +96,13 @@ method isFavorite*(self: AccessInterface, item: GifDto): bool {.base.} =
 method viewDidLoad*(self: AccessInterface) {.base.} =
   raise newException(ValueError, "No implementation available")
 
-method setText*(self: AccessInterface, text: string) {.base.} =
+method setText*(self: AccessInterface, text: string, unfurlUrls: bool) {.base.} =
   raise newException(ValueError, "No implementation available")
 
-method setUrls*(self: AccessInterface, urls: seq[string]) {.base.} =
+method getPlainText*(self: AccessInterface): string {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method setLinkPreviewUrls*(self: AccessInterface, urls: seq[string]) {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method updateLinkPreviewsFromCache*(self: AccessInterface, urls: seq[string]) {.base.} =
@@ -109,4 +112,25 @@ method clearLinkPreviewCache*(self: AccessInterface) {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method linkPreviewsFromCache*(self: AccessInterface, urls: seq[string]): Table[string, LinkPreview] {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method reloadUnfurlingPlan*(self: AccessInterface) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method loadLinkPreviews*(self: AccessInterface, urls: seq[string]) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method getLinkPreviewEnabled*(self: AccessInterface): bool {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method setLinkPreviewEnabled*(self: AccessInterface, enabled: bool) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method setAskToEnableLinkPreview*(self: AccessInterface, value: bool) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method setLinkPreviewEnabledForThisMessage*(self: AccessInterface, enabled: bool) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method setUrls*(self: AccessInterface, urls: seq[string]) {.base.} =
   raise newException(ValueError, "No implementation available")

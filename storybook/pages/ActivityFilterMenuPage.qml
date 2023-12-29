@@ -32,7 +32,7 @@ SplitView {
 
     QtObject {
         id: d
-        property var recipeintModel: RecipientModel {}
+        property var recipientModel: RecipientModel {}
 
         property var store: QtObject {
             property var overview: ({
@@ -48,8 +48,6 @@ SplitView {
                                                               displayDecimals: 4,
                                                               stripTrailingZeroes: false}),
                                         isAllAccounts: false,
-                                        includeWatchOnly: false
-
                                     })
 
             function getNameForAddress(address) {
@@ -82,7 +80,7 @@ SplitView {
         id: actvityStore
         tokensList: WalletAssetsModel {}
         collectiblesList: CollectiblesModel {}
-        savedAddressesModel: d.recipeintModel.savedAddresses
+        savedAddressesModel: d.recipientModel.savedAddresses
         activityController: d.activityController
         areTestNetworksEnabled: false
     }
@@ -100,3 +98,5 @@ SplitView {
         }
     }
 }
+
+// category: Wallet

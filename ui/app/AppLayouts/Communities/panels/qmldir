@@ -5,6 +5,7 @@ ChannelsAndCategoriesBannerPanel 1.0 ChannelsAndCategoriesBannerPanel.qml
 ChatPermissionQualificationPanel 1.0 ChatPermissionQualificationPanel.qml
 ColorPanel 1.0 ColorPanel.qml
 ColumnHeaderPanel 1.0 ColumnHeaderPanel.qml
+ControlNodeOfflineCenterPanel 1.0 ControlNodeOfflineCenterPanel.qml
 EditSettingsPanel 1.0 EditSettingsPanel.qml
 FeesBox 1.0 FeesBox.qml
 FeesPanel 1.0 FeesPanel.qml
@@ -14,6 +15,7 @@ JoinCommunityCenterPanel 1.0 JoinCommunityCenterPanel.qml
 JoinCommunityHeaderPanel 1.0 JoinCommunityHeaderPanel.qml
 JoinPermissionsOverlayPanel 1.0 JoinPermissionsOverlayPanel.qml
 MembersSettingsPanel 1.0 MembersSettingsPanel.qml
+MembersTabPanel 1.0 MembersTabPanel.qml
 MintTokensFooterPanel 1.0 MintTokensFooterPanel.qml
 MintTokensSettingsPanel 1.0 MintTokensSettingsPanel.qml
 OverviewSettingsChart 1.0 OverviewSettingsChart.qml
@@ -26,7 +28,9 @@ PrivilegedTokenArtworkPanel 1.0 PrivilegedTokenArtworkPanel.qml
 ProfilePopupInviteFriendsPanel 1.0 ProfilePopupInviteFriendsPanel.qml
 ProfilePopupInviteMessagePanel 1.0 ProfilePopupInviteMessagePanel.qml
 ProfilePopupOverviewPanel 1.0 ProfilePopupOverviewPanel.qml
+RequirementsCheckPendingLoader 1.0 RequirementsCheckPendingLoader.qml
 SharedAddressesPanel 1.0 SharedAddressesPanel.qml
+SharedAddressesSigningPanel 1.0 SharedAddressesSigningPanel.qml
 SortableTokenHoldersList 1.0 SortableTokenHoldersList.qml
 SortableTokenHoldersPanel 1.0 SortableTokenHoldersPanel.qml
 TagsPanel 1.0 TagsPanel.qml

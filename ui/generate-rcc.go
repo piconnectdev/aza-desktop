@@ -25,6 +25,8 @@ var qrcExtensions = map[string]bool{
 	".txt":  true,
 	".gif":  true,
 	".json": true,
+	".mdwn": true,
+	".html": true,
 }
 
 func main() {
@@ -52,7 +54,7 @@ func main() {
 			if err != nil {
 				return err
 			}
-			if info.IsDir() && (info.Name() == "vendor" || info.Name() == "tests" || info.Name() == "StatusQ") {
+			if info.IsDir() && (info.Name() == "vendor" || info.Name() == "tests" || info.Name() == "StatusQ" || info.Name() == "node_modules") {
 				return filepath.SkipDir
 			}
 			if !info.IsDir() {

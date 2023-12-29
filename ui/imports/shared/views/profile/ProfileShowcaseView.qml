@@ -18,7 +18,8 @@ Control {
     id: root
 
     property alias currentTabIndex: stackLayout.currentIndex
-    property bool isCurrentUser
+
+    property string publicKey
     property string mainDisplayName
     property bool readOnly
     property var profileStore
@@ -26,6 +27,8 @@ Control {
     property var communitiesModel
 
     signal closeRequested()
+
+    onVisibleChanged: if (visible) profileStore.requestProfileShowcase(publicKey)
 
     horizontalPadding: readOnly ? 20 : 40 // smaller in settings/preview
     topPadding: Style.current.bigPadding
@@ -77,19 +80,16 @@ Control {
                 cellHeight: cellWidth/2
                 visible: count
                 model: SortFilterProxyModel {
-                    sourceModel: root.isCurrentUser ? root.communitiesModel : null // TODO show other users too
-                    filters: ValueFilter {
-                        roleName: "joined"
-                        value: true
-                    }
-                    sorters: [
-                        RoleSorter {
-                            roleName: "memberRole"
-                            sortOrder: Qt.DescendingOrder // admin first
+                    sourceModel: root.profileStore.profileShowcaseCommunitiesModel
+                    filters: [
+                        ValueFilter {
+                            roleName: "showcaseVisibility"
+                            value: Constants.ShowcaseVisibility.NoOne
+                            inverted: true
                         },
-                        StringSorter {
-                            roleName: "name"
-                            caseSensitivity: Qt.CaseInsensitive
+                        ValueFilter {
+                            roleName: "loading"
+                            value: false
                         }
                     ]
                 }
@@ -101,7 +101,7 @@ Control {
                     statusListItemTitle.font.pixelSize: 17
                     statusListItemTitle.font.bold: true
                     subTitle: model.description
-                    tertiaryTitle: qsTr("%n member(s)", "", model.members.count)
+                    tertiaryTitle: qsTr("%n member(s)", "", model.membersCount)
                     asset.name: model.image ?? model.name
                     asset.isImage: asset.name.startsWith(Constants.dataImagePrefix)
                     asset.isLetterIdenticon: !model.image
@@ -113,7 +113,8 @@ Control {
                     components: [
                         StatusIcon {
                             visible: model.memberRole === Constants.memberRole.owner ||
-                                     model.memberRole === Constants.memberRole.admin
+                                     model.memberRole === Constants.memberRole.admin ||
+                                     model.memberRole === Constants.memberRole.tokenMaster
                             anchors.verticalCenter: parent.verticalCenter
                             icon: "crown"
                             color: Theme.palette.directColor1
@@ -149,10 +150,10 @@ Control {
                 spacing: Style.current.halfPadding
                 visible: count
                 model: SortFilterProxyModel {
-                    sourceModel: root.isCurrentUser ? root.walletStore.accounts : null // TODO show other users too
-                    filters: ValueFilter { // everything except keycards
-                        roleName: "walletType"
-                        value: Constants.keyWalletType
+                    sourceModel: root.profileStore.profileShowcaseAccountsModel
+                    filters: ValueFilter {
+                        roleName: "showcaseVisibility"
+                        value: Constants.ShowcaseVisibility.NoOne
                         inverted: true
                     }
                 }
@@ -174,7 +175,6 @@ Control {
                     components: [
                         StatusIcon {
                             anchors.verticalCenter: parent.verticalCenter
-                            visible: model.walletType === Constants.watchWalletType
                             icon: "show"
                             color: Theme.palette.directColor1
                         },
@@ -217,11 +217,6 @@ Control {
                             }
                         }
                     ]
-                    onClicked: {
-                        if (root.readOnly)
-                            return
-                        root.walletStore.setFilterAddress(model.address)
-                    }
                 }
             }
         }
@@ -247,7 +242,15 @@ Control {
                 cellWidth: (width-rightMargin)/4
                 cellHeight: cellWidth
                 visible: count
-                model: root.isCurrentUser ? root.walletStore.flatCollectibles : null // TODO show other users too
+                // TODO Issue #11637: Dedicated controller for user's list of collectibles (no watch-only entries)
+                model: SortFilterProxyModel {
+                    sourceModel: root.profileStore.profileShowcaseCollectiblesModel
+                    filters: ValueFilter {
+                        roleName: "showcaseVisibility"
+                        value: Constants.ShowcaseVisibility.NoOne
+                        inverted: true
+                    }
+                }
                 ScrollBar.vertical: StatusScrollBar { }
                 delegate: StatusRoundedImage {
                     width: GridView.view.cellWidth - Style.current.smallPadding
@@ -334,20 +337,12 @@ Control {
                 cellHeight: cellWidth/2.5
                 visible: count
                 model: SortFilterProxyModel {
-                    // TODO show assets for all accounts, not just the current one?
-                    sourceModel: root.isCurrentUser ? root.walletStore.assets : null // TODO show other users too
+                    sourceModel: root.profileStore.profileShowcaseAssetsModel
                     filters: ValueFilter {
-                        roleName: "visibleForNetworkWithPositiveBalance"
-                        value: true
+                        roleName: "showcaseVisibility"
+                        value: Constants.ShowcaseVisibility.NoOne
+                        inverted: true
                     }
-                    sorters: [
-                        StringSorter {
-                            roleName: "name"
-                        },
-                        StringSorter {
-                            roleName: "symbol"
-                        }
-                    ]
                 }
                 ScrollBar.vertical: StatusScrollBar { }
                 delegate: StatusListItem {

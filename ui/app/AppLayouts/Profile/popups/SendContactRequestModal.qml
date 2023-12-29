@@ -16,6 +16,7 @@ StatusModal {
     property var contactsStore
 
     headerSettings.title: qsTr("Send Contact Request to chat key")
+    padding: d.contentMargins
 
     QtObject {
         id: d
@@ -43,6 +44,15 @@ StatusModal {
         })
 
         function textChanged(text) {
+            const urlContactData = Utils.parseContactUrl(text)
+            if (urlContactData) {
+                // Ignore all the data from the link, because it might be malformed.
+                // Except for the publicKey.
+                d.realChatKey = urlContactData.publicKey
+                Qt.callLater(d.lookupContact, urlContactData.publicKey);
+                return
+            }
+
             d.resolvedPubKey = ""
             d.realChatKey = text
 
@@ -104,52 +114,47 @@ StatusModal {
         }
     }
 
-    contentItem: Item {
-        Column {
-            id: content
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.margins: d.contentMargins
-            spacing: d.contentSpacing
+    contentItem: Column {
+        id: content
+        spacing: d.contentSpacing
 
-            StatusInput {
-                id: chatKeyInput
-                input.edit.objectName: "SendContactRequestModal_ChatKey_Input"
+        StatusInput {
+            id: chatKeyInput
+            input.edit.objectName: "SendContactRequestModal_ChatKey_Input"
 
-                placeholderText: qsTr("Enter chat key here")
-                input.text: input.edit.focus? d.realChatKey : d.elidedChatKey
-                input.rightComponent: {
-                    if(d.showPasteButton)
-                        return pasteButtonComponent
-                    else if(d.showChatKeyValidationIndicator)
-                        return chatKeyValidationIndicator
-                    else
-                        return null
-                }
-                input.onTextChanged: {
-                    if(input.edit.focus)
-                    {
-                        d.textChanged(text)
-                    }
+            placeholderText: qsTr("Enter chat key here")
+            input.text: input.edit.focus? d.realChatKey : d.elidedChatKey
+            input.rightComponent: {
+                if(d.showPasteButton)
+                    return pasteButtonComponent
+                else if(d.showChatKeyValidationIndicator)
+                    return chatKeyValidationIndicator
+                else
+                    return null
+            }
+            input.onTextChanged: {
+                if(input.edit.focus)
+                {
+                    d.textChanged(text)
                 }
             }
+        }
 
-            StatusInput {
-                id: messageInput
-                input.edit.objectName: "SendContactRequestModal_SayWhoYouAre_Input"
-                charLimit: d.maxMsgLength
+        StatusInput {
+            id: messageInput
+            input.edit.objectName: "SendContactRequestModal_SayWhoYouAre_Input"
+            charLimit: d.maxMsgLength
 
-                placeholderText: qsTr("Say who you are / why you want to become a contact...")
-                input.multiline: true
-                minimumHeight: d.msgHeight
-                maximumHeight: d.msgHeight
-                input.verticalAlignment: TextEdit.AlignTop
+            placeholderText: qsTr("Say who you are / why you want to become a contact...")
+            input.multiline: true
+            minimumHeight: d.msgHeight
+            maximumHeight: d.msgHeight
+            input.verticalAlignment: TextEdit.AlignTop
 
-                validators: [StatusMinLengthValidator {
-                        minLength: d.minMsgLength
-                        errorMessage: Utils.getErrorMessage(messageInput.errors, qsTr("who are you"))
-                    }]
-            }
+            validators: [StatusMinLengthValidator {
+                    minLength: d.minMsgLength
+                    errorMessage: Utils.getErrorMessage(messageInput.errors, qsTr("who are you"))
+                }]
         }
     }
 

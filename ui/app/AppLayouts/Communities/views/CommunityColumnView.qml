@@ -36,15 +36,34 @@ Item {
     property var emojiPopup
 
     property var store
+    property var communitiesStore
     property bool hasAddedContacts: false
     property var communityData
 
+    // Community transfer ownership related props:
+    required property bool isPendingOwnershipRequest
+    signal finaliseOwnershipClicked
+
     readonly property bool isSectionAdmin:
         communityData.memberRole === Constants.memberRole.owner ||
-        communityData.memberRole === Constants.memberRole.admin
+        communityData.memberRole === Constants.memberRole.admin ||
+        communityData.memberRole === Constants.memberRole.tokenMaster
 
     signal infoButtonClicked
     signal manageButtonClicked
+
+    QtObject {
+        id: d
+
+        readonly property bool showJoinButton: !communityData.joined || root.communityData.amIBanned
+        readonly property bool showFinaliseOwnershipButton: root.isPendingOwnershipRequest
+        readonly property bool discordImportInProgress: (root.communitiesStore.discordImportProgress > 0 && root.communitiesStore.discordImportProgress < 100)
+                                                        || root.communitiesStore.discordImportInProgress
+
+        property bool invitationPending: root.store.isMyCommunityRequestPending(communityData.id)
+
+        property bool joiningCommunityInProgress: false
+    }
 
     ColumnHeaderPanel {
         id: communityHeader
@@ -62,100 +81,29 @@ Item {
         onAdHocChatButtonClicked: root.store.openCloseCreateChatView()
     }
 
-    StatusButton {
-        id: joinCommunityButton
-
-        property bool invitationPending: root.store.isCommunityRequestPending(communityData.id)
+    Loader {
+        id: columnHeaderButton
 
         anchors.top: communityHeader.bottom
         anchors.topMargin: Style.current.halfPadding
         anchors.bottomMargin: Style.current.halfPadding
         anchors.horizontalCenter: parent.horizontalCenter
-        enabled: !root.communityData.amIBanned
-
-        visible: !communityData.joined || root.communityData.amIBanned
-
-        text: {
-            if (root.communityData.amIBanned) return qsTr("You were banned from community")
-            if (invitationPending) return qsTr("Membership request pending...")
-
-            return root.communityData.access === Constants.communityChatOnRequestAccess ?
-                    qsTr("Request to join") : qsTr("Join Community")
-        }
-
-        onClicked: {
-            Global.openPopup(communityIntroDialog);
-        }
-
-        Connections {
-            enabled: joinCommunityButton.loading
-            target: root.store.communitiesModuleInst
-            function onCommunityAccessRequested(communityId: string) {
-                if (communityId === communityData.id) {
-                    joinCommunityButton.invitationPending = root.store.isCommunityRequestPending(communityData.id)
-                    joinCommunityButton.loading = false
-                }
-            }
-            function onCommunityAccessFailed(communityId: string) {
-                if (communityId === communityData.id) {
-                    joinCommunityButton.invitationPending = false
-                    joinCommunityButton.loading = false
-                    Global.displayToastMessage(qsTr("Request to join failed"),
-                            qsTr("Please try again later"),
-                            "",
-                            false,
-                            Constants.ephemeralNotificationType.normal,
-                            "")
-                }
-            }
-        }
-
-        Connections {
-            enabled: joinCommunityButton.loading
-            target: communitySectionModule
-            function onUserAuthenticationCanceled() {
-                joinCommunityButton.invitationPending = false
-                joinCommunityButton.loading = false
-            }
-        }
-        Component {
-            id: communityIntroDialog
-            CommunityIntroDialog {
-
-                isInvitationPending: joinCommunityButton.invitationPending
-                name: communityData.name
-                introMessage: communityData.introMessage
-                imageSrc: communityData.image
-                accessType: communityData.access
-                loginType: root.store.loginType
-                walletAccountsModel: WalletStore.RootStore.receiveAccounts
-                permissionsModel: root.store.permissionsStore.permissionsModel
-                assetsModel: root.store.assetsModel
-                collectiblesModel: root.store.collectiblesModel
-
-                onJoined: {
-                    joinCommunityButton.loading = true
-                    root.store.requestToJoinCommunityWithAuthentication(root.store.userProfileInst.name, sharedAddresses, airdropAddress)
-                }
-                onCancelMembershipRequest: {
-                    root.store.cancelPendingRequest(communityData.id)
-                    joinCommunityButton.invitationPending = root.store.isCommunityRequestPending(communityData.id)
-                }
-                onClosed: destroy()
-            }
-        }
+        sourceComponent: d.showFinaliseOwnershipButton ? finaliseCommunityOwnershipBtn :
+                                                         d.showJoinButton ? joinCommunityButton : undefined
+        active: d.showFinaliseOwnershipButton || d.showJoinButton
     }
 
     ChatsLoadingPanel {
         chatSectionModule: root.communitySectionModule
         width: parent.width
-        anchors.top: joinCommunityButton.visible ? joinCommunityButton.bottom : communityHeader.bottom
+        anchors.top: columnHeaderButton.active ? columnHeaderButton.bottom : communityHeader.bottom
         anchors.topMargin: active ? Style.current.halfPadding : 0
     }
 
     StatusMenu {
         id: adminPopupMenu
         enabled: root.isSectionAdmin
+        hideDisabledItems: !showInviteButton
 
         property bool showInviteButton: false
 
@@ -166,6 +114,16 @@ Item {
             text: qsTr("Create channel")
             icon.name: "channel"
             onTriggered: Global.openPopup(createChannelPopup)
+        }
+
+        StatusAction {
+            objectName: "importCommunityChannelBtn"
+            text: qsTr("Create channel via Discord import")
+            icon.name: "download"
+            enabled: !d.discordImportInProgress
+            onTriggered: {
+                Global.openPopup(createChannelPopup, {isDiscordImport: true, communityId: communityData.id})
+            }
         }
 
         StatusAction {
@@ -184,6 +142,7 @@ Item {
             text: qsTr("Invite people")
             icon.name: "share-ios"
             enabled: communityData.canManageUsers && adminPopupMenu.showInviteButton
+            objectName: "invitePeople"
             onTriggered: {
                 Global.openInviteFriendsToCommunityPopup(root.communityData,
                                                          root.communitySectionModule,
@@ -194,7 +153,8 @@ Item {
 
     StatusScrollView {
         id: scrollView
-        anchors.top: joinCommunityButton.visible ? joinCommunityButton.bottom : communityHeader.bottom
+
+        anchors.top: columnHeaderButton.active ? columnHeaderButton.bottom : communityHeader.bottom
         anchors.topMargin: Style.current.halfPadding
         anchors.bottom: createChatOrCommunity.top
         anchors.horizontalCenter: parent.horizontalCenter
@@ -232,15 +192,24 @@ Item {
             onChatListCategoryReordered: root.store.reorderCommunityCategories(categoryId, to)
 
             onCategoryAddButtonClicked: Global.openPopup(createChannelPopup, {
-                categoryId: id
-            })
+                                                             categoryId: id
+                                                         })
 
             popupMenu: StatusMenu {
+                hideDisabledItems: false
                 StatusAction {
                     text: qsTr("Create channel")
                     icon.name: "channel"
                     enabled: root.isSectionAdmin
                     onTriggered: Global.openPopup(createChannelPopup)
+                }
+
+                StatusAction {
+                    objectName: "importCommunityChannelBtn"
+                    text: qsTr("Create channel via Discord import")
+                    icon.name: "download"
+                    enabled: !d.discordImportInProgress
+                    onTriggered: Global.openPopup(createChannelPopup, {isDiscordImport: true, communityId: root.communityData.id})
                 }
 
                 StatusAction {
@@ -256,6 +225,7 @@ Item {
                     text: qsTr("Invite people")
                     icon.name: "share-ios"
                     enabled: communityData.canManageUsers
+                    objectName: "invitePeople"
                     onTriggered: {
                         Global.openInviteFriendsToCommunityPopup(root.communityData,
                                                                  root.communitySectionModule,
@@ -292,12 +262,12 @@ Item {
                     text: qsTr("Edit Category")
                     icon.name: "edit"
                     onTriggered: {
-                       Global.openPopup(createCategoryPopup, {
-                           isEdit: true,
-                           channels: [],
-                           categoryId: categoryItem.itemId,
-                           categoryName: categoryItem.name
-                       })
+                        Global.openPopup(createCategoryPopup, {
+                                             isEdit: true,
+                                             channels: [],
+                                             categoryId: categoryItem.itemId,
+                                             categoryName: categoryItem.name
+                                         })
                     }
                 }
 
@@ -313,11 +283,11 @@ Item {
                     type: StatusAction.Type.Danger
                     onTriggered: {
                         Global.openPopup(deleteCategoryConfirmationDialogComponent, {
-                            "headerSettings.title": qsTr("Delete '%1' category").arg(categoryItem.name),
-                            confirmationText: qsTr("Are you sure you want to delete '%1' category? Channels inside the category won't be deleted.")
-                                .arg(categoryItem.name),
-                            categoryId: categoryItem.itemId
-                        })
+                                             "headerSettings.title": qsTr("Delete '%1' category").arg(categoryItem.name),
+                                             confirmationText: qsTr("Are you sure you want to delete '%1' category? Channels inside the category won't be deleted.")
+                                             .arg(categoryItem.name),
+                                             categoryId: categoryItem.itemId
+                                         })
                     }
                 }
             }
@@ -369,6 +339,10 @@ Item {
                     root.communitySectionModule.markAllMessagesRead(chatId)
                 }
 
+                onRequestMoreMessages: {
+                    root.communitySectionModule.requestMoreMessages(chatId)
+                }
+
                 onClearChatHistory: {
                     root.communitySectionModule.clearChatHistory(chatId)
                 }
@@ -393,14 +367,14 @@ Item {
 
                 onEditCommunityChannel: {
                     communitySectionModule.editCommunityChannel(
-                        chatId,
-                        newName,
-                        newDescription,
-                        newEmoji,
-                        newColor,
-                        newCategory,
-                        channelPosition // TODO change this to the signal once it is modifiable
-                    )
+                                chatId,
+                                newName,
+                                newDescription,
+                                newEmoji,
+                                newColor,
+                                newCategory,
+                                channelPosition // TODO change this to the signal once it is modifiable
+                                )
                 }
             }
         }
@@ -436,36 +410,16 @@ Item {
                 width: parent.width
                 height: item.height
                 sourceComponent: Component {
-                        ChannelsAndCategoriesBannerPanel {
-                            id: channelsAndCategoriesBanner
-                            communityId: communityData.id
-                            onAddMembersClicked: {
-                                Global.openPopup(createChannelPopup);
-                            }
-                            onAddCategoriesClicked: {
-                                Global.openPopup(createCategoryPopup);
-                            }
+                    ChannelsAndCategoriesBannerPanel {
+                        id: channelsAndCategoriesBanner
+                        communityId: communityData.id
+                        onAddMembersClicked: {
+                            Global.openPopup(createChannelPopup);
                         }
-                }
-            } // Loader
-
-            Loader {
-                active: root.communityData.memberRole === Constants.memberRole.owner &&
-                        (!localAccountSensitiveSettings.hiddenCommunityBackUpBanners ||
-                         !localAccountSensitiveSettings.hiddenCommunityBackUpBanners.includes(communityData.id))
-                width: parent.width
-                height: item.height
-                sourceComponent: Component {
-                        BackUpCommuntyBannerPanel {
-                            id: backupBanner
-                            communityId: communityData.id
-                            onBackupButtonClicked: {
-                                Global.openPopup(transferOwnershipPopup, {
-                                    privateKey: communitySectionModule.exportCommunity(communityData.id),
-                                    store: root.store
-                                })
-                            }
+                        onAddCategoriesClicked: {
+                            Global.openPopup(createCategoryPopup);
                         }
+                    }
                 }
             } // Loader
         } // Column
@@ -491,15 +445,12 @@ Item {
         anchors.bottomMargin: active ? Style.current.padding : 0
         active: root.isSectionAdmin
         sourceComponent: Component {
-            StatusBaseText {
+            StatusLinkText {
                 id: createChannelOrCategoryBtn
                 objectName: "createChannelOrCategoryBtn"
-                color: Theme.palette.baseColor1
                 height: visible ? implicitHeight : 0
                 text: qsTr("Create channel or category")
                 font.underline: true
-                font.pixelSize: 13
-                textFormat: Text.RichText
 
                 MouseArea {
                     anchors.fill: parent
@@ -508,7 +459,7 @@ Item {
                         adminPopupMenu.showInviteButton = false
                         adminPopupMenu.popup()
                         adminPopupMenu.y = Qt.binding(() => root.height - adminPopupMenu.height
-                            - createChannelOrCategoryBtn.height - 20)
+                                                      - createChannelOrCategoryBtn.height - 20)
                     }
                 }
             }
@@ -516,14 +467,142 @@ Item {
     }
 
     Component {
+        id: joinCommunityButton
+
+        StatusButton {
+            anchors.top: communityHeader.bottom
+            anchors.topMargin: Style.current.halfPadding
+            anchors.bottomMargin: Style.current.halfPadding
+            anchors.horizontalCenter: parent.horizontalCenter
+            enabled: !root.communityData.amIBanned
+            loading: d.joiningCommunityInProgress
+
+            text: {
+                if (root.communityData.amIBanned) return qsTr("You were banned from community")
+                if (d.invitationPending) return qsTr("Membership request pending...")
+
+                return root.communityData.access === Constants.communityChatOnRequestAccess ?
+                            qsTr("Request to join") : qsTr("Join Community")
+            }
+
+            onClicked: {
+                Global.openPopup(communityIntroDialogComponent);
+            }
+
+            Connections {
+                enabled: d.joiningCommunityInProgress
+                target: root.store.communitiesModuleInst
+                function onCommunityAccessRequested(communityId: string) {
+                    if (communityId === communityData.id) {
+                        d.invitationPending = root.store.isMyCommunityRequestPending(communityData.id)
+                        d.joiningCommunityInProgress = false
+                    }
+                }
+
+                function onCommunityAccessFailed(communityId: string, error: string) {
+                    if (communityId === communityData.id) {
+                        d.invitationPending = false
+                        d.joiningCommunityInProgress = false
+                        Global.displayToastMessage(qsTr("Request to join failed"),
+                                                   qsTr("Please try again later"),
+                                                   "",
+                                                   false,
+                                                   Constants.ephemeralNotificationType.normal,
+                                                   "")
+                    }
+                }
+            }
+
+            Component {
+                id: communityIntroDialogComponent
+                CommunityIntroDialog {
+                    id: communityIntroDialog
+
+                    isInvitationPending: d.invitationPending
+                    requirementsCheckPending: root.store.requirementsCheckPending
+                    name: communityData.name
+                    introMessage: communityData.introMessage
+                    imageSrc: communityData.image
+                    accessType: communityData.access
+                    loginType: root.store.loginType
+                    walletAccountsModel: WalletStore.RootStore.nonWatchAccounts
+                    permissionsModel: {
+                        root.store.prepareTokenModelForCommunity(communityData.id)
+                        return root.store.permissionsModel
+                    }
+                    assetsModel: root.store.assetsModel
+                    collectiblesModel: root.store.collectiblesModel
+
+                    onPrepareForSigning: {
+                        root.store.prepareKeypairsForSigning(communityData.id, root.store.userProfileInst.name, sharedAddresses, airdropAddress, false)
+
+                        communityIntroDialog.keypairSigningModel = root.store.communitiesModuleInst.keypairsSigningModel
+                    }
+
+                    onSignSharedAddressesForAllNonKeycardKeypairs: {
+                        root.store.signSharedAddressesForAllNonKeycardKeypairs()
+                    }
+
+                    onSignSharedAddressesForKeypair: {
+                        root.store.signSharedAddressesForKeypair(keyUid)
+                    }
+
+                    onJoinCommunity: {
+                        d.joiningCommunityInProgress = true
+                        root.store.joinCommunityOrEditSharedAddresses()
+                    }
+
+                    onCancelMembershipRequest: {
+                        root.store.cancelPendingRequest(communityData.id)
+                        d.invitationPending = root.store.isMyCommunityRequestPending(communityData.id)
+                    }
+
+                    onSharedAddressesUpdated: {
+                        root.store.updatePermissionsModel(communityData.id, sharedAddresses)
+                    }
+
+                    onClosed: {
+                        destroy()
+                    }
+
+                    Connections {
+                        target: root.store.communitiesModuleInst
+
+                        function onSharedAddressesForAllNonKeycardKeypairsSigned() {
+                            if (!!communityIntroDialog.replaceItem) {
+                                communityIntroDialog.replaceLoader.item.sharedAddressesForAllNonKeycardKeypairsSigned()
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Component {
+        id: finaliseCommunityOwnershipBtn
+
+        StatusButton {
+            anchors.top: communityHeader.bottom
+            anchors.topMargin: Style.current.halfPadding
+            anchors.bottomMargin: Style.current.halfPadding
+            anchors.horizontalCenter: parent.horizontalCenter
+
+            text: communityData.joined ? qsTr("Finalise community ownership") : qsTr("To join, finalise community ownership")
+
+            onClicked: root.finaliseOwnershipClicked()
+        }
+    }
+
+    Component {
         id: createChannelPopup
         CreateChannelPopup {
-            anchors.centerIn: parent
+            communitiesStore: root.communitiesStore
             emojiPopup: root.emojiPopup
             onCreateCommunityChannel: function (chName, chDescription, chEmoji, chColor,
-                    chCategoryId) {
+                                                chCategoryId) {
                 root.store.createCommunityChannel(chName, chDescription, chEmoji, chColor,
-                    chCategoryId)
+                                                  chCategoryId)
             }
             onClosed: {
                 destroy()
@@ -570,20 +649,5 @@ Item {
         title: qsTr("Error deleting the category")
         icon: StandardIcon.Critical
         standardButtons: StandardButton.Ok
-    }
-
-    Component {
-        id: transferOwnershipPopup
-        TransferOwnershipPopup {
-            anchors.centerIn: parent
-            onClosed: {
-                let hiddenBannerIds = localAccountSensitiveSettings.hiddenCommunityBackUpBanners || []
-                if (hiddenBannerIds.includes(root.store.activeCommunity.id)) {
-                    return
-                }
-                hiddenBannerIds.push(root.store.activeCommunity.id)
-                localAccountSensitiveSettings.hiddenCommunityBackUpBanners = hiddenBannerIds
-            }
-        }
     }
 }

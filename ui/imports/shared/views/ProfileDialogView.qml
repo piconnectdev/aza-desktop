@@ -239,6 +239,7 @@ Pane {
         StatusButton {
             size: StatusButton.Size.Small
             text: qsTr("Respond to ID Request")
+            objectName: "respondToIDRequest_StatusItem"
             onClicked: {
                 Global.openIncomingIDRequestPopup(root.publicKey,
                                                   popup => popup.closed.connect(d.reload))
@@ -508,7 +509,7 @@ Pane {
                         type: StatusAction.Type.Danger
                         enabled: d.isContact && !d.isBlocked && d.contactRequestState !== Constants.ContactRequestState.Sent
                         onTriggered: {
-                            Global.removeContactRequested(root.mainDisplayName, root.publicKey);
+                            Global.removeContactRequested(d.mainDisplayName, root.publicKey);
                             moreMenu.close();
                         }
                     }
@@ -693,7 +694,7 @@ Pane {
                     Layout.preferredHeight: 300
 
                     currentTabIndex: showcaseTabBar.currentIndex
-                    isCurrentUser: d.isCurrentUser
+                    publicKey: root.publicKey
                     mainDisplayName: d.mainDisplayName
                     readOnly: root.readOnly
                     profileStore: root.profileStore

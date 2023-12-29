@@ -176,10 +176,10 @@ Rectangle {
     signal clicked()
 
     /*!
-        \qmlsignal StatusCard::cardLocked
+        \qmlsignal StatusCard::lockCard
         This signal is emitted when the card is locked or unlocked
     */
-    signal cardLocked(bool isLocked)
+    signal lockCard(bool lock)
 
     /*!
        \qmlproperty string StatusCard::state
@@ -226,11 +226,7 @@ Rectangle {
         acceptedButtons: Qt.LeftButton
         hoverEnabled: true
         enabled: root.clickable && root.state !== "unavailable"
-        onClicked: {
-            if(!advancedMode)
-                disabled = !disabled
-            root.clicked()
-        }
+        onClicked: root.clicked()
     }
 
     ColumnLayout {
@@ -285,13 +281,19 @@ Rectangle {
         }
         StatusInput {
             id: advancedInput
-            property bool tempLock: false
             Layout.preferredWidth: layout.width
             maximumHeight: 32
             topPadding: 0
             bottomPadding: 0
             leftPadding: 8
             rightPadding: 5
+            input.edit.color: { // crash workaround, https://bugreports.qt.io/browse/QTBUG-107795
+                if (root.state === "error")
+                    return Theme.palette.dangerColor1
+                if (root.locked)
+                    return Theme.palette.directColor5
+                return Theme.palette.directColor1
+            }
             input.edit.font.pixelSize: 13
             input.edit.readOnly: disabled
             input.background.radius: 4
@@ -305,17 +307,13 @@ Rectangle {
                     anchors.verticalCenter: parent.verticalCenter
                     width: 12
                     height: 12
-                    icon.name: root.locked && advancedInput.tempLock ? "lock" : "unlock"
+                    icon.name: root.locked ? "lock" : "unlock"
                     icon.width: 12
                     icon.height: 12
-                    icon.color: root.locked && advancedInput.tempLock ? Theme.palette.primaryColor1 : Theme.palette.baseColor1
+                    icon.color: root.locked ? Theme.palette.primaryColor1 : Theme.palette.baseColor1
                     type: StatusFlatRoundButton.Type.Secondary
                     enabled: !disabled
-                    onClicked: {
-                        advancedInput.tempLock = !advancedInput.tempLock
-                        root.locked = advancedInput.tempLock
-                        root.cardLocked(advancedInput.tempLock)
-                    }
+                    onClicked: root.lockCard(!root.locked)
                 }
             }
             validators: [
@@ -328,18 +326,13 @@ Rectangle {
                 }
             ]
             text: root.preCalculatedAdvancedText
-            onTextChanged: {
-                advancedInput.tempLock = false
-                waitTimer.restart()
-            }
+            onTextChanged: waitTimer.restart()
             Timer {
                 id: waitTimer
                 interval: lockTimeout
                 onTriggered: {
-                    advancedInput.tempLock = true
                     if(!!advancedInput.text && root.preCalculatedAdvancedText !== advancedInput.text) {
-                        root.locked = advancedInput.tempLock
-                        root.cardLocked(advancedInput.tempLock)
+                        root.lockCard(true)
                     }
                 }
             }
@@ -407,7 +400,7 @@ Rectangle {
             PropertyChanges {
                 target: secondaryLabel
                 text: disabled ? sensor.containsMouse ? root.enableText : disabledText : secondaryText
-            } 
+            }
             PropertyChanges {
                 target: secondaryLabel
                 font.weight: disabled && sensor.containsMouse ? Font.Medium : Font.Normal
@@ -435,11 +428,6 @@ Rectangle {
             PropertyChanges {
                 target: advancedInput
                 visible: advancedMode
-            }
-            PropertyChanges {
-                target: advancedInput
-                input.edit.color: input.edit.activeFocus || !root.locked ?
-                                      Theme.palette.directColor1 : Theme.palette.directColor5
             }
             PropertyChanges {
                 target: basicInput
@@ -511,10 +499,6 @@ Rectangle {
                 visible: advancedMode
             }
             PropertyChanges {
-                target: advancedInput
-                input.edit.color: Theme.palette.dangerColor1
-            }
-            PropertyChanges {
                 target: basicInput
                 visible: !advancedMode && !(root.loading && !disabled)
             }
@@ -584,10 +568,6 @@ Rectangle {
                 visible: advancedMode
             }
             PropertyChanges {
-                target: advancedInput
-                input.edit.color: root.locked ? Theme.palette.directColor5 : Theme.palette.directColor1
-            }
-            PropertyChanges {
                 target: basicInput
                 visible: !advancedMode && !(root.loading && !disabled)
             }
@@ -655,10 +635,6 @@ Rectangle {
                 visible: false
             }
             PropertyChanges {
-                target: advancedInput
-                input.edit.color: Theme.palette.directColor1
-            }
-            PropertyChanges {
                 target: basicInput
                 visible: true
             }
@@ -667,4 +643,5 @@ Rectangle {
                 active: false
             }
         }
-    ]}
+    ]
+}

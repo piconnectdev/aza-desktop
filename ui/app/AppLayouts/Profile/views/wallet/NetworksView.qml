@@ -40,9 +40,10 @@ Item {
                 }
             }
             delegate: WalletNetworkDelegate {
+                objectName: "walletNetworkDelegate_" + network.chainName + '_' + network.chainId
                 network: areTestNetworksEnabled ? model.test: model.prod
                 areTestNetworksEnabled: walletStore.areTestNetworksEnabled
-                onClicked: editNetwork(model)
+                onClicked: editNetwork(walletStore.getNetworkData(model))
             }
         }
 
@@ -68,9 +69,10 @@ Item {
                 }
             }
             delegate: WalletNetworkDelegate {
+                objectName: "walletNetworkDelegate_" + network.chainName + '_' + network.chainId
                 network: areTestNetworksEnabled ? model.test: model.prod
                 areTestNetworksEnabled: walletStore.areTestNetworksEnabled
-                onClicked: editNetwork(model)
+                onClicked: editNetwork(walletStore.getNetworkData(model))
             }
         }
 
@@ -93,15 +95,14 @@ Item {
             asset.bgColor: Theme.palette.warningColor3
             title: qsTr("Testnet mode")
             subTitle: qsTr("Switch entire Status app to testnet only mode")
-            onClicked: testnetSwitch.clicked()
+            onClicked: testnetSwitch.onToggled()
             components: [
                 StatusSwitch {
                     id: testnetSwitch
                     objectName: "testnetModeSwitch"
                     checked: walletStore.areTestNetworksEnabled
-                    checkable: false
-                    onClicked: {
-                        checkable = false
+                    onToggled: {
+                        checked = Qt.binding(() => walletStore.areTestNetworksEnabled)
                         Global.openTestnetPopup()
                     }
                 }

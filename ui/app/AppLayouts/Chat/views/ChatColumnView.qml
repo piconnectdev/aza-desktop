@@ -15,9 +15,11 @@ import shared.popups 1.0
 import shared.status 1.0
 import shared.controls 1.0
 import shared.views.chat 1.0
+import shared.popups.send 1.0
 import SortFilterProxyModel 0.2
 
 import AppLayouts.Communities.popups 1.0
+import AppLayouts.Communities.panels 1.0
 
 import "../helpers"
 import "../controls"
@@ -25,7 +27,6 @@ import "../popups"
 import "../panels"
 import "../../Wallet"
 import "../stores"
-import AppLayouts.Communities.panels 1.0
 
 Item {
     id: root
@@ -53,56 +54,23 @@ Item {
 
     signal openStickerPackPopup(string stickerPackId)
 
-    function requestAddressForTransaction(address, amount, tokenAddress, tokenDecimals = 18) {
-        amount =  globalUtils.eth2Wei(amount.toString(), tokenDecimals)
-
-        parentModule.prepareChatContentModuleForChatId(activeChatId)
-        let chatContentModule = parentModule.getChatContentModule()
-        chatContentModule.inputAreaModule.requestAddress(address,
-                                                         amount,
-                                                         tokenAddress)
-    }
-    function requestTransaction(address, amount, tokenAddress, tokenDecimals = 18) {
-        amount = globalUtils.eth2Wei(amount.toString(), tokenDecimals)
-
-
-        parentModule.prepareChatContentModuleForChatId(activeChatId)
-        let chatContentModule = parentModule.getChatContentModule()
-        chatContentModule.inputAreaModule.request(address,
-                                                  amount,
-                                                  tokenAddress)
-    }
-
     // This function is called once `1:1` or `group` chat is created.
     function checkForCreateChatOptions(chatId) {
-        if(root.createChatPropertiesStore.createChatStartSendTransactionProcess) {
-            if (root.contactDetails.ensVerified) {
-                Global.openPopup(cmpSendTransactionWithEns);
-            } else {
-                Global.openPopup(cmpSendTransactionNoEns);
-            }
-        }
-        else if (root.createChatPropertiesStore.createChatStartSendTransactionProcess) {
-            Global.openPopup(cmpReceiveTransaction);
-        }
-        else if (root.createChatPropertiesStore.createChatStickerHashId !== "" &&
-                 root.createChatPropertiesStore.createChatStickerPackId !== "" &&
-                 root.createChatPropertiesStore.createChatStickerUrl !== "") {
-            root.rootStore.sendSticker(chatId,
-                                       root.createChatPropertiesStore.createChatStickerHashId,
-                                       "",
-                                       root.createChatPropertiesStore.createChatStickerPackId,
-                                       root.createChatPropertiesStore.createChatStickerUrl);
-        }
-        else if (root.createChatPropertiesStore.createChatInitMessage !== "" ||
-                 root.createChatPropertiesStore.createChatFileUrls.length > 0) {
-
-            root.rootStore.sendMessage(chatId,
-                                       Qt.Key_Enter,
-                                       root.createChatPropertiesStore.createChatInitMessage,
-                                       "",
-                                       root.createChatPropertiesStore.createChatFileUrls
-                                       );
+        if (root.createChatPropertiesStore.createChatStickerHashId !== ""
+                && root.createChatPropertiesStore.createChatStickerPackId !== ""
+                && root.createChatPropertiesStore.createChatStickerUrl !== "") {
+            root.rootStore.sendSticker(
+                        chatId,
+                        root.createChatPropertiesStore.createChatStickerHashId,
+                        "",
+                        root.createChatPropertiesStore.createChatStickerPackId,
+                        root.createChatPropertiesStore.createChatStickerUrl)
+        } else if (root.createChatPropertiesStore.createChatInitMessage !== ""
+                 || root.createChatPropertiesStore.createChatFileUrls.length > 0) {
+            root.rootStore.sendMessage(
+                        chatId, Qt.Key_Enter,
+                        root.createChatPropertiesStore.createChatInitMessage,
+                        "", root.createChatPropertiesStore.createChatFileUrls)
         }
 
         root.createChatPropertiesStore.resetProperties()
@@ -112,6 +80,15 @@ Item {
         id: d
         readonly property var activeChatContentModule: d.getChatContentModule(root.activeChatId)
 
+        readonly property var urlsList: {
+            urlsModelChangeTracker.revision
+            ModelUtils.modelToFlatArray(d.activeChatContentModule.inputAreaModule.urlsModel, "url")
+        }
+
+        readonly property ModelChangeTracker urlsModelChangeTracker: ModelChangeTracker {
+            model: d.activeChatContentModule.inputAreaModule.urlsModel
+        }
+
         readonly property UsersStore activeUsersStore: UsersStore {
             usersModule: !!d.activeChatContentModule ? d.activeChatContentModule.usersModule : null
         }
@@ -120,6 +97,13 @@ Item {
             messageModule: d.activeChatContentModule ? d.activeChatContentModule.messagesModule : null
             chatSectionModule: root.rootStore.chatCommunitySectionModule
         }
+
+        readonly property string linkPreviewBeginAnchor: `<a style="text-decoration:none" href="#${Constants.appSection.profile}/${Constants.settingsSubsection.messaging}">`
+        readonly property string linkPreviewEndAnchor: `</a>`
+
+        readonly property string linkPreviewEnabledNotification: qsTr("Link previews will be shown for all sites. You can manage link previews in %1.", "Go to settings").arg(linkPreviewBeginAnchor + qsTr("Settings", "Go to settings page") + linkPreviewEndAnchor)
+        readonly property string linkPreviewDisabledNotification: qsTr("Link previews will never be shown. You can manage link previews in %1.").arg(linkPreviewBeginAnchor + qsTr("Settings", "Go to settings page") + linkPreviewEndAnchor)
+        readonly property string linkPreviewEnabledForMessageNotification: qsTr("Link previews will be shown for this message. You can manage link previews in %1.").arg(linkPreviewBeginAnchor + qsTr("Settings", "Go to settings page") + linkPreviewEndAnchor)
 
         function getChatContentModule(chatId) {
             root.parentModule.prepareChatContentModuleForChatId(chatId)
@@ -162,18 +146,17 @@ Item {
             chatInput.validateImagesAndShowImageArea(filesList)
         }
 
-        function restoreInputState() {
+        function restoreInputState(textInput) {
 
             if (!d.activeChatContentModule) {
-                chatInput.textInput.text = ""
+                chatInput.clear()
                 chatInput.resetReplyArea()
                 chatInput.resetImageArea()
                 return
             }
 
             // Restore message text
-            chatInput.textInput.text = d.activeChatContentModule.inputAreaModule.preservedProperties.text
-            chatInput.textInput.cursorPosition = chatInput.textInput.length
+            chatInput.setText(textInput)
 
             d.restoreInputReply()
             d.restoreInputAttachments()
@@ -187,9 +170,14 @@ Item {
         }
 
         onActiveChatContentModuleChanged: {
+            let preservedText = ""
+            if (d.activeChatContentModule) {
+                preservedText = d.activeChatContentModule.inputAreaModule.preservedProperties.text
+            }
+
             d.activeChatContentModule.inputAreaModule.clearLinkPreviewCache()
             // Call later to make sure activeUsersStore and activeMessagesStore bindings are updated
-            Qt.callLater(d.restoreInputState)
+            Qt.callLater(d.restoreInputState, preservedText)
         }
     }
 
@@ -247,31 +235,6 @@ Item {
             }
         }
 
-        // This is a non-designed preview of unfurled urls.
-        // Should be replaced with a proper UI when it's ready.
-        //
-        // StatusListView {
-        //     Layout.fillWidth: true
-        //     Layout.maximumHeight: 200
-        //     Layout.margins: Style.current.smallPadding
-
-        //     // For a vertical list bind the imlicitHeight to contentHeight
-        //     implicitHeight: contentHeight
-        //     spacing: 10
-
-        //     model: d.activeChatContentModule.inputAreaModule.linkPreviewModel
-
-        //     delegate: StatusBaseText {
-        //         width: ListView.view.width
-        //         wrapMode: Text.WordWrap
-        //         text: {
-        //             const icon = unfurled ? (hostname !== "" ? '✅' : '❌') : '👀'
-        //             const thumbnailInfo = `thumbnail: (${thumbnailWidth}*${thumbnailHeight}, url: ${thumbnailUrl.length} symbols, data: ${thumbnailDataUri.length} symbols)`
-        //             return `${icon} ${url} (hostname: ${hostname}): ${title}\ndescription: ${description}\n${thumbnailInfo}`
-        //         }
-        //     }
-        // }
-
         RowLayout {
             Layout.fillWidth: true
             Layout.margins: Style.current.smallPadding
@@ -300,7 +263,14 @@ Item {
 
                     store: root.rootStore
                     usersStore: d.activeUsersStore
+                    linkPreviewModel: d.activeChatContentModule.inputAreaModule.linkPreviewModel
+                    urlsList: d.urlsList
+                    askToEnableLinkPreview: {
+                        if(!d.activeChatContentModule || !d.activeChatContentModule.inputAreaModule || !d.activeChatContentModule.inputAreaModule.preservedProperties)
+                            return false
 
+                        return d.activeChatContentModule.inputAreaModule.askToEnableLinkPreview
+                    }
                     textInput.placeholderText: {
                         if (!channelPostRestrictions.visible) {
                             if (d.activeChatContentModule.chatDetails.blocked)
@@ -320,12 +290,12 @@ Item {
                     emojiPopup: root.emojiPopup
                     stickersPopup: root.stickersPopup
                     chatType: root.activeChatType
-                    suggestions.suggestionFilter.addSystemSuggestions: chatType === Constants.chatType.communityChat
 
                     textInput.onTextChanged: {
-                        d.updateLinkPreviews()
-                        if (!!d.activeChatContentModule)
+                        if (!!d.activeChatContentModule && textInput.text !== d.activeChatContentModule.inputAreaModule.preservedProperties.text) {
                             d.activeChatContentModule.inputAreaModule.preservedProperties.text = textInput.text
+                            d.updateLinkPreviews()
+                        }
                     }
 
                     onReplyMessageIdChanged: {
@@ -336,23 +306,6 @@ Item {
                     onFileUrlsAndSourcesChanged: {
                         if (!!d.activeChatContentModule)
                             d.activeChatContentModule.inputAreaModule.preservedProperties.fileUrlsAndSourcesJson = JSON.stringify(chatInput.fileUrlsAndSources)
-                    }
-
-                    onSendTransactionCommandButtonClicked: {
-                        if (!d.activeChatContentModule) {
-                            console.warn("error on sending transaction command - chat content module is not set")
-                            return
-                        }
-
-                        if (Utils.isEnsVerified(d.activeChatContentModule.getMyChatId())) {
-                            Global.openPopup(cmpSendTransactionWithEns)
-                        } else {
-                            Global.openPopup(cmpSendTransactionNoEns)
-                        }
-                    }
-
-                    onReceiveTransactionCommandButtonClicked: {
-                        Global.openPopup(cmpReceiveTransaction)
                     }
 
                     onStickerSelected: {
@@ -378,7 +331,7 @@ Item {
                          {
                              Global.playSendMessageSound()
 
-                             chatInput.textInput.clear();
+                             chatInput.setText("")
                              chatInput.textInput.textFormat = TextEdit.PlainText;
                              chatInput.textInput.textFormat = TextEdit.RichText;
                          }
@@ -387,6 +340,24 @@ Item {
                     onKeyUpPress: {
                         d.activeMessagesStore.setEditModeOnLastMessage(root.rootStore.userProfileInst.pubKey)
                     }
+                    
+                    onLinkPreviewReloaded: (link) => d.activeChatContentModule.inputAreaModule.reloadLinkPreview(link)
+                    onEnableLinkPreview: () => {
+                        d.activeChatContentModule.inputAreaModule.enableLinkPreview()
+                        Global.displayToastMessage(d.linkPreviewEnabledNotification, "", "show", false, Constants.ephemeralNotificationType.success, "")
+                    }
+                    onDisableLinkPreview: () => {
+                        d.activeChatContentModule.inputAreaModule.disableLinkPreview()
+                        Global.displayToastMessage(d.linkPreviewDisabledNotification, "", "hide", false, Constants.ephemeralNotificationType.danger, "")
+                    }
+                    onEnableLinkPreviewForThisMessage: () => {
+                        d.activeChatContentModule.inputAreaModule.setLinkPreviewEnabledForCurrentMessage(true)
+                        Global.displayToastMessage(d.linkPreviewEnabledForMessageNotification, "", "show", false, Constants.ephemeralNotificationType.success, "")
+                    }
+                    onDismissLinkPreviewSettings: () => {
+                        d.activeChatContentModule.inputAreaModule.setLinkPreviewEnabledForCurrentMessage(false)
+                    }
+                    onDismissLinkPreview: (index) => d.activeChatContentModule.inputAreaModule.removeLinkPreviewData(index)
                 }
 
                 ChatPermissionQualificationPanel {
@@ -413,89 +384,6 @@ Item {
                 onClicked: {
                     if (!!d.activeChatContentModule)
                         d.activeChatContentModule.unblockChat()
-                }
-            }
-        }
-    }
-
-    Component {
-        id: cmpSendTransactionNoEns
-        ChatCommandModal {
-            store: root.rootStore
-            contactsStore: root.contactsStore
-            onClosed: {
-                destroy()
-            }
-            sendChatCommand: root.requestAddressForTransaction
-            isRequested: false
-            commandTitle: qsTr("Send")
-            headerSettings.title: commandTitle
-            finalButtonLabel: qsTr("Request Address")
-            selectRecipient.selectedRecipient: {
-                parentModule.prepareChatContentModuleForChatId(activeChatId)
-                let chatContentModule = parentModule.getChatContentModule()
-                return {
-                    address: Constants.zeroAddress, // Setting as zero address since we don't have the address yet
-                    alias: chatContentModule.chatDetails.name, // Do we need the alias for real or name works?
-                    pubKey: chatContentModule.chatDetails.id,
-                    icon: chatContentModule.chatDetails.icon,
-                    name: chatContentModule.chatDetails.name,
-                    type: RecipientSelector.Type.Contact,
-                    ensVerified: true
-                }
-            }
-            selectRecipient.selectedType: RecipientSelector.Type.Contact
-            selectRecipient.readOnly: true
-        }
-    }
-
-    Component {
-        id: cmpReceiveTransaction
-        ChatCommandModal {
-            store: root.rootStore
-            contactsStore: root.contactsStore
-            onClosed: {
-                destroy()
-            }
-            sendChatCommand: root.requestTransaction
-            isRequested: true
-            commandTitle: qsTr("Request")
-            headerSettings.title: commandTitle
-            finalButtonLabel: qsTr("Request")
-            selectRecipient.selectedRecipient: {
-                parentModule.prepareChatContentModuleForChatId(activeChatId)
-                let chatContentModule = parentModule.getChatContentModule()
-                return {
-                    address: Constants.zeroAddress, // Setting as zero address since we don't have the address yet
-                    alias: chatContentModule.chatDetails.name, // Do we need the alias for real or name works?
-                    pubKey: chatContentModule.chatDetails.id,
-                    icon: chatContentModule.chatDetails.icon,
-                    name: chatContentModule.chatDetails.name,
-                    type: RecipientSelector.Type.Contact
-                }
-            }
-            selectRecipient.selectedType: RecipientSelector.Type.Contact
-            selectRecipient.readOnly: true
-        }
-    }
-
-    Component {
-        id: cmpSendTransactionWithEns
-        SendModal {
-            onClosed: {
-                destroy()
-            }
-            preSelectedRecipient: {
-                parentModule.prepareChatContentModuleForChatId(activeChatId)
-                let chatContentModule = parentModule.getChatContentModule()
-
-                return {
-                    address: "",
-                    alias: chatContentModule.chatDetails.name, // Do we need the alias for real or name works?
-                    identicon: chatContentModule.chatDetails.icon,
-                    name: chatContentModule.chatDetails.name,
-                    type: RecipientSelector.Type.Contact,
-                    ensVerified: true
                 }
             }
         }

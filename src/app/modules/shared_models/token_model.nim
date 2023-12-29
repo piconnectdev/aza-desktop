@@ -7,12 +7,11 @@ type
   ModelRole {.pure.} = enum
     Name = UserRole + 1,
     Symbol
+    TotalRawBalance
     TotalBalance
     TotalCurrencyBalance
     EnabledNetworkCurrencyBalance
     EnabledNetworkBalance
-    VisibleForNetwork
-    VisibleForNetworkWithPositiveBalance
     Balances
     Description
     AssetWebsiteUrl
@@ -27,6 +26,10 @@ type
     Change24hour
     CurrencyPrice
     Decimals
+    CommunityId
+    CommunityName
+    CommunityImage
+    ImageUrl
     Loading
 
 QtObject:
@@ -65,12 +68,11 @@ QtObject:
     {
       ModelRole.Name.int:"name",
       ModelRole.Symbol.int:"symbol",
+      ModelRole.TotalRawBalance.int:"totalRawBalance",
       ModelRole.TotalBalance.int:"totalBalance",
       ModelRole.TotalCurrencyBalance.int:"totalCurrencyBalance",
       ModelRole.EnabledNetworkCurrencyBalance.int:"enabledNetworkCurrencyBalance",
       ModelRole.EnabledNetworkBalance.int:"enabledNetworkBalance",
-      ModelRole.VisibleForNetwork.int:"visibleForNetwork",
-      ModelRole.VisibleForNetworkWithPositiveBalance.int:"visibleForNetworkWithPositiveBalance",
       ModelRole.Balances.int:"balances",
       ModelRole.Description.int:"description",
       ModelRole.AssetWebsiteUrl.int:"assetWebsiteUrl",
@@ -85,6 +87,10 @@ QtObject:
       ModelRole.Change24hour.int:"change24hour",
       ModelRole.CurrencyPrice.int:"currencyPrice",
       ModelRole.Decimals.int:"decimals",
+      ModelRole.CommunityId.int:"communityId",
+      ModelRole.CommunityName.int:"communityName",
+      ModelRole.CommunityImage.int:"communityImage",
+      ModelRole.ImageUrl.int:"imageUrl",
       ModelRole.Loading.int:"loading",
     }.toTable
 
@@ -103,6 +109,8 @@ QtObject:
       result = newQVariant(item.getName())
     of ModelRole.Symbol:
       result = newQVariant(item.getSymbol())
+    of ModelRole.TotalRawBalance:
+      result = newQVariant(item.getTotalRawBalance())
     of ModelRole.TotalBalance:
       result = newQVariant(item.getTotalBalance())
     of ModelRole.TotalCurrencyBalance:
@@ -111,10 +119,6 @@ QtObject:
       result = newQVariant(item.getEnabledNetworkCurrencyBalance())
     of ModelRole.EnabledNetworkBalance:
       result = newQVariant(item.getEnabledNetworkBalance())
-    of ModelRole.VisibleForNetwork:
-      result = newQVariant(item.getVisibleForNetwork())
-    of ModelRole.VisibleForNetworkWithPositiveBalance:
-      result = newQVariant(item.getVisibleForNetworkWithPositiveBalance())
     of ModelRole.Balances:
       result = newQVariant(item.getBalances())
     of ModelRole.Description:
@@ -143,6 +147,14 @@ QtObject:
       result = newQVariant(item.getCurrencyPrice())
     of ModelRole.Decimals:
       result = newQVariant(item.getDecimals())
+    of ModelRole.CommunityId:
+      result = newQVariant(item.getCommunityId())
+    of ModelRole.CommunityName:
+      result = newQVariant(item.getCommunityName())
+    of ModelRole.CommunityImage:
+      result = newQVariant(item.getCommunityImage())
+    of ModelRole.ImageUrl:
+      result = newQVariant(item.getImage())
     of ModelRole.Loading:
       result = newQVariant(item.getLoading())
 
@@ -153,12 +165,11 @@ QtObject:
     case column:
       of "name": result = $item.getName()
       of "symbol": result = $item.getSymbol()
+      of "totalRawBalance": result = $item.getTotalRawBalance()
       of "totalBalance": result = $item.getTotalBalance().toJsonNode()
       of "totalCurrencyBalance": result = $item.getTotalCurrencyBalance().toJsonNode()
       of "enabledNetworkCurrencyBalance": result = $item.getEnabledNetworkCurrencyBalance()
       of "enabledNetworkBalance": result = $item.getEnabledNetworkBalance()
-      of "visibleForNetwork": result = $item.getVisibleForNetwork()
-      of "visibleForNetworkWithPositiveBalance": result = $item.getVisibleForNetworkWithPositiveBalance()
       of "description": result = $item.getDescription()
       of "assetWebsiteUrl": result = $item.getAssetWebsiteUrl()
       of "builtOn": result = $item.getBuiltOn()
@@ -172,6 +183,10 @@ QtObject:
       of "change24hour": result = $item.getChange24hour()
       of "currencyPrice": result = $item.getCurrencyPrice()
       of "decimals": result = $item.getDecimals()
+      of "communityId": result = $item.getCommunityId()
+      of "communityName": result = $item.getCommunityName()
+      of "communityImage": result = $item.getCommunityImage()
+      of "ImageUrl": result = $item.getImage()
       of "loading": result = $item.getLoading()
 
   proc setItems*(self: Model, items: seq[Item]) =

@@ -11,10 +11,13 @@ import StatusQ.Core.Utils 0.1
 Control{
     id: root
 
+    objectName: "communityPermissionItem"
+
     property var holdingsListModel
     property var channelsListModel
 
     property int permissionType: PermissionTypes.Type.None
+    property int permissionState: PermissionTypes.State.Approved
     property bool isPrivate: false
     property bool showButtons: true
 
@@ -32,6 +35,23 @@ Control{
         readonly property int buttonTextPixelSize: 12
         readonly property int buttonDiameter: 36
         readonly property int buttonTextSpacing: 6
+        readonly property int headerIconleftMargin: 20
+        readonly property bool isActiveState: root.permissionState === PermissionTypes.State.Approved
+        readonly property bool isDeletingState: root.permissionState === PermissionTypes.State.RemovalPending
+
+        function getStateText(state) {
+            if(state === PermissionTypes.State.Approved)
+                return qsTr("Active")
+
+            if(state === PermissionTypes.State.AdditionPending)
+                return qsTr("Pending, will become active once owner node comes online")
+
+            if(state === PermissionTypes.State.RemovalPending)
+                return qsTr("Deletion pending, will be deleted once owner node comes online")
+
+            if(state === PermissionTypes.State.UpdatePending)
+                return qsTr("Pending updates will be applied when owner node comes online")
+        }
     }
     background: Rectangle {
         color: "transparent"
@@ -55,16 +75,24 @@ Control{
                 spacing: 8
 
                 StatusIcon {
-                    Layout.leftMargin: 19
+                    Layout.leftMargin: d.headerIconleftMargin
+
+                    visible: d.isActiveState
                     icon: "checkmark"
                     Layout.preferredWidth: 11
                     Layout.preferredHeight: 8
                     color: Theme.palette.directColor1
                 }
 
+                StatusDotsLoadingIndicator {
+                    Layout.leftMargin: d.headerIconleftMargin
+
+                    visible: !d.isActiveState
+                }
+
                 StatusBaseText {
                     Layout.fillWidth: true
-                    text: qsTr("Active")
+                    text: d.getStateText(root.permissionState)
                     font.pixelSize: d.tagTextPixelSize
                 }
 
@@ -101,6 +129,7 @@ Control{
                 model: root.holdingsListModel
 
                 StatusListItemTag {
+                    objectName: "whoHoldsStatusListItem"
                     height: d.flowRowHeight
                     width: (implicitWidth > content.width) ? content.width : implicitWidth
                     leftPadding: 2
@@ -126,15 +155,61 @@ Control{
                 verticalAlignment: Text.AlignVCenter
             }
 
-            StatusListItemTag {
-                height: d.flowRowHeight
-                title: PermissionTypes.getName(root.permissionType)
-                asset.name: PermissionTypes.getIcon(root.permissionType)
-                asset.isImage: false
-                asset.bgColor: "transparent"
-                closeButtonVisible: false
-                titleText.color: Theme.palette.primaryColor1
-                titleText.font.pixelSize: d.tagTextPixelSize
+            ListModel {
+                id: tokenOwnerModel
+
+                ListElement { permissionType: PermissionTypes.Type.Owner }
+                ListElement { permissionType: PermissionTypes.Type.TokenMaster }
+                ListElement { permissionType: PermissionTypes.Type.Admin }
+            }
+
+            ListModel {
+                id: tokenMasterModel
+                ListElement { permissionType: PermissionTypes.Type.TokenMaster }
+                ListElement { permissionType: PermissionTypes.Type.Admin }
+            }
+
+            ListModel {
+                id: regularRoleModel
+                ListElement { permissionType: PermissionTypes.Type.None }
+            }
+
+            Repeater {
+                id: rolesRepeater
+
+                model: {
+                    if (root.permissionType === PermissionTypes.Type.Owner)
+                        return tokenOwnerModel
+                    if (root.permissionType === PermissionTypes.Type.TokenMaster)
+                        return tokenMasterModel
+                    return regularRoleModel
+                }
+
+                Flow {
+                    spacing: 6
+
+                    StatusListItemTag {
+                        objectName: "isAllowedStatusListItem"
+                        height: d.flowRowHeight
+                        title: PermissionTypes.getName(model.permissionType === PermissionTypes.Type.None
+                                                       ? root.permissionType : model.permissionType)
+                        asset.name: PermissionTypes.getIcon(root.permissionType)
+                        asset.isImage: false
+                        asset.bgColor: "transparent"
+                        closeButtonVisible: false
+                        titleText.color: Theme.palette.primaryColor1
+                        titleText.font.pixelSize: d.tagTextPixelSize
+                    }
+
+                    StatusBaseText {
+                        height: d.flowRowHeight
+                        visible: model.index < rolesRepeater.model.count  - 1
+                        font.pixelSize: d.itemTextPixelSize
+                        text: qsTr("and")
+                        verticalAlignment: Text.AlignVCenter
+
+                    }
+                }
             }
 
             StatusBaseText {
@@ -148,6 +223,7 @@ Control{
                 model: root.channelsListModel
 
                 StatusListItemTag {
+                    objectName: "inCommunityStatusListItem"
                     readonly property bool isLetterIdenticon: !model.imageSource
 
                     asset.isLetterIdenticon: isLetterIdenticon
@@ -190,6 +266,9 @@ Control{
                     Layout.preferredWidth: Layout.preferredHeight
                     type: StatusRoundButton.Type.Primary
                     onClicked: root.editClicked()
+
+                    // FIXME: implement undo operation first
+                    enabled: d.isActiveState
                 }
                 StatusBaseText {
                     Layout.alignment: Qt.AlignHCenter
@@ -226,10 +305,13 @@ Control{
                     Layout.preferredWidth: Layout.preferredHeight
                     type: StatusRoundButton.Type.Quaternary
                     onClicked: root.removeClicked()
+
+                    // FIXME: implement undo operation first
+                    enabled: d.isActiveState
                 }
                 StatusBaseText {
                     Layout.alignment: Qt.AlignHCenter
-                    text: qsTr("Delete")
+                    text: /*d.isDeletingState*/false ? qsTr("Undo delete") : qsTr("Delete")
                     color: Theme.palette.dangerColor1
                     font.pixelSize: d.buttonTextPixelSize
                 }

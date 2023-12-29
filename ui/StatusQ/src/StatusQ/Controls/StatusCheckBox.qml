@@ -40,6 +40,7 @@ CheckBox {
     }
 
     font.family: Theme.palette.baseFont.name
+    font.pixelSize: size === StatusCheckBox.Size.Regular ? 15 : 13
 
     indicator: Rectangle {
         anchors.left: root.leftSide? parent.left : undefined
@@ -73,7 +74,6 @@ CheckBox {
         verticalAlignment: Text.AlignVCenter
         wrapMode: Text.WordWrap
         width: parent.width
-        color: Theme.palette.directColor1
         lineHeight: 1.2
         leftPadding: root.leftSide? (!!root.text ? root.indicator.width + root.spacing
                                  : root.indicator.width) : 0
@@ -84,6 +84,6 @@ CheckBox {
 
     HoverHandler {
         acceptedDevices: PointerDevice.Mouse
-        cursorShape: Qt.PointingHandCursor
+        cursorShape: root.changeCursor ? Qt.PointingHandCursor : undefined
     }
 }

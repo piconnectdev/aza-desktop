@@ -9,7 +9,7 @@
         <file>StatusQ/Components/private/statusMessage/StatusPinMessageDetails.qml</file>
         <file>StatusQ/Components/private/statusMessage/StatusSticker.qml</file>
         <file>StatusQ/Components/private/statusMessage/StatusTextMessage.qml</file>
-        <file>StatusQ/Components/private/statusMessage/StatusTimeStampLabel.qml</file>
+        <file>StatusQ/Components/StatusTimeStampLabel.qml</file>
         <file>StatusQ/Components/qmldir</file>
         <file>StatusQ/Components/private/qmldir</file>
         <file>StatusQ/Components/StatusAddress.qml</file>
@@ -207,6 +207,7 @@
         <file>StatusQ/Core/Utils/ModelUtils.qml</file>
         <file>StatusQ/Core/Utils/ModelsComparator.qml</file>
         <file>StatusQ/Core/Utils/ModelChangeTracker.qml</file>
+        <file>StatusQ/Core/Utils/StringUtils.qml</file>
         <file>StatusQ/Components/StatusPageIndicator.qml</file>
         <file>StatusQ/Components/StatusQrCodeScanner.qml</file>
         <file>StatusQ/Components/StatusOnlineBadge.qml</file>
@@ -224,5 +225,11 @@
         <file>StatusQ/Core/Utils/big.min.mjs</file>
         <file>StatusQ/Controls/StatusBlockProgressBar.qml</file>
         <file>StatusQ/Components/StatusInfoBoxPanel.qml</file>
+        <file>StatusQ/Controls/StatusWarningBox.qml</file>
+        <file>StatusQ/Core/Utils/Subscription.qml</file>
+        <file>StatusQ/Core/Utils/SubscriptionBroker.qml</file>
+        <file>StatusQ/Components/WebEngineLoader.qml</file>
+        <file>StatusQ/Components/private/qwebchannel/qwebchannel.js</file>
+        <file>StatusQ/Components/private/qwebchannel/helpers.js</file>
     </qresource>
 </RCC>

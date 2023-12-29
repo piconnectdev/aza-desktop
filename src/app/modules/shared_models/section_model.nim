@@ -3,9 +3,7 @@ import NimQml, Tables, strutils, strformat
 import json
 
 import section_item, member_model
-import ../main/communities/tokens/models/token_item
-
-import ../../../app_service/common/types
+import ../main/communities/tokens/models/[token_item, token_model]
 
 type
   ModelRole {.pure.} = enum
@@ -45,6 +43,10 @@ type
     PendingMemberRequestsModel
     DeclinedMemberRequestsModel
     AmIBanned
+    PubsubTopic
+    PubsubTopicKey
+    ShardIndex
+    IsPendingOwnershipRequest
 
 QtObject:
   type
@@ -118,6 +120,10 @@ QtObject:
       ModelRole.PendingMemberRequestsModel.int:"pendingMemberRequests",
       ModelRole.DeclinedMemberRequestsModel.int:"declinedMemberRequests",
       ModelRole.AmIBanned.int:"amIBanned",
+      ModelRole.PubsubTopic.int:"pubsubTopic",
+      ModelRole.PubsubTopicKey.int:"pubsubTopicKey",
+      ModelRole.ShardIndex.int:"shardIndex",
+      ModelRole.IsPendingOwnershipRequest.int:"isPendingOwnershipRequest",
     }.toTable
 
   method data(self: SectionModel, index: QModelIndex, role: int): QVariant =
@@ -203,8 +209,16 @@ QtObject:
       result = newQVariant(item.declinedMemberRequests)
     of ModelRole.AmIBanned:
       result = newQVariant(item.amIBanned)
+    of ModelRole.PubsubTopic:
+      result = newQVariant(item.pubsubTopic)
+    of ModelRole.PubsubTopicKey:
+      result = newQVariant(item.pubsubTopicKey)
+    of ModelRole.ShardIndex:
+      result = newQVariant(item.shardIndex)
+    of ModelRole.IsPendingOwnershipRequest:
+      result = newQVariant(item.isPendingOwnershipRequest)
 
-  proc isItemExist(self: SectionModel, id: string): bool =
+  proc itemExists*(self: SectionModel, id: string): bool =
     for it in self.items:
       if(it.id == id):
         return true
@@ -215,7 +229,7 @@ QtObject:
     let parentModelIndex = newQModelIndex()
     defer: parentModelIndex.delete
 
-    if not self.isItemExist(item.id):
+    if not self.itemExists(item.id):
       self.beginInsertRows(parentModelIndex, self.items.len, self.items.len)
       self.items.add(item)
       self.endInsertRows()
@@ -226,7 +240,7 @@ QtObject:
     let parentModelIndex = newQModelIndex()
     defer: parentModelIndex.delete
 
-    if not self.isItemExist(item.id):
+    if not self.itemExists(item.id):
       self.beginInsertRows(parentModelIndex, index, index)
       self.items.insert(item, index)
       self.endInsertRows()
@@ -274,36 +288,7 @@ QtObject:
     self.items[index] = item
     let dataIndex = self.createIndex(index, 0, nil)
     defer: dataIndex.delete
-    self.dataChanged(dataIndex, dataIndex, @[
-      ModelRole.Name.int,
-      ModelRole.MemberRole.int,
-      ModelRole.IsControlNode.int,
-      ModelRole.Description.int,
-      ModelRole.IntroMessage.int,
-      ModelRole.OutroMessage.int,
-      ModelRole.Image.int,
-      ModelRole.BannerImageData.int,
-      ModelRole.Icon.int,
-      ModelRole.Color.int,
-      ModelRole.Tags.int,
-      ModelRole.HasNotification.int,
-      ModelRole.NotificationsCount.int,
-      ModelRole.IsMember.int,
-      ModelRole.CanJoin.int,
-      ModelRole.Joined.int,
-      ModelRole.Spectated.int,
-      ModelRole.Muted.int, 
-      ModelRole.MembersModel.int,
-      ModelRole.PendingRequestsToJoinModel.int,
-      ModelRole.HistoryArchiveSupportEnabled.int,
-      ModelRole.PinMessageAllMembersEnabled.int,
-      ModelRole.BannedMembersModel.int,
-      ModelRole.Encrypted.int,
-      ModelRole.CommunityTokensModel.int,
-      ModelRole.PendingMemberRequestsModel.int,
-      ModelRole.DeclinedMemberRequestsModel.int,
-      ModelRole.AmIBanned.int,
-      ])
+    self.dataChanged(dataIndex, dataIndex)
 
   proc getNthEnabledItem*(self: SectionModel, nth: int): SectionItem =
     if nth >= 0 and nth < self.items.len:
@@ -370,6 +355,8 @@ QtObject:
 
       let topIndex = self.createIndex(topInd, 0, nil)
       let bottomIndex = self.createIndex(bottomInd, 0, nil)
+      defer: topIndex.delete
+      defer: bottomIndex.delete
       self.dataChanged(topIndex, bottomIndex, @[ModelRole.Enabled.int])
 
     # This signal is emitted to update buttons visibility in the left navigation bar,
@@ -387,6 +374,15 @@ QtObject:
     for item in self.items:
       if item.sectionType == SectionType.Chat or item.sectionType == SectionType.Community:
         result += item.notificationsCount
+
+  proc updateIsPendingOwnershipRequest*(self: SectionModel, id: string, isPending: bool) =
+    for i in 0 ..< self.items.len:
+      if(self.items[i].id == id):
+        let index = self.createIndex(i, 0, nil)
+        defer: index.delete
+        self.items[i].setIsPendingOwnershipRequest(isPending)
+        self.dataChanged(index, index, @[ModelRole.IsPendingOwnershipRequest.int])
+        return
 
   proc updateNotifications*(self: SectionModel, id: string, hasNotification: bool, notificationsCount: int) =
     for i in 0 ..< self.items.len:
@@ -444,5 +440,23 @@ QtObject:
           "ensOnly": item.ensOnly,
           "nbMembers": item.members.getCount(),
           "encrypted": item.encrypted,
+          "pubsubTopic": item.pubsubTopic,
+          "pubsubTopicKey": item.pubsubTopicKey,
+          "shardIndex": item.shardIndex,
         }
         return $jsonObj
+
+  proc setMembersAirdropAddress*(self: SectionModel, id: string, communityMembersAirdropAddress: Table[string, string]) = 
+    let index = self.getItemIndex(id)
+    if (index == -1):
+      return
+
+    for pubkey, revealedAccounts in communityMembersAirdropAddress.pairs:
+      self.items[index].members.setAirdropAddress(pubkey, revealedAccounts)
+
+  proc setTokenItems*(self: SectionModel, id: string, communityTokensItems: seq[TokenItem]) = 
+    let index = self.getItemIndex(id)
+    if (index == -1):
+      return
+
+    self.items[index].communityTokens.setItems(communityTokensItems)

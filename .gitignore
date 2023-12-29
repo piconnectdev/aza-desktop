@@ -110,3 +110,5 @@ release/
 # ui-tests
 /test/ui-pytest/configs/_local.py
 *.pyc
+
+test/ui-pytest/squish_server.ini

@@ -5,7 +5,6 @@
 import stint
 import ../../../backend/backend as backend
 import ../../common/conversion as service_conversion
-import ../../common/wallet_constants
 
 proc sortAsc[T](t1, t2: T): int =
   if (t1.fromNetwork.chainId > t2.fromNetwork.chainId): return 1
@@ -13,69 +12,15 @@ proc sortAsc[T](t1, t2: T): int =
   else: return 0
 
 type
-  LoadTransactionsTaskArg* = ref object of QObjectTaskArg
-    chainId: int
-    address: string
-    toBlock: Uint256
-    limit: int
-    collectiblesLimit: int
-    loadMore: bool
-    allTxLoaded: bool
-
-const loadTransactionsTask*: Task = proc(argEncoded: string) {.gcsafe, nimcall.} =
-  let arg = decode[LoadTransactionsTaskArg](argEncoded)
-  let output = %* {
-    "address": arg.address,
-    "chainId": arg.chainId,
-    "history": "",
-    "collectibles": "",
-    "loadMore": arg.loadMore,
-    "allTxLoaded": ""
-  }
-  try:
-    let limitAsHex = "0x" & eth_utils.stripLeadingZeros(arg.limit.toHex)
-    let response = transactions.getTransfersByAddress(arg.chainId, arg.address, arg.toBlock, limitAsHex, arg.loadMore).result
-    output["history"] = response
-    output["allTxLoaded"] = %(response.getElems().len < arg.limit)
-
-    # Fetch collectibles for transactions
-    var uniqueIds: seq[collectibles.NFTUniqueID] = @[]
-    for txJson in response.getElems():
-      let tx = txJson.toTransactionDto()
-      if tx.typeValue == ERC721_TRANSACTION_TYPE:
-        let nftId = collectibles.NFTUniqueID(
-          contractAddress: tx.contract,
-          tokenID: tx.tokenId.toString(10)
-        )
-        if not uniqueIds.any(x => (x == nftId)):
-          uniqueIds.add(nftId)
-
-    if len(uniqueIds) > 0:
-      let collectiblesResponse = collectibles.getOpenseaAssetsByNFTUniqueID(arg.chainId, uniqueIds, arg.collectiblesLimit)
-
-      if not collectiblesResponse.error.isNil:
-        # We don't want to prevent getting the list of transactions if we cannot get
-        # NFT metadata. Just don't return the metadata.
-        let errDesription = "Error getOpenseaAssetsByNFTUniqueID" & collectiblesResponse.error.message
-        error "error loadTransactionsTask: ", errDesription
-      else:
-        output["collectibles"] = collectiblesResponse.result
-  except Exception as e:
-    let errDesription = e.msg
-    error "error loadTransactionsTask: ", errDesription
-
-  arg.finish(output)
-
-
-type
   GetSuggestedRoutesTaskArg* = ref object of QObjectTaskArg
-    account: string
+    accountFrom: string
+    accountTo: string
     amount: Uint256
     token: string
-    disabledFromChainIDs: seq[uint64]
-    disabledToChainIDs: seq[uint64]
-    preferredChainIDs: seq[uint64]
-    sendType: int
+    disabledFromChainIDs: seq[int]
+    disabledToChainIDs: seq[int]
+    preferredChainIDs: seq[int]
+    sendType: SendType
     lockedInAmounts: string
 
 proc getGasEthValue*(gweiValue: float, gasLimit: uint64): float =
@@ -83,8 +28,8 @@ proc getGasEthValue*(gweiValue: float, gasLimit: uint64): float =
   let ethValue = parseFloat(service_conversion.wei2Eth(weiValue))
   return ethValue
 
-proc getFeesTotal*(paths: seq[TransactionPathDto]): Fees =
-  var fees: Fees = Fees()
+proc getFeesTotal*(paths: seq[TransactionPathDto]): FeesDto =
+  var fees: FeesDto = FeesDto()
   if(paths.len == 0):
     return fees
 
@@ -120,11 +65,10 @@ proc addFirstSimpleBridgeTxFlag(paths: seq[TransactionPathDto]) : seq[Transactio
   var firstBridgePath: bool = false
 
   for path in txPaths:
-    if path.bridgeName == "Simple":
-      if not firstSimplePath:
-        firstSimplePath = true
-        path.isFirstSimpleTx = true
-    else:
+    if not firstSimplePath:
+      firstSimplePath = true
+      path.isFirstSimpleTx = true
+    if path.bridgeName != "Transfer":
       if not firstBridgePath:
         firstBridgePath = false
         path.isFirstBridgeTx = true
@@ -139,17 +83,19 @@ const getSuggestedRoutesTask*: Task = proc(argEncoded: string) {.gcsafe, nimcall
     var lockedInAmounts = Table[string, string] : initTable[string, string]()
 
     try:
-      for lockedAmount in parseJson(arg.lockedInAmounts):
-        lockedInAmounts[$lockedAmount["chainID"].getInt] = "0x" & lockedAmount["value"].getStr
+      for chainId, lockedAmount in parseJson(arg.lockedInAmounts):
+        lockedInAmounts[chainId] = lockedAmount.getStr
     except:
       discard
 
-    let response = eth.suggestedRoutes(arg.account, amountAsHex, arg.token, arg.disabledFromChainIDs, arg.disabledToChainIDs, arg.preferredChainIDs, arg.sendType, lockedInAmounts).result
+    let response = eth.suggestedRoutes(arg.accountFrom, arg.accountTo, amountAsHex, arg.token, arg.disabledFromChainIDs,
+      arg.disabledToChainIDs, arg.preferredChainIDs, ord(arg.sendType), lockedInAmounts).result
     var bestPaths = response["Best"].getElems().map(x => x.toTransactionPathDto())
 
     # retry along with unpreferred chains incase no route is possible with preferred chains
     if(bestPaths.len == 0 and arg.preferredChainIDs.len > 0):
-      let response = eth.suggestedRoutes(arg.account, amountAsHex, arg.token, arg.disabledFromChainIDs, arg.disabledToChainIDs, @[], arg.sendType, lockedInAmounts).result
+      let response = eth.suggestedRoutes(arg.accountFrom, arg.accountTo, amountAsHex, arg.token, arg.disabledFromChainIDs,
+        arg.disabledToChainIDs, @[], ord(arg.sendType), lockedInAmounts).result
       bestPaths = response["Best"].getElems().map(x => x.toTransactionPathDto())
 
     bestPaths.sort(sortAsc[TransactionPathDto])
@@ -165,7 +111,7 @@ const getSuggestedRoutesTask*: Task = proc(argEncoded: string) {.gcsafe, nimcall
 
   except Exception as e:
     let output = %* {
-     "suggestedRoutes": SuggestedRoutesDto(best: @[], gasTimeEstimate:  Fees(), amountToReceive: stint.u256(0), toNetworks: @[]),
+     "suggestedRoutes": SuggestedRoutesDto(best: @[], gasTimeEstimate: FeesDto(), amountToReceive: stint.u256(0), toNetworks: @[]),
       "error": fmt"Error getting suggested routes: {e.msg}"
     }
     arg.finish(output)
@@ -221,7 +167,7 @@ const getCryptoServicesTask*: Task = proc(argEncoded: string) {.gcsafe, nimcall.
     error "Error fetching crypto services", message = e.msg
     arg.finish(%* {
       "result": @[],
-    }) 
+    })
 
 type
   FetchDecodedTxDataTaskArg* = ref object of QObjectTaskArg

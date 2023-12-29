@@ -1,5 +1,8 @@
 import tables
 import ../../../../app_service/service/community/service as community_service
+import ../../../../app_service/service/chat/service as chat_service
+import ../../../../app_service/service/community_tokens/dto/community_token
+import app_service/common/types
 import ../../shared_models/section_item
 
 type
@@ -49,22 +52,27 @@ method requestImportDiscordCommunity*(self: AccessInterface, name: string, descr
                         fromTimestamp: int) {.base.} =
   raise newException(ValueError, "No implementation available")
 
+method requestImportDiscordChannel*(self: AccessInterface, name: string, discordChannelId: string, communityId: string, description: string,
+                        color: string, emoji: string, filesToImport: seq[string],
+                        fromTimestamp: int) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
 method isUserMemberOfCommunity*(self: AccessInterface, communityId: string): bool {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method userCanJoin*(self: AccessInterface, communityId: string): bool {.base.} =
   raise newException(ValueError, "No implementation available")
 
-method isCommunityRequestPending*(self: AccessInterface, communityId: string): bool {.base.} =
+method isMyCommunityRequestPending*(self: AccessInterface, communityId: string): bool {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method cancelRequestToJoinCommunity*(self: AccessInterface, communityId: string) {.base.} =
   raise newException(ValueError, "No implementation available")
 
-method requestCommunityInfo*(self: AccessInterface, communityId: string, importing: bool) {.base.} =
+method requestCommunityInfo*(self: AccessInterface, communityId: string, shardCluster: int, shardIndex: int, importing: bool) {.base.} =
   raise newException(ValueError, "No implementation available")
 
-method removePrivateKey*(self: AccessInterface, communityId: string) {.base.} =
+method requestCommunityInfo*(self: AccessInterface, communityId: string, shard: Shard, importing: bool) {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method importCommunity*(self: AccessInterface, communityKey: string) {.base.} =
@@ -91,9 +99,6 @@ method communityCategoryEdited*(self: AccessInterface) {.base.} =
 method communityCategoryDeleted*(self: AccessInterface) {.base.} =
   raise newException(ValueError, "No implementation available")
 
-method communityPrivateKeyRemoved*(self: AccessInterface, communityId: string) {.base.} =
-  raise newException(ValueError, "No implementation available")
-
 method communityEdited*(self: AccessInterface, community: CommunityDto) {.base.} =
   raise newException(ValueError, "No implementation available")
 
@@ -112,7 +117,13 @@ method communityImported*(self: AccessInterface, community: CommunityDto) {.base
 method communityDataImported*(self: AccessInterface, community: CommunityDto) {.base.} =
   raise newException(ValueError, "No implementation available")
 
+method communityInfoRequestFailed*(self: AccessInterface, communityId: string, errorMsg: string) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
 method onImportCommunityErrorOccured*(self: AccessInterface, communityId: string, error: string) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method onImportCommunityCancelled*(self: AccessInterface, communityId: string) {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method viewDidLoad*(self: AccessInterface) {.base.} =
@@ -142,7 +153,30 @@ method discordCategoriesAndChannelsExtracted*(self: AccessInterface, categories:
 method discordImportProgressUpdated*(self: AccessInterface, communityId: string, communityName: string, communityImage: string, tasks: seq[DiscordImportTaskProgress], progress: float, errorsCount: int, warningsCount: int, stopped: bool, totalChunksCount: int, currentChunk: int) {.base.} =
   raise newException(ValueError, "No implementation available")
 
+method discordImportChannelProgressUpdated*(
+    self: AccessInterface,
+    channelId: string,
+    channelName: string,
+    tasks: seq[DiscordImportTaskProgress],
+    progress: float,
+    errorsCount: int,
+    warningsCount: int,
+    stopped: bool,
+    totalChunksCount: int,
+    currentChunk: int
+  ) {.base.} =
+    raise newException(ValueError, "No implementation available")
+
+method discordImportChannelFinished*(self: AccessInterface, communityId: string, channelId: string) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method discordImportChannelCanceled*(self: AccessInterface, channelId: string) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
 method requestCancelDiscordCommunityImport*(self: AccessInterface, id: string) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method requestCancelDiscordChannelImport*(self: AccessInterface, discordChannelId: string) {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method communityHistoryArchivesDownloadStarted*(self: AccessInterface, communityId: string) {.base.} =
@@ -160,13 +194,7 @@ method curatedCommunitiesLoadingFailed*(self: AccessInterface) {.base.} =
 method curatedCommunitiesLoaded*(self: AccessInterface, curatedCommunities: seq[CommunityDto]) {.base.} =
   raise newException(ValueError, "No implementation available")
 
-method communityInfoAlreadyRequested*(self: AccessInterface) {.base.} = 
-  raise newException(ValueError, "No implementation available")
-
-method onCommunityTokenMetadataAdded*(self: AccessInterface, communityId: string, tokenMetadata: CommunityTokensMetadataDto) {.base.} = 
-  raise newException(ValueError, "No implementation available")
-
-method onOwnedCollectiblesUpdated*(self: AccessInterface) {.base.} =
+method onCommunityTokenMetadataAdded*(self: AccessInterface, communityId: string, tokenMetadata: CommunityTokensMetadataDto) {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method onWalletAccountTokensRebuilt*(self: AccessInterface) {.base.} =
@@ -182,4 +210,55 @@ method shareCommunityChannelUrlWithChatKey*(self: AccessInterface, communityId: 
   raise newException(ValueError, "No implementation available")
 
 method shareCommunityChannelUrlWithData*(self: AccessInterface, communityId: string, chatId: string): string {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method onUserAuthenticated*(self: AccessInterface, pin: string, password: string, keyUid: string) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method onDataSigned*(self: AccessInterface, keyUid: string, path: string, r: string, s: string, v: string, pin: string) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method prepareKeypairsForSigning*(self: AccessInterface, communityId: string, ensName: string, addresses: string,
+  airdropAddress: string, editMode: bool) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method signSharedAddressesForAllNonKeycardKeypairs*(self: AccessInterface) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method signSharedAddressesForKeypair*(self: AccessInterface, keyUid: string, pin: string) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method joinCommunityOrEditSharedAddresses*(self: AccessInterface) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method prepareTokenModelForCommunity*(self: AccessInterface, communityId: string) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method getCommunityPublicKeyFromPrivateKey*(self: AccessInterface, communityPrivateKey: string): string {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method checkPermissions*(self: AccessInterface, communityId: string, sharedAddresses: seq[string]) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method onCommunityCheckPermissionsToJoinResponse*(self: AccessInterface, communityId: string, checkPermissionsToJoinResponse: CheckPermissionsToJoinResponseDto) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method onCommunityCheckAllChannelsPermissionsResponse*(self: AccessInterface, communityId: string,
+    checkChannelPermissionsResponse: CheckAllChannelsPermissionsResponseDto) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method onCommunityCheckPermissionsToJoinFailed*(self: AccessInterface, communityId: string, ValueErrorerror: string) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method onCommunityCheckAllChannelPermissionsFailed*(self: AccessInterface, communityId: string, ValueErrorerror: string) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method onCommunityMemberRevealedAccountsLoaded*(self: AccessInterface, communityId: string, memberPubkey: string,
+    revealedAccounts: seq[RevealedAccount]) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method onAllCommunityTokensLoaded*(self: AccessInterface, communityTokens: seq[CommunityTokenDto]) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method removeCommunityChat*(self: AccessInterface, communityId: string, channelId: string) {.base.} =
   raise newException(ValueError, "No implementation available")

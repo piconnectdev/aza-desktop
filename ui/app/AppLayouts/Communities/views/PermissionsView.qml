@@ -85,6 +85,7 @@ StatusScrollView {
                 }
 
                 permissionType: model.permissionType
+                permissionState: model.permissionState // TODO: Backend!
 
                 ChannelsSelectionModel {
                     id: channelsSelectionModel
@@ -97,7 +98,10 @@ StatusScrollView {
                                    ? channelsSelectionModel : communityItemModel
                 isPrivate: model.isPrivate
 
-                showButtons: root.communityDetails.owner || (root.communityDetails.admin && model.permissionType !== PermissionTypes.Type.Admin)
+                showButtons: (model.permissionType !== PermissionTypes.Type.TokenMaster &&
+                             model.permissionType !== PermissionTypes.Type.Owner) &&
+                             (root.communityDetails.owner ||
+                             ((root.communityDetails.admin || root.communityDetails.tokenMaster) && model.permissionType !== PermissionTypes.Type.Admin))
 
                 onEditClicked: root.editPermissionRequested(model.index)
                 onDuplicateClicked: root.duplicatePermissionRequested(model.index)

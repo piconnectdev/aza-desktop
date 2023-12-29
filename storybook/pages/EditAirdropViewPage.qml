@@ -99,32 +99,35 @@ SplitView {
 
         interval: 2000
 
-        property var response
+        property var feesPerContract: []
+
+        function createAmount(amount, symbol, decimals) {
+            return {
+                amount, symbol,
+                displayDecimals: decimals, stripTrailingZeroes: false
+            }
+        }
 
         function requestMockedFees(contractKeysAndAmounts) {
-            const fees = []
+            if (!loader.item)
+                return
+            
+            const view = loader.item
+            view.feesAvailable = false
+            view.totalFeeText = ""
+            view.feeErrorText = ""
+            view.feesPerSelectedContract = []
 
-            function createAmount(amount, symbol, decimals) {
-                return {
-                    amount, symbol,
-                    displayDecimals: decimals, stripTrailingZeroes: false
-                }
-            }
+            const fees = []
 
             contractKeysAndAmounts.forEach(entry => {
                 fees.push({
-                    ethFee: createAmount(0.0002120115, "ETH", 4),
-                    fiatFee: createAmount(123.15, "USD", 2),
-                    errorCode: 0,
-                    contractUniqueKey: entry.contractUniqueKey
+                    contractUniqueKey: entry.contractUniqueKey,
+                    feeText: "0.0002120115 ETH (123.15 USD)"
                 })
             })
 
-            response = {
-                fees, errorCode: feesErrorsButtonGroup.checkedButton.code,
-                totalEthFee: createAmount(0.0002120115 * fees.length, "ETH", 4),
-                totalFiatFee: createAmount(123.15 * fees.length, "USD", 2)
-            }
+            feesPerContract = fees
 
             restart()
         }
@@ -134,7 +137,10 @@ SplitView {
                 return
 
             const view = loader.item
-            view.airdropFees = response
+            view.totalFeeText = createAmount(0.0002120115 * feesPerContract.length, "ETH", 4) + "(" ,createAmount(123.15 * feesPerContract.length, "USD", 2),"USD)"
+            view.feeErrorText = feesErrorsButtonGroup.checkedButton.code ? feesErrorsButtonGroup.checkedButton.text : ""
+            view.feesAvailable = true
+            view.feesPerSelectedContract = feesCalculationTimer.feesPerContract
         }
     }
 
@@ -252,6 +258,31 @@ SplitView {
                 assetsModel: AssetsModel {}
                 collectiblesModel: CollectiblesModel {}
                 membersModel: members
+                totalFeeText: ""
+                feeErrorText: ""
+                feesPerSelectedContract: []
+                feesAvailable: false
+
+                onShowingFeesChanged: {
+                    feesCalculationTimer.requestMockedFees(loader.item.selectedContractKeysAndAmounts)
+                }
+
+                accountsModel: ListModel {
+                    ListElement {
+                        name: "Test account"
+                        emoji: "😋"
+                        address: "0x7F47C2e18a4BBf5487E6fb082eC2D9Ab0E6d7240"
+                        color: "red"
+                    }
+
+                    ListElement {
+                        name: "Another account - generated"
+                        emoji: "🚗"
+                        address: "0x7F47C2e98a4BBf5487E6fb082eC2D9Ab0E6d8888"
+                        color: "blue"
+                    }
+                }
+
                 communityDetails: QtObject {
                     readonly property string name: "Socks"
                     readonly property string id: "SOCKS"
@@ -262,16 +293,9 @@ SplitView {
 
                 onAirdropClicked: {
                     logs.logEvent("EditAirdropView::airdropClicked",
-                                  ["airdropTokens", "addresses", "membersPubKeys"],
+                                  ["airdropTokens", "addresses",
+                                   "membersPubKeys", "feeAccountAddress"],
                                   arguments)
-                }
-
-                onAirdropFeesRequested: {
-                    logs.logEvent("EditAirdropView::airdropFeesRequested",
-                                  ["contractKeysAndAmounts", "addresses"],
-                                  arguments)
-
-                    feesCalculationTimer.requestMockedFees(contractKeysAndAmounts)
                 }
             }
         }
@@ -298,6 +322,12 @@ SplitView {
                 id: feesErrorsButtonGroup
 
                 buttons: feesErrorsRow.children
+                onCheckedButtonChanged: {
+                    if(!loader.item)
+                        return
+
+                    feesCalculationTimer.requestMockedFees(loader.item.selectedContractKeysAndAmounts)
+                }
             }
 
             RowLayout {
@@ -331,3 +361,12 @@ SplitView {
         }
     }
 }
+
+// category: Views
+
+// https://www.figma.com/file/17fc13UBFvInrLgNUKJJg5/Kuba%E2%8E%9CDesktop?node-id=22602-495563&t=9dIP8Sji2UlfhsEs-0
+// https://www.figma.com/file/17fc13UBFvInrLgNUKJJg5/Kuba%E2%8E%9CDesktop?node-id=22628-495258&t=9dIP8Sji2UlfhsEs-0
+// https://www.figma.com/file/17fc13UBFvInrLgNUKJJg5/Kuba%E2%8E%9CDesktop?node-id=22628-496145&t=9dIP8Sji2UlfhsEs-0
+// https://www.figma.com/file/17fc13UBFvInrLgNUKJJg5/Kuba%E2%8E%9CDesktop?node-id=22647-497754&t=9dIP8Sji2UlfhsEs-0
+// https://www.figma.com/file/17fc13UBFvInrLgNUKJJg5/Kuba%E2%8E%9CDesktop?node-id=22647-501014&t=9dIP8Sji2UlfhsEs-0
+// https://www.figma.com/file/17fc13UBFvInrLgNUKJJg5/Kuba%E2%8E%9CDesktop?node-id=22647-499051&t=kHAcE8WSCyGqhWSH-0

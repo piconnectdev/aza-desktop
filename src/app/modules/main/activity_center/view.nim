@@ -1,4 +1,4 @@
-import NimQml, json, strutils, json_serialization, sequtils, strformat, std/tables
+import NimQml, json, strutils, sequtils, std/tables
 import ../../../../app_service/service/activity_center/service as activity_center_service
 
 import ./model
@@ -62,7 +62,7 @@ QtObject:
     read = hasUnseenActivityCenterNotifications
     notify = hasUnseenActivityCenterNotificationsChanged
 
-  proc loadMoreNotifications(self: View) {.slot.} =
+  proc fetchActivityCenterNotifications(self: View) {.slot.} =
     self.delegate.fetchActivityCenterNotifications()
 
   proc markAllActivityCenterNotificationsRead(self: View): string {.slot.} =
@@ -71,72 +71,27 @@ QtObject:
   proc markAllActivityCenterNotificationsReadDone*(self: View) {.slot.} =
     self.model.markAllAsRead()
 
-  proc markActivityCenterNotificationRead(
-      self: View,
-      notificationId: string,
-      communityId: string,
-      channelId: string,
-      nType: int
-      ): void {.slot.} =
-    discard self.delegate.markActivityCenterNotificationRead(notificationId, communityId, channelId, nType)
+  proc markActivityCenterNotificationRead(self: View, notificationId: string): void {.slot.} =
+    self.delegate.markActivityCenterNotificationRead(notificationId)
 
   proc markActivityCenterNotificationReadDone*(self: View, notificationId: string) =
-     self.model.markActivityCenterNotificationRead(notificationId)
+    self.model.markActivityCenterNotificationRead(notificationId)
 
   proc markActivityCenterNotificationUnreadDone*(self: View, notificationId: string) =
-     self.model.markActivityCenterNotificationUnread(notificationId)
+    self.model.markActivityCenterNotificationUnread(notificationId)
 
   proc removeActivityCenterNotifications*(self: View, notificationIds: seq[string]) =
-     self.model.removeNotifications(notificationIds)
+    self.model.removeNotifications(notificationIds)
 
-  proc markAllChatMentionsAsRead*(self: View, communityId: string, chatId: string) =
-    let notifsIds = self.model.getUnreadNotificationsForChat(chatId)
-    for notifId in notifsIds:
-      # TODO change the 3 to the real type
-      self.markActivityCenterNotificationRead(notifId, communityId, chatId, ActivityCenterNotificationType.Mention.int)
-
-  proc markActivityCenterNotificationUnread(
-      self: View,
-      notificationId: string,
-      communityId: string,
-      channelId: string,
-      nType: int
-      ): void {.slot.} =
-    discard self.delegate.markActivityCenterNotificationUnread(
-      notificationId,
-      communityId,
-      channelId,
-      nType
-    )
+  proc markActivityCenterNotificationUnread(self: View, notificationId: string): void {.slot.} =
+    self.delegate.markActivityCenterNotificationUnread(notificationId)
 
   proc markAsSeenActivityCenterNotifications(self: View): void {.slot.} =
     self.delegate.markAsSeenActivityCenterNotifications()
     self.hasUnseenActivityCenterNotificationsChanged()
 
-  proc acceptActivityCenterNotifications(self: View, idsJson: string): string {.slot.} =
-    let ids = map(parseJson(idsJson).getElems(), proc(x:JsonNode):string = x.getStr())
-
-    result = self.delegate.acceptActivityCenterNotifications(ids)
-
-  proc acceptActivityCenterNotificationsDone*(self: View, notificationIds: seq[string]) =
-    self.model.removeNotifications(notificationIds)
-
-  proc acceptActivityCenterNotification(self: View, id: string): string {.slot.} =
-    self.acceptActivityCenterNotifications(fmt"[""{id}""]")
-
-  proc dismissActivityCenterNotifications(self: View, idsJson: string): string {.slot.} =
-    let ids = map(parseJson(idsJson).getElems(), proc(x:JsonNode):string = x.getStr())
-
-    result = self.delegate.dismissActivityCenterNotifications(ids)
-
-  proc dismissActivityCenterNotification(self: View, id: string): string {.slot.} =
-    self.dismissActivityCenterNotifications(fmt"[""{id}""]")
-
-  proc dismissActivityCenterNotificationsDone*(self: View, notificationIds: seq[string]) =
-    self.model.removeNotifications(notificationIds)
-
   proc addActivityCenterNotifications*(self: View, activityCenterNotifications: seq[Item]) =
-    self.model.addActivityNotificationItemsToList(activityCenterNotifications)
+    self.model.upsertActivityCenterNotifications(activityCenterNotifications)
 
   proc resetActivityCenterNotifications*(self: View, activityCenterNotifications: seq[Item]) =
     self.model.setNewData(activityCenterNotifications)

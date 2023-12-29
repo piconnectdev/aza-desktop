@@ -10,8 +10,8 @@ type
     emoji: string
     isWatchOnlyAccount: bool
     isAllAccounts: bool
-    includeWatchOnly: bool
     colorIds: seq[string]
+    canSend: bool
 
 proc initItem*(
   name: string = "",
@@ -22,8 +22,8 @@ proc initItem*(
   emoji: string,
   isWatchOnlyAccount: bool=false,
   isAllAccounts: bool = false,
-  includeWatchOnly: bool = true,
-  colorIds: seq[string] = @[]
+  colorIds: seq[string] = @[],
+  canSend: bool = true,
 ): Item =
   result.name = name
   result.mixedCaseAddress = mixedCaseAddress
@@ -32,9 +32,9 @@ proc initItem*(
   result.colorId = colorId
   result.emoji = emoji
   result.isAllAccounts = isAllAccounts
-  result.includeWatchOnly = includeWatchOnly
   result.colorIds = colorIds
   result.isWatchOnlyAccount = isWatchOnlyAccount
+  result.canSend = canSend
 
 proc `$`*(self: Item): string =
   result = fmt"""OverviewItem(
@@ -46,7 +46,6 @@ proc `$`*(self: Item): string =
     emoji: {self.emoji},
     isWatchOnlyAccount: {self.isWatchOnlyAccount},
     isAllAccounts: {self.isAllAccounts},
-    includeWatchOnly: {self.includeWatchOnly},
     colorIds: {self.colorIds}
     ]"""
 
@@ -71,11 +70,11 @@ proc getEmoji*(self: Item): string =
 proc getIsAllAccounts*(self: Item): bool =
   return self.isAllAccounts
 
-proc getIncludeWatchOnly*(self: Item): bool =
-  return self.includeWatchOnly
-
 proc getColorIds*(self: Item): string =
   return self.colorIds.join(";")
 
 proc getIsWatchOnlyAccount*(self: Item): bool =
   return self.isWatchOnlyAccount
+
+proc getCanSend*(self: Item): bool =
+  return self.canSend

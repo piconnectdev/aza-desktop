@@ -13,8 +13,8 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Although SHARED libraries set this to ON by default,
-# all static libraries, that are built into this SHARED, 
-# (which is qzxing in our case) should also be build with -fPIC. 
+# all static libraries, that are built into this SHARED,
+# (which is qzxing in our case) should also be build with -fPIC.
 # This fixes it.
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
@@ -88,22 +88,46 @@ endif()
 
 add_library(StatusQ SHARED
         ${STATUSQ_QRC_COMPILED}
-        src/plugin.cpp
         include/StatusQ/QClipboardProxy.h
+        include/StatusQ/aggregator.h
+        include/StatusQ/concatmodel.h
+        include/StatusQ/fastexpressionrole.h
+        include/StatusQ/leftjoinmodel.h
         include/StatusQ/modelutilsinternal.h
         include/StatusQ/permissionutilsinternal.h
+        include/StatusQ/rolesrenamingmodel.h
         include/StatusQ/rxvalidator.h
+        include/StatusQ/singleroleaggregator.h
         include/StatusQ/statussyntaxhighlighter.h
         include/StatusQ/statuswindow.h
+        include/StatusQ/stringutilsinternal.h
+        include/StatusQ/submodelproxymodel.h
+        include/StatusQ/sumaggregator.h
         src/QClipboardProxy.cpp
+        src/aggregator.cpp
+        src/concatmodel.cpp
+        src/fastexpressionrole.cpp
+        src/leftjoinmodel.cpp
         src/modelutilsinternal.cpp
         src/permissionutilsinternal.cpp
+        src/plugin.cpp
+        src/rolesrenamingmodel.cpp
         src/rxvalidator.cpp
+        src/singleroleaggregator.cpp
         src/statussyntaxhighlighter.cpp
         src/statuswindow.cpp
+        src/stringutilsinternal.cpp
+        src/submodelproxymodel.cpp
+        src/sumaggregator.cpp
+
+        # wallet
+        src/wallet/managetokenscontroller.cpp
+        src/wallet/managetokenscontroller.h
+        src/wallet/managetokensmodel.cpp
+        src/wallet/managetokensmodel.h
         )
 
-set_target_properties(StatusQ PROPERTIES 
+set_target_properties(StatusQ PROPERTIES
     ADDITIONAL_CLEAN_FILES bin/StatusQ/qmldir
     RUNTIME_OUTPUT_DIRECTORY ${STATUSQ_MODULE_PATH}
     RUNTIME_OUTPUT_DIRECTORY_DEBUG ${STATUSQ_MODULE_PATH}
@@ -142,7 +166,7 @@ target_link_libraries(StatusQ PRIVATE
         qzxing
         )
 
-target_include_directories(StatusQ PRIVATE include)
+target_include_directories(StatusQ PUBLIC include)
 
 install(TARGETS StatusQ
         RUNTIME DESTINATION StatusQ
@@ -169,5 +193,6 @@ if (${STATUSQ_BUILD_SANITY_CHECKER})
 endif ()
 
 if (${STATUSQ_BUILD_TESTS})
+    enable_testing()
     add_subdirectory(tests)
 endif ()

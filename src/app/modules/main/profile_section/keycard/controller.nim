@@ -2,11 +2,12 @@ import chronicles
 
 import io_interface
 
-import ../../../../core/eventemitter
+import app/core/eventemitter
 
-import ../../../shared_modules/keycard_popup/io_interface as keycard_shared_module
-import ../../../../../app_service/service/contacts/service as contact_service
-import ../../../../../app_service/service/wallet_account/service as wallet_account_service
+import app/modules/shared_modules/keycard_popup/io_interface as keycard_shared_module
+import app_service/service/contacts/service as contact_service
+import app_service/service/wallet_account/service as wallet_account_service
+import app_service/service/settings/service as settings_service
 
 logScope:
   topics = "profile-section-keycard-module-controller"
@@ -36,7 +37,8 @@ proc init*(self: Controller) =
     let args = SharedKeycarModuleFlowTerminatedArgs(e)
     if args.uniqueIdentifier != UNIQUE_SETTING_KEYCARD_MODULE_IDENTIFIER:
       return
-    self.delegate.onSharedKeycarModuleFlowTerminated(args.lastStepInTheCurrentFlow)
+    self.delegate.onSharedKeycarModuleFlowTerminated(args.lastStepInTheCurrentFlow, args.continueWithNextFlow,
+      args.forceFlow, args.continueWithKeyUid, args.returnToFlow)
 
   self.events.on(SIGNAL_SHARED_KEYCARD_MODULE_DISPLAY_POPUP) do(e: Args):
     let args = SharedKeycarModuleBaseArgs(e)
@@ -48,10 +50,22 @@ proc init*(self: Controller) =
     let args = KeypairArgs(e)
     self.delegate.onKeypairSynced(args.keypair)
 
+  self.events.on(SIGNAL_DISPLAY_NAME_UPDATED) do(e: Args):
+    self.delegate.onLoggedInUserNameChanged()
+
   self.events.on(SIGNAL_LOGGEDIN_USER_IMAGE_CHANGED) do(e: Args):
     self.delegate.onLoggedInUserImageChanged()
 
+  self.events.on(SIGNAL_KEYCARD_REBUILD) do(e: Args):
+    self.delegate.rebuildAllKeycards()
+
   self.events.on(SIGNAL_NEW_KEYCARD_SET) do(e: Args):
+    let args = KeycardArgs(e)
+    if not args.success:
+      return
+    self.delegate.onKeycardChange(args.keycard)
+
+  self.events.on(SIGNAL_ALL_KEYCARDS_DELETED) do(e: Args):
     let args = KeycardArgs(e)
     if not args.success:
       return

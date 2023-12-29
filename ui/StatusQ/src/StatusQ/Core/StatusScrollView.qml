@@ -88,7 +88,7 @@ import StatusQ.Core.Theme 0.1
 
     2. Apply paddings of the popup and make `StatusScrollView` scroll bars non-attached
 
-        Use when `StatusScrollView`/`StatusListView` is not a direct child of `contentItem`, or it's not the only child.
+       Use when `StatusScrollView`/`StatusListView` is not a direct child of `contentItem`, or it's not the only child.
 
        Though this requires more coding and custom wrappers, the result is very neat.
        All popup contents are aligned to given paddings, but the scroll bar doesn't overlay
@@ -179,6 +179,43 @@ T.ScrollView {
 
     Component.onCompleted: {
         applyFlickableFix()
+    }
+
+    Keys.onPressed: {
+        switch (event.key) {
+        case Qt.Key_Home:
+            scrollHome()
+            event.accepted = true
+            break
+        case Qt.Key_End:
+            scrollEnd()
+            event.accepted = true
+            break
+        case Qt.Key_PageUp:
+            scrollPageUp()
+            event.accepted = true
+            break
+        case Qt.Key_PageDown:
+            scrollPageDown()
+            event.accepted = true
+            break
+        }
+    }
+
+    function scrollHome() {
+        flickable.contentY = 0
+    }
+
+    function scrollEnd() {
+        flickable.contentY = flickable.contentHeight - flickable.height
+    }
+
+    function scrollPageUp() {
+        root.ScrollBar.vertical.decrease()
+    }
+
+    function scrollPageDown() {
+        root.ScrollBar.vertical.increase()
     }
 
     ScrollBar.vertical: StatusScrollBar {

@@ -8,11 +8,11 @@ import ../../../../app_service/service/community/service as community_service
 import ../../../../app_service/service/message/service as message_service
 import ../../../../app_service/service/gif/service as gif_service
 import ../../../../app_service/service/mailservers/service as mailservers_service
+import ../../../../app_service/service/shared_urls/service as shared_urls_service
 
 import model as chats_model
 import item as chat_item
 
-import ../../../core/eventemitter
 import ../../../core/unique_event_emitter
 
 type
@@ -21,30 +21,22 @@ type
 method delete*(self: AccessInterface) {.base.} =
   raise newException(ValueError, "No implementation available")
 
-method load*(self: AccessInterface,
-  channelGroup: ChannelGroupDto,
-  events: EventEmitter,
-  settingsService: settings_service.Service,
-  nodeConfigurationService: node_configuration_service.Service,
-  contactService: contact_service.Service,
-  chatService: chat_service.Service,
-  communityService: community_service.Service,
-  messageService: message_service.Service,
-  gifService: gif_service.Service,
-  mailserversService: mailservers_service.Service) {.base.} =
+method load*(self: AccessInterface) {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method onChatsLoaded*(self: AccessInterface,
-  channelGroup: ChannelGroupDto,
-  events: UniqueUUIDEventEmitter,
-  settingsService: settings_service.Service,
-  nodeConfigurationService: node_configuration_service.Service,
-  contactService: contact_service.Service,
-  chatService: chat_service.Service,
-  communityService: community_service.Service,
-  messageService: message_service.Service,
-  gifService: gif_service.Service,
-  mailserversService: mailservers_service.Service) {.base.} =
+    channelGroup: ChannelGroupDto,
+    events: UniqueUUIDEventEmitter,
+    settingsService: settings_service.Service,
+    nodeConfigurationService: node_configuration_service.Service,
+    contactService: contact_service.Service,
+    chatService: chat_service.Service,
+    communityService: community_service.Service,
+    messageService: message_service.Service,
+    gifService: gif_service.Service,
+    mailserversService: mailservers_service.Service,
+    sharedUrlsService: shared_urls_service.Service,
+  ) {.base.} =
   raise newException(ValueError, "No implementation available rip")
 
 method isLoaded*(self: AccessInterface): bool {.base.} =
@@ -68,16 +60,6 @@ method chatContentDidLoad*(self: AccessInterface) {.base.} =
 method activeItemSet*(self: AccessInterface, itemId: string) {.base.} =
   raise newException(ValueError, "No implementation available")
 
-method makeChatWithIdActive*(self: AccessInterface, chatId: string) {.base.} =
-  raise newException(ValueError, "No implementation available")
-
-method addNewChat*(self: AccessInterface, chatDto: ChatDto, belongsToCommunity: bool, events: EventEmitter,
-  settingsService: settings_service.Service, contactService: contact_service.Service,
-  chatService: chat_service.Service, communityService: community_service.Service,
-  messageService: message_service.Service, gifService: gif_service.Service,
-  mailserversService: mailservers_service.Service, setChatAsActive: bool = true, insertIntoModel: bool = true): Item {.base.} =
-  raise newException(ValueError, "No implementation available")
-
 method doesCatOrChatExist*(self: AccessInterface, chatId: string): bool {.base.} =
   raise newException(ValueError, "No implementation available")
 
@@ -96,12 +78,13 @@ method addOrUpdateChat*(self: AccessInterface,
     messageService: message_service.Service,
     gifService: gif_service.Service,
     mailserversService: mailservers_service.Service,
+    sharedUrlsService: shared_urls_service.Service,
     setChatAsActive: bool = true,
     insertIntoModel: bool = true
   ): Item {.base.} =
   raise newException(ValueError, "No implementation available")
 
-method onNewMessagesReceived*(self: AccessInterface, sectionIdMsgBelongsTo: string, chatIdMsgBelongsTo: string, 
+method onNewMessagesReceived*(self: AccessInterface, sectionIdMsgBelongsTo: string, chatIdMsgBelongsTo: string,
   chatTypeMsgBelongsTo: ChatType, lastMessageTimestamp: int, unviewedMessagesCount: int, unviewedMentionsCount: int, message: MessageDto) {.base.} =
   raise newException(ValueError, "No implementation available")
 
@@ -109,6 +92,9 @@ method changeMutedOnChat*(self: AccessInterface, chatId: string, muted: bool) {.
   raise newException(ValueError, "No implementation available")
 
 method onMarkAllMessagesRead*(self: AccessInterface, chat: ChatDto) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method onMarkMessageAsUnread*(self: AccessInterface, chat: ChatDto) {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method onCommunityMuted*(self: AccessInterface, chatId: string, muted: bool) {.base.} =
@@ -219,6 +205,9 @@ method markAllMessagesRead*(self: AccessInterface, chatId: string) {.base.} =
 method clearChatHistory*(self: AccessInterface, chatId: string) {.base.} =
   raise newException(ValueError, "No implementation available")
 
+method requestMoreMessages*(self: AccessInterface, chatId: string) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
 method getCurrentFleet*(self: AccessInterface): string {.base.} =
   raise newException(ValueError, "No implementation available")
 
@@ -307,7 +296,7 @@ method exportCommunity*(self: AccessInterface): string {.base.} =
 method setCommunityMuted*(self: AccessInterface, mutedType: int) {.base.} =
   raise newException(ValueError, "No implementation available")
 
-method inviteUsersToCommunity*(self: AccessInterface, pubKeysJSON: string, inviteMessage: string): string {.base.} =
+method shareCommunityToUsers*(self: AccessInterface, pubKeysJSON: string, inviteMessage: string): string {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method createCommunityCategory*(self: AccessInterface, name: string, channels: seq[string]) {.base.} =
@@ -340,13 +329,19 @@ method contactsStatusUpdated*(self: AccessInterface, statusUpdates: seq[StatusUp
 method switchToChannel*(self: AccessInterface, channelName: string) {.base.} =
   raise newException(ValueError, "No implementation available")
 
-method joinSpectatedCommunity*(self: AccessInterface) {.base.} =
-  raise newException(ValueError, "No implementation available")
-
 method createOrEditCommunityTokenPermission*(self: AccessInterface, communityId: string, permissionId: string, permissionType: int, tokenCriteriaJson: string, channelIDs: seq[string], isPrivate: bool) {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method deleteCommunityTokenPermission*(self: AccessInterface, communityId: string, permissionId: string) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method collectCommunityMetricsMessagesTimestamps*(self: AccessInterface, intervals: string) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method collectCommunityMetricsMessagesCount*(self: AccessInterface, intervals: string) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method setCommunityMetrics*(self: AccessInterface, metrics: CommunityMetricsDto) {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method onCommunityTokenPermissionCreated*(self: AccessInterface, communityId: string, tokenPermission: CommunityTokenPermissionDto) {.base.} =
@@ -376,23 +371,10 @@ method onJoinedCommunity*(self: AccessInterface) {.base.} =
 method onAcceptRequestToJoinFailedNoPermission*(self: AccessInterface, communityId: string, memberKey: string, requestId: string) {.base.} =
   raise newException(ValueError, "No implementation available")
 
-method onUserAuthenticated*(self: AccessInterface, pin: string, password: string, keyUid: string) {.base.} =
-  raise newException(ValueError, "No implementation available")
-
 method onDeactivateChatLoader*(self: AccessInterface, chatId: string) {.base.} =
   raise newException(ValueError, "No implementation available")
 
-method requestToJoinCommunityWithAuthentication*(self: AccessInterface, ensName: string, addressesToShare: seq[string],
-    airdropAddress: string) {.base.} =
-  raise newException(ValueError, "No implementation available")
-
-method editSharedAddressesWithAuthentication*(self: AccessInterface, addressesToShare: seq[string], airdropAddress: string)
-    {.base.} =
-  raise newException(ValueError, "No implementation available")
-
-
 method onCommunityCheckPermissionsToJoinResponse*(self: AccessInterface, checkPermissionsToJoinResponse: CheckPermissionsToJoinResponseDto) {.base.} =
- 
   raise newException(ValueError, "No implementation available")
 
 method onCommunityCheckChannelPermissionsResponse*(self: AccessInterface, chatId: string, checkChannelPermissionsResponse: CheckChannelPermissionsResponseDto) {.base.} =
@@ -401,8 +383,24 @@ method onCommunityCheckChannelPermissionsResponse*(self: AccessInterface, chatId
 method onCommunityCheckAllChannelsPermissionsResponse*(self: AccessInterface, checkAllChannelsPermissionsResponse: CheckAllChannelsPermissionsResponseDto) {.base.} =
   raise newException(ValueError, "No implementation available")
 
-method authenticateWithCallback*(self: AccessInterface) {.base.} =
+method setPermissionsToJoinCheckOngoing*(self: AccessInterface, value: bool) {.base.} =
   raise newException(ValueError, "No implementation available")
 
-method callbackFromAuthentication*(self: AccessInterface, authenticated: bool) {.base.} =
+method getPermissionsToJoinCheckOngoing*(self: AccessInterface): bool {.base.} =
   raise newException(ValueError, "No implementation available")
+
+method setChannelsPermissionsCheckOngoing*(self: AccessInterface, value: bool) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method getChannelsPermissionsCheckOngoing*(self: AccessInterface): bool {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method onWaitingOnNewCommunityOwnerToConfirmRequestToRejoin*(self: AccessInterface) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method setCommunityShard*(self: AccessInterface, shardIndex: int) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method setShardingInProgress*(self: AccessInterface, value: bool) {.base.} =
+  raise newException(ValueError, "No implementation available")
+

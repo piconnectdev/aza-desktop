@@ -17,6 +17,7 @@ QtObject:
       chatIcon: string
       chatType: int
       loading: bool
+      keepUnread: bool
 
   proc delete*(self: View) =
     self.model.delete
@@ -36,6 +37,7 @@ QtObject:
     result.chatIcon = ""
     result.chatType = ChatType.Unknown.int
     result.loading = false
+    result.keepUnread = false
 
   proc load*(self: View) =
     self.delegate.viewDidLoad()
@@ -56,6 +58,25 @@ QtObject:
 
   proc unpinMessage*(self: View, messageId: string) {.slot.} =
     self.delegate.pinUnpinMessage(messageId, false)
+
+  proc keepUnreadChanged*(self: View) {.signal.}
+  proc getKeepUnread*(self: View): bool {.slot.} =
+    return self.keepUnread
+
+  QtProperty[bool] keepUnread:
+    read = getKeepUnread
+    notify = keepUnreadChanged
+
+  proc setKeepUnread*(self: View, value: bool) =
+    self.keepUnread = value
+    self.keepUnreadChanged()
+
+  proc markMessageAsUnread*(self: View, messageId: string) {.slot.} =
+    self.delegate.markMessageAsUnread(messageId)
+    self.setKeepUnread(true)
+
+  proc updateKeepUnread*(self: View, flag: bool) {.slot.} =
+    self.setKeepUnread(flag)
 
   proc getMessageByIdAsJson*(self: View, messageId: string): string {.slot.} =
     let jsonObj = self.model.getMessageByIdAsJson(messageId)
@@ -102,14 +123,6 @@ QtObject:
   proc editMessage*(self: View, messageId: string, contentType: int, updatedMsg: string) {.slot.} =
     self.delegate.editMessage(messageId, contentType, updatedMsg)
 
-  proc getLinkPreviewData*(self: View, link: string, uuid: string, whiteListedSites: string, whiteListedImgExtensions: string, unfurlImages: bool): string {.slot.} =
-    return self.delegate.getLinkPreviewData(link, uuid, whiteListedSites, whiteListedImgExtensions, unfurlImages)
-
-  proc linkPreviewDataWasReceived*(self: View, previewData: string, uuid: string) {.signal.}
-
-  proc onPreviewDataLoaded*(self: View, previewData: string, uuid: string) {.slot.} =
-    self.linkPreviewDataWasReceived(previewData, uuid)
-
   proc switchToMessage(self: View, messageIndex: int) {.signal.}
   proc emitSwitchToMessageSignal*(self: View, messageIndex: int) =
     self.switchToMessage(messageIndex)
@@ -130,9 +143,12 @@ QtObject:
   proc jumpToMessage*(self: View, messageId: string) {.slot.} =
     self.delegate.scrollToMessage(messageId)
 
+  proc isEditAllowed(messageImage: string, sticker: string): bool =
+    return messageImage == "" and sticker == ""
+
   proc setEditModeOnAndScrollToLastMessage*(self: View, pubkey: string) {.slot.} =
     let lastMessage = self.model.getLastItemFrom(pubKey)
-    if lastMessage != nil and lastMessage.id != "":
+    if lastMessage != nil and lastMessage.id != "" and isEditAllowed(lastMessage.messageImage, lastMessage.sticker):
       self.model.setEditModeOn(lastMessage.id)
       self.jumpToMessage(lastMessage.id)
 
@@ -232,3 +248,6 @@ QtObject:
 
   proc firstUnseenMentionMessageId(self: View): string {.slot.} =
     return self.model.getFirstUnseenMentionMessageId()
+
+  proc forceLinkPreviewsLocalData*(self: View, messageId: string) {.slot.} =
+    self.delegate.forceLinkPreviewsLocalData(messageId)

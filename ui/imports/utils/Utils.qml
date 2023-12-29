@@ -10,10 +10,12 @@ import StatusQ.Core.Utils 0.1 as StatusQUtils
 
 QtObject {
     property var mainModuleInst: typeof mainModule !== "undefined" ? mainModule : null
+    property var sharedUrlsModuleInst: typeof  sharedUrlsModule !== "undefined" ? sharedUrlsModule : null
     property var globalUtilsInst: typeof globalUtils !== "undefined" ? globalUtils : null
     property var communitiesModuleInst: typeof communitiesModule !== "undefined" ? communitiesModule : null
 
     readonly property int maxImgSizeBytes: Constants.maxUploadFilesizeMB * 1048576 /* 1 MB in bytes */
+    readonly property int communityIdLength: 68
 
     function isDigit(value) {
       return /^\d$/.test(value);
@@ -32,11 +34,19 @@ QtObject {
     }
 
     function isCommunityPublicKey(value) {
-        return (startsWith0x(value) && isHex(value) && value.length === 68) || globalUtilsInst.isCompressedPubKey(value)
+        return (startsWith0x(value) && isHex(value) && value.length === communityIdLength) || globalUtilsInst.isCompressedPubKey(value)
     }
 
     function isCompressedPubKey(pubKey) {
       return globalUtilsInst.isCompressedPubKey(pubKey)
+    }
+
+    function getCommunityIdFromFullChatId(fullChatId) {
+        return fullChatId.substr(0, communityIdLength)
+    }
+
+    function getChannelUuidFromFullChatId(fullChatId) {
+        return fullChatId.substr(communityIdLength, fullChatId.length)
     }
 
     function isValidETHNamePrefix(value) {
@@ -321,10 +331,6 @@ QtObject {
         return link.includes(Constants.deepLinkPrefix) || link.includes(Constants.externalStatusLink)
     }
 
-    function hasImageExtension(url) {
-        return Constants.acceptedImageExtensions.some(ext => url.toLowerCase().includes(ext))
-    }
-
     function removeGifUrls(message) {
         return message.replace(/(?:https?|ftp):\/\/[\n\S]*(\.gif)+/gm, '');
     }
@@ -400,7 +406,7 @@ QtObject {
 
     /* Validation section end */
 
-    function getContactDetailsAsJson(publicKey, getVerificationRequest=true) {
+    function getContactDetailsAsJson(publicKey, getVerificationRequest=true, getOnlineStatus=false) {
         const defaultValue = {
             displayName: "",
             displayIcon: "",
@@ -421,13 +427,14 @@ QtObject {
             removed: false,
             trustStatus: Constants.trustStatus.unknown,
             verificationStatus: Constants.verificationStatus.unverified,
-            incomingVerificationStatus: Constants.verificationStatus.unverified
+            incomingVerificationStatus: Constants.verificationStatus.unverified,
+            onlineStatus: Constants.onlineStatus.inactive
         }
 
         if (!mainModuleInst || !publicKey)
             return defaultValue
 
-        const jsonObj = mainModuleInst.getContactDetailsAsJson(publicKey, getVerificationRequest)
+        const jsonObj = mainModuleInst.getContactDetailsAsJson(publicKey, getVerificationRequest, getOnlineStatus)
 
         try {
             return JSON.parse(jsonObj)
@@ -494,6 +501,18 @@ QtObject {
         return communitiesModuleInst.shareCommunityUrlWithData(communityId)
     }
 
+    function getCommunityChannelShareLink(communityId, channelId) {
+        if (communityId === "" || channelId === "")
+            return ""
+        return communitiesModuleInst.shareCommunityChannelUrlWithData(communityId, channelId)
+    }
+
+    function getCommunityChannelShareLinkWithChatId(chatId) {
+        const communityId = getCommunityIdFromFullChatId(chatId)
+        const channelId = getChannelUuidFromFullChatId(chatId)
+        return getCommunityChannelShareLink(communityId, channelId)
+    }
+
     function getChatKeyFromShareLink(link) {
         let index = link.lastIndexOf("/u/")
         if (index === -1) {
@@ -515,6 +534,19 @@ QtObject {
         return communityKey
     }
 
+    function getCommunityDataFromSharedLink(link) {
+        const index = link.lastIndexOf("/c/")
+        if (index === -1)
+            return null
+
+        const communityDataString = sharedUrlsModuleInst.parseCommunitySharedUrl(link)
+        try {
+            return JSON.parse(communityDataString)
+        } catch (e) {
+            console.warn("Error while parsing community data from url:", e.message)
+            return null
+        }
+    }
 
     function changeCommunityKeyCompression(communityKey) {
         return globalUtilsInst.changeCommunityKeyCompression(communityKey)
@@ -553,10 +585,6 @@ QtObject {
 
     function elideIfTooLong(str, maxLength) {
         return (str.length > maxLength) ? str.substr(0, maxLength-4) + '...' : str;
-    }
-
-    function escapeHtml(unsafeStr) {
-        return globalUtilsInst.escapeHtml(unsafeStr)
     }
 
     function plainText(text) {
@@ -641,9 +669,9 @@ QtObject {
         case Constants.appTranslatableConstants.loginAccountsListLostKeycard:
             return qsTr("Lost Keycard")
         case Constants.appTranslatableConstants.addAccountLabelNewWatchOnlyAccount:
-            return qsTr("New watch-only account")
+            return qsTr("New watched address")
         case Constants.appTranslatableConstants.addAccountLabelWatchOnlyAccount:
-            return qsTr("Watch-only account")
+            return qsTr("Watched address")
         case Constants.appTranslatableConstants.addAccountLabelExisting:
             return qsTr("Existing")
         case Constants.appTranslatableConstants.addAccountLabelImportNew:
@@ -651,7 +679,7 @@ QtObject {
         case Constants.appTranslatableConstants.addAccountLabelOptionAddNewMasterKey:
             return qsTr("Add new master key")
         case Constants.appTranslatableConstants.addAccountLabelOptionAddWatchOnlyAcc:
-            return qsTr("Add watch-only account")
+            return qsTr("Add watched address")
         }
 
         // special handling because on an index attached to the constant
@@ -669,10 +697,32 @@ QtObject {
         return text
     }
 
+    function parseContactUrl(link) {
+        let index = link.lastIndexOf("/u/")
+
+        if (index === -1) {
+            index = link.lastIndexOf("/u#")
+        }
+
+        if (index === -1)
+            return null
+
+        const contactDataString = sharedUrlsModuleInst.parseContactSharedUrl(link)
+        try {
+            return JSON.parse(contactDataString)
+        } catch (e) {
+            return null
+        }
+    }
+
     function dropCommunityLinkPrefix(text) {
         if (text.startsWith(Constants.communityLinkPrefix))
             text = text.slice(Constants.communityLinkPrefix.length)
         return text
+    }
+
+    function copyToClipboard(text) {
+        globalUtilsInst.copyToClipboard(text)
     }
 
     function copyImageToClipboardByUrl(content) {
@@ -787,8 +837,47 @@ QtObject {
     }
 
     function getPathForDisplay(path) {
-        let letters = path.split("/").join(" / ")
-        return letters
+        return path.split("/").join(" / ")
+    }
+
+    function getKeypairLocationColor(keypair) {
+        return !keypair ||
+                keypair.migratedToKeycard ||
+                keypair.operability === Constants.keypair.operability.fullyOperable ||
+                keypair.operability === Constants.keypair.operability.partiallyOperable?
+                    Theme.palette.baseColor1 :
+                    Theme.palette.warningColor1
+    }
+
+    function getKeypairLocation(keypair, fromAccountDetailsView) {
+        if (!keypair || keypair.pairType === Constants.keypair.type.watchOnly) {
+            return ""
+        }
+
+        let profileTitle = ""
+        if (keypair.pairType === Constants.keypair.type.profile) {
+            profileTitle = Utils.getElidedCompressedPk(keypair.pubKey) + Constants.settingsSection.dotSepString
+        }
+        if (keypair.migratedToKeycard) {
+            return profileTitle + qsTr("On Keycard")
+        }
+        if (keypair.operability === Constants.keypair.operability.fullyOperable ||
+                keypair.operability === Constants.keypair.operability.partiallyOperable) {
+            return profileTitle + qsTr("On device")
+        }
+        if (keypair.operability === Constants.keypair.operability.nonOperable) {
+            if (fromAccountDetailsView) {
+                return qsTr("Requires import")
+            } else if (keypair.syncedFrom === Constants.keypair.syncedFrom.backup) {
+                if (keypair.pairType === Constants.keypair.type.seedImport ||
+                        keypair.pairType === Constants.keypair.type.privateKeyImport) {
+                    return qsTr("Restored from backup. Import keypair to use derived accounts.")
+                }
+            }
+            return qsTr("Import keypair to use derived accounts")
+        }
+
+        return ""
     }
 
     // Leave this function at the bottom of the file as QT Creator messes up the code color after this

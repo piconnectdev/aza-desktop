@@ -30,8 +30,8 @@ StatusStackModal {
         readonly property int footerButtonsHeight: 44
         readonly property int popupContentHeight: 551
 
-        function sendInvites(pubKeys, inviteMessage) {
-            const error = root.communitySectionModule.inviteUsersToCommunity(JSON.stringify(pubKeys), inviteMessage);
+        function shareCommunity(pubKeys, inviteMessage) {
+            const error = root.communitySectionModule.shareCommunityToUsers(JSON.stringify(pubKeys), inviteMessage);
             d.processInviteResult(error);
         }
 
@@ -54,8 +54,8 @@ StatusStackModal {
 
     stackTitle: qsTr("Invite Contacts to %1").arg(community.name)
     width: 640
+    height: d.popupContentHeight
 
-    padding: 0
     leftPadding: 0
     rightPadding: 0
 
@@ -75,7 +75,7 @@ StatusStackModal {
         enabled: root.pubKeys.length > 0
         text: qsTr("Send %n invite(s)", "", root.pubKeys.length)
         onClicked: {
-            d.sendInvites(root.pubKeys, root.inviteMessage);
+            d.shareCommunity(root.pubKeys, root.inviteMessage);
             root.close();
         }
     }
@@ -90,30 +90,17 @@ StatusStackModal {
     }
 
     stackItems: [
-        Item {
-            implicitHeight: d.popupContentHeight
-
-            ProfilePopupInviteFriendsPanel {
-                anchors.fill: parent
-                anchors.topMargin: 16
-                anchors.bottomMargin: 16
-
-                rootStore: root.rootStore
-                contactsStore: root.contactsStore
-                community: root.community
-                onPubKeysChanged: root.pubKeys = pubKeys
-            }
+        ProfilePopupInviteFriendsPanel {
+            rootStore: root.rootStore
+            contactsStore: root.contactsStore
+            community: root.community
+            onPubKeysChanged: root.pubKeys = pubKeys
         },
 
-        Item {
-            ProfilePopupInviteMessagePanel {
-                anchors.fill: parent
-                anchors.topMargin: 16
-
-                contactsStore: root.contactsStore
-                pubKeys: root.pubKeys
-                onInviteMessageChanged: root.inviteMessage = inviteMessage
-            }
+        ProfilePopupInviteMessagePanel {
+            contactsStore: root.contactsStore
+            pubKeys: root.pubKeys
+            onInviteMessageChanged: root.inviteMessage = inviteMessage
         }
     ]
 }

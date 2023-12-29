@@ -16,7 +16,7 @@ Item {
     width: rectangleBubble.width
     height: rectangleBubble.height
 
-    property var store
+    property var store              // expected ui/app/AppLayouts/Chat/stores/RootStore.qml
     property var contactsStore
 
     property var transactionParams
@@ -225,30 +225,7 @@ Item {
                 onSendTransaction: {
                     // TODO: https://github.com/status-im/status-desktop/issues/6778
                     console.log("not implemented")
-                    // Global.openPopup(signTxComponent, {selectedAccount: {
-                    //                   name: root.store.getAccountNameByAddress(fromAddress),
-                    //                   address: fromAddress,
-                    //                   color: root.store.getAccountIconColorByAddress(fromAddress),
-                    //                   assets: root.store.getAccountAssetsByAddress(fromAddress)
-                    //               }})
                 }
-            }
-        }
-
-        Component {
-            id: signTxComponent
-            SignTransactionModal {
-                anchors.centerIn: parent
-                store: root.store
-                contactsStore: root.contactsStore
-                selectedAsset: root.token
-                selectedAmount: root.tokenAmount
-                selectedRecipient: root.selectedRecipient
-                selectedFiatAmount: root.fiatValue
-                selectedType: RecipientSelector.Type.Contact
-                chainId: root.store.getChainIdForChat()
-                onClosed: destroy()
-                msgId: messageId
             }
         }
 

@@ -197,6 +197,7 @@ QtObject {
                         `padding: 0px 2px;` +
                     `}` +
                     (hoveredLink !== "" ? `a.mention[href="${hoveredLink}"] { background-color: ${Theme.palette.mentionColor2}; }` : ``) +
+                    (hoveredLink !== "" ? `a[href="${hoveredLink}"] { background-color: ${Theme.palette.primaryColor3}; }` : ``) +
                     `del {` +
                         `text-decoration: line-through;` +
                     `}` +
@@ -244,6 +245,11 @@ QtObject {
 
     function elideText(text, leftCharsCount, rightCharsCount = leftCharsCount) {
         return text.substr(0, leftCharsCount) + "..." + text.substr(text.length - rightCharsCount)
+    }
+
+    function elideAndFormatWalletAddress(address) {
+        return elideText(address, 5, 3).replace(
+                    "0x", "0" + String.fromCodePoint(0x00D7))
     }
 
     function ensureVisible(flickable, rect) {

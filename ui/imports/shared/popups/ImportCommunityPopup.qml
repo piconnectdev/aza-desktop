@@ -15,133 +15,175 @@ import StatusQ.Controls 0.1
 
 StatusDialog {
     id: root
+
     property var store
+    property alias text: keyInput.text
+
+    signal joinCommunityRequested(string communityId, var communityDetails)
+
     width: 640
     title: qsTr("Import Community")
 
     QtObject {
         id: d
         property string importErrorMessage
+
+        readonly property bool communityFound: !!d.communityDetails && !!d.communityDetails.name
+        property var communityDetails: null
+
+        property var requestedCommunityDetails: null
+
         readonly property string inputErrorMessage: isInputValid ? "" : qsTr("Invalid key")
         readonly property string errorMessage: importErrorMessage || inputErrorMessage
         readonly property string inputKey: keyInput.text.trim()
-        readonly property bool isPrivateKey: Utils.isPrivateKey(inputKey)
-        readonly property bool isPublicKey: publicKey !== ""
+        property int shardCluster: -1
+        property int shardIndex: -1
         readonly property string publicKey: {
-            const key = Utils.dropCommunityLinkPrefix(inputKey)
-            if (!Utils.isCommunityPublicKey(key))
+            if (Utils.isStatusDeepLink(inputKey)) {
+                d.shardCluster = -1
+                d.shardIndex = -1
+                const linkData = Utils.getCommunityDataFromSharedLink(inputKey)
+                if (!linkData) {
+                    return ""
+                }
+                if (linkData.shardCluster != undefined && linkData.shardIndex != undefined) {
+                    d.shardCluster = linkData.shardCluster
+                    d.shardIndex = linkData.shardIndex
+                }
+                return linkData.communityId
+            }
+            if (!Utils.isCommunityPublicKey(inputKey))
                 return ""
-            if (!Utils.isCompressedPubKey(key))
-                return key
-            return Utils.changeCommunityKeyCompression(key)
+            if (!Utils.isCompressedPubKey(inputKey))
+                return inputKey
+            return Utils.changeCommunityKeyCompression(inputKey)
+        }
+        readonly property bool isInputValid: publicKey !== ""
+
+        property bool communityInfoRequested: false
+
+        function updateCommunityDetails(requestIfNotFound) {
+            if (!isInputValid) {
+                d.communityInfoRequested = false
+                d.communityDetails = null
+                return
+            }
+
+            const details = root.store.getCommunityDetails(publicKey)
+
+            if (!!details) {
+                d.communityInfoRequested = false
+                d.communityDetails = details
+                return
+            }
+
+            if (requestIfNotFound) {
+                root.store.requestCommunityInfo(publicKey, shardCluster, shardIndex, false)
+                d.communityInfoRequested = true
+                d.communityDetails = null
+            }
         }
 
-        readonly property bool isInputValid: isPrivateKey || isPublicKey
+        onPublicKeyChanged: {
+            // call later to make sure all proeprties used by `updateCommunityDetails` are udpated
+            Qt.callLater(() => { d.updateCommunityDetails(true) })
+        }
+    }
+
+    Connections {
+        target: root.store
+
+        function onCommunityInfoRequestCompleted(communityId, errorMsg) {
+            if (!d.communityInfoRequested)
+                return
+
+            d.communityInfoRequested = false
+
+            if (errorMsg !== "") {
+                d.importErrorMessage = qsTr("Couldn't find community")
+                return
+            }
+
+            d.updateCommunityDetails(false)
+            d.importErrorMessage = ""
+        }
     }
 
     footer: StatusDialogFooter {
         rightButtons: ObjectModel {
-            StatusFlatButton {
-                text: qsTr("Cancel")
-                onClicked: root.reject()
-            }
             StatusButton {
-                id: importButton
-                enabled: d.isInputValid
-                text: d.isPrivateKey ? qsTr("Make this an Owner Node") : qsTr("Import")
+                enabled: d.isInputValid && d.communityFound
+                loading: d.isInputValid && !d.communityFound && d.communityInfoRequested
+                text: qsTr("Import")
                 onClicked: {
-                    if (d.isPrivateKey) {
-                        const communityKey = d.inputKey
-                        if (!communityKey.startsWith("0x")) {
-                            communityKey = "0x" + communityKey;
-                        }
-                        root.store.importCommunity(communityKey);
-                        root.close();
-                    }
-                    if (d.isPublicKey) {
-                        importButton.loading = true
-                        root.store.requestCommunityInfo(d.publicKey, true)
-                        root.close();
-                    }
+                    root.joinCommunityRequested(d.publicKey, d.communityDetails)
                 }
             }
         }
     }
 
-    ColumnLayout {
+    StatusScrollView {
+        id: scrollContent
         anchors.fill: parent
-        spacing: Style.current.padding
+        anchors.leftMargin: Style.current.halfPadding
+        contentWidth: (root.width-Style.current.bigPadding-Style.current.padding)
+        padding: 0
 
-        StatusBaseText {
-            id: infoText1
-            Layout.fillWidth: true
-            text: qsTr("Enter the public key of the community you wish to access, or enter the private key of a community you own. Remember to always keep any private key safe and never share a private key with anyone else.")
-            wrapMode: Text.WordWrap
-            font.pixelSize: 13
-            color: Theme.palette.baseColor1
-        }
+        ColumnLayout {
+            width: (scrollContent.width-Style.current.padding)
+            spacing: Style.current.halfPadding
 
-        StatusBaseText {
-            id: inputLabel
-            text: qsTr("Community key")
-            color: Theme.palette.directColor1
-            font.pixelSize: 15
-        }
+            StatusBaseText {
+                id: infoText1
+                Layout.fillWidth: true
+                text: qsTr("Enter the public key of the community you wish to access")
+                wrapMode: Text.WordWrap
+                font.pixelSize: Style.current.additionalTextSize
+                color: Theme.palette.baseColor1
+            }
 
-        StatusTextArea {
-            id: keyInput
-            Layout.fillWidth: true
-            implicitHeight: 110
-            placeholderText: "0x0..."
-            wrapMode: TextEdit.WrapAtWordBoundaryOrAnywhere
-            onTextChanged: d.importErrorMessage = ""
-          }
+            StatusBaseText {
+                id: inputLabel
+                text: qsTr("Community key")
+                color: Theme.palette.directColor1
+            }
 
-        StatusBaseText {
-            id: detectionLabel
-            Layout.fillWidth: true
-            horizontalAlignment: Text.AlignRight
-            verticalAlignment: Text.AlignVCenter
-            font.pixelSize: 13
-            visible: keyInput.text.trim() !== ""
-            text: {
-                if (d.errorMessage !== "") {
-                  return d.errorMessage
+            StatusTextArea {
+                id: keyInput
+                Layout.fillWidth: true
+                Layout.preferredHeight: 108
+                placeholderText: "0x0..."
+                wrapMode: TextEdit.WrapAtWordBoundaryOrAnywhere
+                onTextChanged: d.importErrorMessage = ""
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.minimumHeight: 46
+                Layout.maximumHeight: 46
+                StatusChatInfoButton {
+                    visible: d.communityFound
+                    title: visible ? d.communityDetails.name : ""
+                    subTitle: visible ? qsTr("%n member(s)", "", d.communityDetails.nbMembers) : ""
+                    asset.name: visible ? d.communityDetails.image : ""
+                    asset.isImage: (asset.name !== "")
+                    asset.color: visible ? d.communityDetails.color : ""
                 }
-                if (d.isPrivateKey) {
-                    return qsTr("Private key detected")
-                }
-                if (d.isPublicKey) {
-                    return qsTr("Public key detected")
+                Item { Layout.fillWidth: true }
+                StatusBaseText {
+                    id: detectionLabel
+                    Layout.alignment: Qt.AlignRight
+                    font.pixelSize: Style.current.additionalTextSize
+                    visible: !!d.inputKey
+                    text: {
+                        if (d.errorMessage !== "")
+                            return d.errorMessage
+                        if (d.isInputValid)
+                            return qsTr("Public key detected")
+                        return ""
+                    }
+                    color: d.errorMessage === "" ? Theme.palette.successColor1 : Theme.palette.dangerColor1
                 }
             }
-            color: d.errorMessage === "" ? Theme.palette.successColor1 : Theme.palette.dangerColor1
         }
-    }
-
-
-    Connections {
-      target: root.store
-      function onImportingCommunityStateChanged(communityId, state, errorMsg) {
-          let communityKey = keyInput.text.trim();
-          if (d.isPublicKey) {
-              let currentCommunityKey = Utils.isCompressedPubKey(communityKey) ?
-                  Utils.changeCommunityKeyCompression(communityKey) :
-                  communityKey
-
-              if (communityId == currentCommunityKey) {
-                  importButton.loading = false
-                  if (state === Constants.communityImported && root.opened) {
-                    root.close()
-                    return
-                  }
-              }
-
-              if (state === Constants.communityImportingError) {
-                d.importErrorMessage = errorMsg
-                importButton.loading = false
-              }
-          }
-      }
     }
 }

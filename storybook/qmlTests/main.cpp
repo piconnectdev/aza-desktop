@@ -1,5 +1,6 @@
-#include <QtQuickTest/quicktest.h>
 #include <QQmlEngine>
+#include <QtQuickTest>
+
 #include "src/TextUtils.h"
 
 class Setup : public QObject
@@ -14,13 +15,15 @@ public slots:
             QML_IMPORT_ROOT + QStringLiteral("/../ui/app"),
             QML_IMPORT_ROOT + QStringLiteral("/../ui/imports"),
             QML_IMPORT_ROOT + QStringLiteral("/stubs"),
-            QML_IMPORT_ROOT + QStringLiteral("/mocks"),
+            QML_IMPORT_ROOT + QStringLiteral("/src")
         };
 
         for (const auto& path : additionalImportPaths)
             engine->addImportPath(path);
 
         qmlRegisterSingletonType<TextUtils>("TextUtils", 1, 0, "TextUtils", &TextUtils::qmlInstance);
+
+        QStandardPaths::setTestModeEnabled(true);
     }
 };
 

@@ -24,7 +24,20 @@ SplitView {
             SplitView.fillWidth: true
             SplitView.fillHeight: true
 
+            Timer {
+                id: feeCalculationTimer
+
+                interval: 2000
+
+                onTriggered: {
+                    editOwnerTokenView.feeText = "0.0015 ETH ($75.43)"
+                    editOwnerTokenView.isFeeLoading = false
+                }
+            }
+
             EditOwnerTokenView {
+                id: editOwnerTokenView
+
                 anchors.fill: parent
                 anchors.margins: 50
 
@@ -34,12 +47,19 @@ SplitView {
 
                 layer1Networks: NetworksModel.layer1Networks
                 layer2Networks: NetworksModel.layer2Networks
-                testNetworks: NetworksModel.testNetworks
                 enabledNetworks: NetworksModel.enabledNetworks
                 allNetworks: enabledNetworks
                 accounts: WalletAccountsModel {}
 
                 onMintClicked: logs.logEvent("EditOwnerTokenView::onMintClicked")
+
+                Component.onCompleted: {
+                    feeText = ""
+                    feeErrorText = ""
+                    isFeeLoading = true
+
+                    feeCalculationTimer.restart()
+                }
             }
         }
 
@@ -93,3 +113,7 @@ SplitView {
         }
     }
 }
+
+// category: Views
+
+// https://www.figma.com/file/17fc13UBFvInrLgNUKJJg5/Kuba%E2%8E%9CDesktop?type=design&node-id=34794-590207&mode=design&t=ZnwK9yenS5oSgwws-0

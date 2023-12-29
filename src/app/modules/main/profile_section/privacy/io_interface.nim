@@ -25,9 +25,6 @@ method viewDidLoad*(self: AccessInterface) {.base.} =
 method isMnemonicBackedUp*(self: AccessInterface): bool {.base.} =
   raise newException(ValueError, "No implementation available")
 
-method getLinkPreviewWhitelist*(self: AccessInterface): string {.base.} =
-  raise newException(ValueError, "No implementation available")
-
 method changePassword*(self: AccessInterface, password: string, newPassword: string) {.base.} =
   raise newException(ValueError, "No implementation available")
 
@@ -35,6 +32,9 @@ method getMnemonic*(self: AccessInterface): string {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method removeMnemonic*(self: AccessInterface) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method mnemonicWasShown*(self: AccessInterface) {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method getMnemonicWordAtIndex*(self: AccessInterface, index: int): string {.base.} =
@@ -51,6 +51,12 @@ method getMessagesFromContactsOnly*(self: AccessInterface): bool {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method setMessagesFromContactsOnly*(self: AccessInterface, value: bool) {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method urlUnfurlingMode*(self: AccessInterface): int {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method setUrlUnfurlingMode*(self: AccessInterface, value: int) {.base.} =
   raise newException(ValueError, "No implementation available")
 
 method validatePassword*(self: AccessInterface, password: string): bool {.base.} =
@@ -75,4 +81,7 @@ method onUserAuthenticated*(self: AccessInterface, pin: string, password: string
   raise newException(ValueError, "No implementation available")
 
 method backupData*(self: AccessInterface): int64 {.base.} =
+  raise newException(ValueError, "No implementation available")
+
+method onUrlUnfurlingModeUpdated*(self: AccessInterface, mode: int) {.base.} =
   raise newException(ValueError, "No implementation available")

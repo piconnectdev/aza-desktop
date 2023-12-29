@@ -1,7 +1,8 @@
 import NimQml, json, os, chronicles, random, strutils
 import keycard_go
-import ../../../app/core/eventemitter
-import ../../../app/core/tasks/[qt, threadpool]
+import app/global/global_singleton
+import app/core/eventemitter
+import app/core/tasks/[qt, threadpool]
 import ../../../constants as status_const
 
 import constants
@@ -36,9 +37,14 @@ const SupportedMnemonicLength18* = 18
 const SupportedMnemonicLength24* = 24
 
 const MnemonicLengthForStatusApp = SupportedMnemonicLength12
-const TimerIntervalInMilliseconds = 3 * 1000 # 3 seconds
+const ReRunCurrentFlowInterval = 3 * 1000 # 3 seconds
+const CheckKeycardAvailabilityInterval = 1000 # 1 seconds
 
 const SIGNAL_KEYCARD_RESPONSE* = "keycardResponse"
+
+type TimerReason {.pure.} = enum
+  ReRunCurrentFlowLater = "ReRunCurrentFlowLater"
+  WaitForKeycardAvailability = "WaitForKeycardAvailability"
 
 logScope:
   topics = "keycard-service"
@@ -62,6 +68,16 @@ QtObject:
     lastReceivedKeycardData: tuple[flowType: string, flowEvent: KeycardEvent]
     setPayloadForCurrentFlow: JsonNode
     doLogging: bool
+    busy: bool
+    waitingFlows: seq[tuple[flow: KCSFlowType, payload: JsonNode]]
+    registeredCallback: proc ()
+
+  ## Forward declaration
+  proc startFlow(self: Service, payload: JsonNode)
+  proc runTimer(self: Service, timeoutInMilliseconds: int, reason: string)
+
+  proc isBusy*(self: Service): bool =
+    return self.busy
 
   proc delete*(self: Service) =
     self.closingApp = true
@@ -107,7 +123,13 @@ QtObject:
     self.events.emit(SIGNAL_KEYCARD_RESPONSE, KeycardLibArgs(flowType: flowType, flowEvent: flowEvent))
 
   proc receiveKeycardSignal(self: Service, signal: string) {.slot.} =
+    self.busy = false
     self.processSignal(signal)
+    if self.waitingFlows.len > 0:
+      let (flow, payload) = self.waitingFlows[0]
+      self.waitingFlows.delete(0)
+      self.currentFlow = flow
+      self.startFlow(payload)
 
   proc getLastReceivedKeycardData*(self: Service): tuple[flowType: string, flowEvent: KeycardEvent] =
     return self.lastReceivedKeycardData
@@ -131,22 +153,75 @@ QtObject:
     return self.currentFlow
 
   proc startFlow(self: Service, payload: JsonNode) =
+    if self.busy:
+      self.waitingFlows.add((flow: self.currentFlow, payload: payload))
+      return
+    self.busy = true
     self.updateLocalPayloadForCurrentFlow(payload, cleanBefore = true)
     let response = keycard_go.keycardStartFlow(self.currentFlow.int, $payload)
     if self.doLogging:
       debug "keycardStartFlow", kcServiceCurrFlow=($self.currentFlow), payload=payload, response=response
 
   proc resumeFlow(self: Service, payload: JsonNode) =
+    if self.busy:
+      return
+    self.busy = true
     self.updateLocalPayloadForCurrentFlow(payload)
     let response = keycard_go.keycardResumeFlow($payload)
     if self.doLogging:
       debug "keycardResumeFlow", kcServiceCurrFlow=($self.currentFlow), payload=payload, response=response
 
   proc cancelCurrentFlow*(self: Service) =
+    if self.busy:
+      return
     let response = keycard_go.keycardCancelFlow()
     self.currentFlow = KCSFlowType.NoFlow
     if self.doLogging:
       debug "keycardCancelFlow", kcServiceCurrFlow=($self.currentFlow), response=response
+
+  ##########################################################
+  ## Used in test env only, for testing keycard flows
+  proc registerMockedKeycard*(self: Service, cardIndex: int, readerState: int, keycardState: int,
+  mockedKeycard: string, mockedKeycardHelper: string) =
+    if not singletonInstance.localAppSettings.getTestEnvironment():
+      error "registerMockedKeycard can be used only in test env"
+      return
+    let response = keycard_go.mockedLibRegisterKeycard(cardIndex, readerState, keycardState, mockedKeycard, mockedKeycardHelper)
+    if self.doLogging:
+      debug "mockedLibRegisterKeycard", kcServiceCurrFlow=($self.currentFlow), cardIndex=cardIndex, readerState=readerState, keycardState=keycardState, mockedKeycard=mockedKeycard, mockedKeycardHelper=mockedKeycardHelper, response=response
+
+  proc pluginMockedReaderAction*(self: Service) =
+    if not singletonInstance.localAppSettings.getTestEnvironment():
+      error "pluginMockedReaderAction can be used only in test env"
+      return
+    let response = keycard_go.mockedLibReaderPluggedIn()
+    if self.doLogging:
+      debug "mockedLibReaderPluggedIn", kcServiceCurrFlow=($self.currentFlow), response=response
+
+  proc unplugMockedReaderAction*(self: Service) =
+    if not singletonInstance.localAppSettings.getTestEnvironment():
+      error "unplugMockedReaderAction can be used only in test env"
+      return
+    let response = keycard_go.mockedLibReaderUnplugged()
+    if self.doLogging:
+      debug "mockedLibReaderUnplugged", kcServiceCurrFlow=($self.currentFlow), response=response
+
+  proc insertMockedKeycardAction*(self: Service, cardIndex: int) =
+    if not singletonInstance.localAppSettings.getTestEnvironment():
+      error "insertMockedKeycardAction can be used only in test env"
+      return
+    let response = keycard_go.mockedLibKeycardInserted(cardIndex)
+    if self.doLogging:
+      debug "mockedLibKeycardInserted", kcServiceCurrFlow=($self.currentFlow), cardIndex=cardIndex, response=response
+
+  proc removeMockedKeycardAction*(self: Service) =
+    if not singletonInstance.localAppSettings.getTestEnvironment():
+      error "removeMockedKeycardAction can be used only in test env"
+      return
+    let response = keycard_go.mockedLibKeycardRemoved()
+    if self.doLogging:
+      debug "mockedLibKeycardRemoved", kcServiceCurrFlow=($self.currentFlow), response=response
+  ##########################################################
 
   proc generateRandomPUK*(self: Service): string =
     randomize()
@@ -154,13 +229,23 @@ QtObject:
       result = result & $rand(0 .. 9)
 
   proc onTimeout(self: Service, response: string) {.slot.} =
-    if(self.closingApp or self.currentFlow == KCSFlowType.NoFlow):
-      return
-    if self.doLogging:
-      debug "onTimeout, about to start flow: ", kcServiceCurrFlow=($self.currentFlow)
-    self.startFlow(self.setPayloadForCurrentFlow)
+    if response == $TimerReason.ReRunCurrentFlowLater:
+      if(self.closingApp or self.currentFlow == KCSFlowType.NoFlow):
+        return
+      if self.doLogging:
+        debug "onTimeout, about to start flow: ", kcServiceCurrFlow=($self.currentFlow)
+      self.startFlow(self.setPayloadForCurrentFlow)
+    elif response == $TimerReason.WaitForKeycardAvailability:
+      if self.busy:
+        self.runTimer(CheckKeycardAvailabilityInterval, $TimerReason.WaitForKeycardAvailability)
+        return
+      if self.registeredCallback != nil:
+        self.registeredCallback()
+        self.registeredCallback = nil
+    else:
+      error "unknown timer reason", reason = response
 
-  proc runTimer(self: Service) =
+  proc runTimer(self: Service, timeoutInMilliseconds: int, reason: string) =
     if(self.closingApp or self.currentFlow == KCSFlowType.NoFlow):
       return
 
@@ -168,7 +253,8 @@ QtObject:
       tptr: cast[ByteAddress](timerTask),
       vptr: cast[ByteAddress](self.vptr),
       slot: "onTimeout",
-      timeoutInMilliseconds: TimerIntervalInMilliseconds
+      timeoutInMilliseconds: timeoutInMilliseconds,
+      reason: reason
     )
     self.threadpool.start(arg)
 
@@ -301,7 +387,7 @@ QtObject:
     self.currentFlow = KCSFlowType.StoreMetadata
     self.startFlow(payload)
 
-  proc startSignFlow*(self: Service, bip44Path: string, txHash: string) =
+  proc startSignFlow*(self: Service, bip44Path: string, txHash: string, pin: string = "") =
     var payload = %* {
       RequestParamTXHash: EmptyTxHash,
       RequestParamBIP44Path: DefaultBIP44Path
@@ -310,6 +396,8 @@ QtObject:
       payload[RequestParamTXHash] = %* txHash
     if bip44Path.len > 0:
       payload[RequestParamBIP44Path] = %* bip44Path
+    if pin.len > 0:
+      payload[RequestParamPIN] = %* pin
     self.currentFlow = KCSFlowType.Sign
     self.startFlow(payload)
 
@@ -393,4 +481,11 @@ QtObject:
     let tmpFlow = self.currentFlow
     self.cancelCurrentFlow()
     self.currentFlow = tmpFlow
-    self.runTimer()
+    self.runTimer(ReRunCurrentFlowInterval, "reRunCurrentFlowLater")
+
+  proc registerForKeycardAvailability*(self: Service, p: proc()) =
+    if not self.busy:
+      error "registerForKeycardAvailability can be called only when keycard is busy"
+      return
+    self.registeredCallback = p
+    self.runTimer(CheckKeycardAvailabilityInterval, $TimerReason.WaitForKeycardAvailability)

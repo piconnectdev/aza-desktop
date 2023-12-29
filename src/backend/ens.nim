@@ -1,6 +1,5 @@
 import json
 import ./core, ./response_type
-import ../app_service/common/utils
 export response_type
 
 proc getEnsUsernames*(): RpcResponse[JsonNode] {.raises: [Exception].} =
@@ -58,38 +57,26 @@ proc resourceURL*(chainId: int, username: string): RpcResponse[JsonNode] {.raise
   let payload = %* [chainId, username]
   return core.callPrivateRPC("ens_resourceURL", payload)
 
-proc register*(
-  chainId: int, txData: JsonNode, password: string, username: string, pubkey: string
-): RpcResponse[JsonNode] {.raises: [Exception].} =
-  let payload = %* [chainId, txData, utils.hashPassword(password), username, pubkey]
-  return core.callPrivateRPC("ens_register", payload)
+proc prepareTxForRegisterEnsUsername*(chainId: int, txData: JsonNode, username: string, pubkey: string): RpcResponse[JsonNode] {.raises: [Exception].} =
+  let payload = %* [chainId, txData, username, pubkey]
+  return core.callPrivateRPC("ens_registerPrepareTx", payload)
 
-proc registerEstimate*(
-  chainId: int, txData: JsonNode, username: string, pubkey: string
-): RpcResponse[JsonNode] {.raises: [Exception].} =
+proc registerEstimate*(chainId: int, txData: JsonNode, username: string, pubkey: string): RpcResponse[JsonNode] {.raises: [Exception].} =
   let payload = %* [chainId, txData, username, pubkey]
   return core.callPrivateRPC("ens_registerEstimate", payload)
 
-proc release*(
-  chainId: int, txData: JsonNode, password: string, username: string
-): RpcResponse[JsonNode] {.raises: [Exception].} =
-  let payload = %* [chainId, txData, utils.hashPassword(password), username]
-  return core.callPrivateRPC("ens_release", payload)
+proc prepareTxForReleaseEnsUsername*(chainId: int, txData: JsonNode, username: string): RpcResponse[JsonNode] {.raises: [Exception].} =
+  let payload = %* [chainId, txData, username]
+  return core.callPrivateRPC("ens_releasePrepareTx", payload)
 
-proc releaseEstimate*(
-  chainId: int, txData: JsonNode, username: string
-): RpcResponse[JsonNode] {.raises: [Exception].} =
+proc releaseEstimate*(chainId: int, txData: JsonNode, username: string): RpcResponse[JsonNode] {.raises: [Exception].} =
   let payload = %* [chainId, txData, username]
   return core.callPrivateRPC("ens_releaseEstimate", payload)
 
-proc setPubKey*(
-  chainId: int, txData: JsonNode, password: string, username: string, pubkey: string
-): RpcResponse[JsonNode] {.raises: [Exception].} =
-  let payload = %* [chainId, txData, utils.hashPassword(password), username, pubkey]
-  return core.callPrivateRPC("ens_setPubKey", payload)
+proc prepareTxForSetPubKey*(chainId: int, txData: JsonNode, username: string, pubkey: string): RpcResponse[JsonNode] {.raises: [Exception].} =
+  let payload = %* [chainId, txData, username, pubkey]
+  return core.callPrivateRPC("ens_setPubKeyPrepareTx", payload)
 
-proc setPubKeyEstimate*(
-  chainId: int, txData: JsonNode, username: string, pubkey: string
-): RpcResponse[JsonNode] {.raises: [Exception].} =
+proc setPubKeyEstimate*(chainId: int, txData: JsonNode, username: string, pubkey: string): RpcResponse[JsonNode] {.raises: [Exception].} =
   let payload = %* [chainId, txData, username, pubkey]
   return core.callPrivateRPC("ens_setPubKeyEstimate", payload)

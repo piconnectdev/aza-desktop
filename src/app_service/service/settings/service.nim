@@ -1,13 +1,13 @@
 import NimQml, chronicles, json, strutils, sequtils, tables
 
-import ../../common/types as common_types
-import ../../common/social_links
-import ../../common/utils as common_utils
-import ../../../app/core/eventemitter
-import ../../../app/core/fleets/fleet_configuration
-import ../../../app/core/signals/types
-import ../../../backend/settings as status_settings
-import ../../../backend/status_update as status_update
+import app_service/common/types as common_types
+import app_service/common/social_links
+import app_service/common/utils as common_utils
+import app/core/eventemitter
+import app/core/fleets/fleet_configuration
+import app/core/signals/types
+import backend/settings as status_settings
+import backend/status_update as status_update
 
 import ./dto/settings as settings_dto
 import ../stickers/dto/stickers as stickers_dto
@@ -27,7 +27,8 @@ const SIGNAL_BIO_UPDATED* = "bioUpdated"
 const SIGNAL_MNEMONIC_REMOVED* = "mnemonicRemoved"
 const SIGNAL_SOCIAL_LINKS_UPDATED* = "socialLinksUpdated"
 const SIGNAL_CURRENT_USER_STATUS_UPDATED* = "currentUserStatusUpdated"
-const SIGNAL_INCLUDE_WATCH_ONLY_ACCOUNTS_UPDATED* = "includeWatchOnlyAccounts"
+const SIGNAL_PROFILE_MIGRATION_NEEDED_UPDATED* = "profileMigrationNeededUpdated"
+const SIGNAL_URL_UNFURLING_MODE_UPDATED* = "urlUnfurlingModeUpdated"
 
 logScope:
   topics = "settings-service"
@@ -44,8 +45,11 @@ type
     socialLinks*: SocialLinks
     error*: string
 
-  SettingProfilePictureArgs* = ref object of Args
-    value*: int
+  SettingsBoolValueArgs* = ref object of Args
+    value*: bool
+
+  UrlUnfurlingModeArgs* = ref object of Args
+    value*: UrlUnfurlingMode
 
 QtObject:
   type Service* = ref object of QObject
@@ -110,9 +114,12 @@ QtObject:
           if settingsField.name == KEY_MNEMONIC:
             self.settings.mnemonic = ""
             self.events.emit(SIGNAL_MNEMONIC_REMOVED, Args())
-          if settingsField.name == INCLUDE_WATCH_ONLY_ACCOUNT:
-            self.settings.includeWatchOnlyAccount = settingsField.value.getBool
-            self.events.emit(SIGNAL_INCLUDE_WATCH_ONLY_ACCOUNTS_UPDATED, Args())
+          if settingsField.name == PROFILE_MIGRATION_NEEDED:
+            self.settings.profileMigrationNeeded = settingsField.value.getBool
+            self.events.emit(SIGNAL_PROFILE_MIGRATION_NEEDED_UPDATED, SettingsBoolValueArgs(value: self.settings.profileMigrationNeeded))
+          if settingsField.name == KEY_URL_UNFURLING_MODE:
+            self.settings.urlUnfurlingMode = toUrlUnfurlingMode(settingsField.value.getInt)
+            self.events.emit(SIGNAL_URL_UNFURLING_MODE_UPDATED, UrlUnfurlingModeArgs(value: self.settings.urlUnfurlingMode))
 
       if receivedData.socialLinksInfo.links.len > 0 or
         receivedData.socialLinksInfo.removed:
@@ -411,6 +418,8 @@ QtObject:
       return self.settings.pinnedMailserver.statusTest
     elif (fleet == Fleet.StatusProd):
       return self.settings.pinnedMailserver.statusProd
+    elif (fleet == Fleet.ShardsTest):
+      return self.settings.pinnedMailserver.shardsTest
     return ""
 
   proc pinMailserver*(self: Service, mailserverID: string, fleet: Fleet): bool =
@@ -431,6 +440,8 @@ QtObject:
         self.settings.pinnedMailserver.statusTest = mailserverID
       elif (fleet == Fleet.StatusProd):
         self.settings.pinnedMailserver.statusProd = mailserverID
+      elif (fleet == Fleet.ShardsTest):
+        self.settings.pinnedMailserver.shardsTest = mailserverID
       return true
     return false
 
@@ -476,6 +487,36 @@ QtObject:
       self.settings.testNetworksEnabled = newValue
       return true
     return false
+
+  proc isSepoliaEnabled*(self: Service): bool =
+    return self.settings.isSepoliaEnabled
+
+  proc toggleIsSepoliaEnabled*(self: Service): bool =
+    let newValue = not self.settings.isSepoliaEnabled
+    if(self.saveSetting(KEY_IS_SEPOLIA_ENABLED, newValue)):
+      self.settings.isSepoliaEnabled = newValue
+      return true
+    return false
+
+  proc tokenGroupByCommunity*(self: Service): bool =
+    return self.settings.tokenGroupByCommunity
+
+  proc toggleTokenGroupByCommunity*(self: Service): bool =
+    let newValue = not self.settings.tokenGroupByCommunity
+    if(self.saveSetting(KEY_TOKEN_GROUP_BY_COMMUNITY, newValue)):
+      self.settings.tokenGroupByCommunity = newValue
+      return true
+    return false
+
+  proc urlUnfurlingMode*(self: Service): UrlUnfurlingMode =
+    return self.settings.urlUnfurlingMode
+
+  proc saveUrlUnfurlingMode*(self: Service, value: UrlUnfurlingMode): bool =
+    if not self.saveSetting(KEY_URL_UNFURLING_MODE, int(value)):
+      return false
+    self.settings.urlUnfurlingMode = value
+    self.events.emit(SIGNAL_URL_UNFURLING_MODE_UPDATED, UrlUnfurlingModeArgs(value: self.settings.urlUnfurlingMode))
+    return true
 
   proc notifSettingAllowNotificationsChanged*(self: Service) {.signal.}
   proc getNotifSettingAllowNotifications*(self: Service): bool {.slot.} =
@@ -967,11 +1008,11 @@ QtObject:
       error "error saving social links", errDescription=data.error
     self.storeSocialLinksAndNotify(data)
 
-  proc isIncludeWatchOnlyAccount*(self: Service): bool =
-    return self.settings.includeWatchOnlyAccount
+  proc getProfileMigrationNeeded*(self: Service): bool =
+    self.settings.profileMigrationNeeded
 
-  proc toggleIncludeWatchOnlyAccount*(self: Service) =
-    let newValue = not self.settings.includeWatchOnlyAccount
-    if(self.saveSetting(INCLUDE_WATCH_ONLY_ACCOUNT, newValue)):
-      self.settings.includeWatchOnlyAccount = newValue
-      self.events.emit(SIGNAL_INCLUDE_WATCH_ONLY_ACCOUNTS_UPDATED, Args())
+  proc mnemonicWasShown*(self: Service) =
+    let response = status_settings.mnemonicWasShown()
+    if(not response.error.isNil):
+      error "error saving mnemonic was shown setting: ", errDescription = response.error.message
+      return

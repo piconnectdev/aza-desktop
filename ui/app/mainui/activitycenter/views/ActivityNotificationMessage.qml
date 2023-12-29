@@ -12,7 +12,7 @@ import utils 1.0
 ActivityNotificationBase {
     id: root
 
-    readonly property bool isOutgoingMessage: notification && notification.message && notification.message.amISender
+    readonly property bool isOutgoingMessage: notification && notification.message && notification.message.amISender || false
     readonly property string contactId: notification ? isOutgoingMessage ? notification.chatId : notification.author : ""
     readonly property string contactName: contactDetails ? ProfileUtils.displayName(contactDetails.localNickname, contactDetails.name,
                                                                       contactDetails.displayName, contactDetails.alias) : ""
@@ -40,6 +40,10 @@ ActivityNotificationBase {
             colorId: Utils.colorIdForPubkey(contactId)
             colorHash: Utils.getColorHashAsJson(contactId, sender.isEnsVerified)
         }
+        contentType: notification && notification.message ? notification.message.contentType : StatusMessage.ContentType.Unknown
+        album: notification && notification.message ? notification.message.albumMessageImages.split(" ") : []
+        albumCount: notification && notification.message ? notification.message.albumImagesCount : 0
+        messageContent: notification && notification.message ? notification.message.messageImage : ""
     }
 
     property Component messageSubheaderComponent: null

@@ -6,17 +6,22 @@ import StatusQ.Core 0.1
 import StatusQ.Core.Theme 0.1
 import StatusQ.Controls 0.1
 import StatusQ.Components 0.1
+import StatusQ.Core.Utils 0.1 as SQUtils
 
 import AppLayouts.Communities.layouts 1.0
 import AppLayouts.Communities.panels 1.0
+import AppLayouts.Communities.popups 1.0
+import AppLayouts.Communities.helpers 1.0
 
 import shared.popups 1.0
+
 
 import utils 1.0
 
 StackLayout {
     id: root
 
+    required property bool isOwner
     property string communityId
     property string name
     property string description
@@ -32,13 +37,27 @@ StackLayout {
     property bool requestToJoinEnabled
     property bool pinMessagesEnabled
     property string previousPageName: (currentIndex === 1) ? qsTr("Overview") : ""
+    property var sendModalPopup
 
     property bool archiveSupporVisible: true
     property bool editable: false
-    property bool owned: false
     property bool isControlNode: false
     property int loginType: Constants.LoginType.Password
     property bool communitySettingsDisabled
+    property var accounts // Wallet accounts model. Expected roles: address, name, color, emoji, walletType
+    property var ownerToken: null
+
+    property string overviewChartData: ""
+
+    property bool shardingEnabled
+    property int shardIndex: -1
+    property bool shardingInProgress
+    property string pubsubTopic
+    property string pubsubTopicKey
+
+    // Community transfer ownership related props:
+    required property bool isPendingOwnershipRequest
+    signal finaliseOwnershipClicked
 
     function navigateBack() {
         if (editSettingsPanelLoader.item.dirty)
@@ -47,12 +66,17 @@ StackLayout {
             root.currentIndex = 0
     }
 
+    signal collectCommunityMetricsMessagesCount(var intervals)
+
     signal edited(Item item) // item containing edited fields (name, description, logoImagePath, color, options, etc..)
 
     signal inviteNewPeopleClicked
     signal airdropTokensClicked
     signal exportControlNodeClicked
     signal importControlNodeClicked
+    signal mintOwnerTokenClicked
+
+    signal shardIndexEdited(int shardIndex)
 
     clip: true
 
@@ -97,6 +121,28 @@ StackLayout {
                 StatusButton {
                     Layout.preferredHeight: 38
                     Layout.alignment: Qt.AlignTop
+                    objectName: "communityOverviewSettingsTransferOwnershipButton"
+                    visible: root.isOwner
+                    text: qsTr("Transfer ownership")
+                    size: StatusBaseButton.Size.Small
+
+                    onClicked: {
+                        if(!!root.ownerToken && root.ownerToken.deployState === Constants.ContractTransactionStatus.Completed) {
+                            Global.openTransferOwnershipPopup(root.communityId,
+                                                              root.name,
+                                                              root.logoImageData,
+                                                              root.ownerToken,
+                                                              root.accounts,
+                                                              root.sendModalPopup)
+                        } else {
+                            Global.openPopup(transferOwnershipAlertPopup, { mode: TransferOwnershipAlertPopup.Mode.TransferOwnership })
+                        }
+                    }
+                }
+
+                StatusButton {
+                    Layout.preferredHeight: 38
+                    Layout.alignment: Qt.AlignTop
                     objectName: "communityOverviewSettingsEditCommunityButton"
                     visible: root.editable
                     text: qsTr("Edit Community")
@@ -113,11 +159,21 @@ StackLayout {
             }
 
             OverviewSettingsChart {
+                model: JSON.parse(root.overviewChartData)
+                onCollectCommunityMetricsMessagesCount: {
+                    root.collectCommunityMetricsMessagesCount(intervals)
+                }
                 Layout.topMargin: 16
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.bottomMargin: 16
+
+                Connections {
+                    target: root
+                    onCommunityIdChanged: reset()
+                }
             }
+
             Rectangle {
                 Layout.fillWidth: true
 
@@ -129,16 +185,26 @@ StackLayout {
 
     Component {
         id: overviewSettingsFooterComp
+
         OverviewSettingsFooter {
             rightPadding: 64
             leftPadding: 64
             bottomPadding: 64
             topPadding: 0
-            loginType: root.loginType
             communityName: root.name
+            communityColor: root.color
             isControlNode: root.isControlNode
-            onExportControlNodeClicked: root.exportControlNodeClicked()
+            isPendingOwnershipRequest: root.isPendingOwnershipRequest
+
+            onExportControlNodeClicked:{
+                if(!!root.ownerToken && root.ownerToken.deployState === Constants.ContractTransactionStatus.Completed) {
+                    root.exportControlNodeClicked()
+                } else {
+                    Global.openPopup(transferOwnershipAlertPopup, { mode: TransferOwnershipAlertPopup.Mode.MoveControlNode })
+                }
+            }
             onImportControlNodeClicked: root.importControlNodeClicked()
+            onFinaliseOwnershipTransferClicked: root.finaliseOwnershipClicked()
             //TODO update once the domain changes
             onLearnMoreClicked: Global.openLink(Constants.statusHelpLinkPrefix + "status-communities/about-the-control-node-in-status-communities")
         }
@@ -228,6 +294,12 @@ StackLayout {
                     pinMessagesEnabled: root.pinMessagesEnabled
                 }
 
+                shardingEnabled: root.shardingEnabled
+                shardIndex: root.shardIndex
+                shardingInProgress: root.shardingInProgress
+                pubsubTopic: root.pubsubTopic
+                pubsubTopicKey: root.pubsubTopicKey
+
                 bottomReservedSpace:
                     Qt.size(settingsDirtyToastMessage.implicitWidth,
                             settingsDirtyToastMessage.implicitHeight +
@@ -240,6 +312,8 @@ StackLayout {
                     property: "bottomMargin"
                     value: 24
                 }
+
+                onShardIndexEdited: root.shardIndexEdited(shardIndex)
             }
         }
 
@@ -267,6 +341,17 @@ StackLayout {
                 root.edited(editSettingsPanelLoader.item)
                 editSettingsPanelLoader.reloadContent()
             }
+        }
+    }
+
+    Component {
+        id: transferOwnershipAlertPopup
+
+        TransferOwnershipAlertPopup {
+            communityName: root.name
+            communityLogo: root.logoImageData
+
+            onMintClicked: root.mintOwnerTokenClicked()
         }
     }
 }

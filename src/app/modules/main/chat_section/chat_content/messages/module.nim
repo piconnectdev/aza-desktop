@@ -1,4 +1,4 @@
-import NimQml, chronicles, sequtils
+import NimQml, chronicles, sequtils, uuids, sets, times, tables
 import io_interface
 import ../io_interface as delegate_interface
 import view, controller
@@ -6,6 +6,7 @@ import ../../../../shared_models/message_model
 import ../../../../shared_models/message_item
 import ../../../../shared_models/message_reaction_item
 import ../../../../shared_models/message_transaction_parameters_item
+import ../../../../shared_models/link_preview_model
 import ../../../../../global/global_singleton
 import ../../../../../core/eventemitter
 import ../../../../../../app_service/service/contacts/dto/contacts
@@ -14,6 +15,7 @@ import ../../../../../../app_service/service/community/service as community_serv
 import ../../../../../../app_service/service/chat/service as chat_service
 import ../../../../../../app_service/service/message/service as message_service
 import ../../../../../../app_service/service/mailservers/service as mailservers_service
+import ../../../../../../app_service/service/shared_urls/service as shared_urls_service
 import ../../../../../../app_service/common/types
 
 export io_interface
@@ -41,17 +43,19 @@ type
     moduleLoaded: bool
     initialMessagesLoaded: bool
     firstUnseenMessageState: FirstUnseenMessageState
+    getMessageRequestId: UUID
 
 proc newModule*(delegate: delegate_interface.AccessInterface, events: EventEmitter, sectionId: string, chatId: string,
-  belongsToCommunity: bool, contactService: contact_service.Service, communityService: community_service.Service,
-  chatService: chat_service.Service, messageService: message_service.Service, mailserversService: mailservers_service.Service):
+    belongsToCommunity: bool, contactService: contact_service.Service, communityService: community_service.Service,
+    chatService: chat_service.Service, messageService: message_service.Service,
+    mailserversService: mailservers_service.Service, sharedUrlsService: shared_urls_service.Service):
   Module =
   result = Module()
   result.delegate = delegate
   result.view = view.newView(result)
   result.viewVariant = newQVariant(result.view)
   result.controller = controller.newController(result, events, sectionId, chatId, belongsToCommunity, contactService,
-  communityService, chatService, messageService, mailserversService)
+    communityService, chatService, messageService, mailserversService, sharedUrlsService)
   result.moduleLoaded = false
   result.initialMessagesLoaded = false
   result.firstUnseenMessageState = (false, false, false)
@@ -61,6 +65,9 @@ proc createChatIdentifierItem(self: Module): Item
 proc createFetchMoreMessagesItem(self: Module): Item
 proc setChatDetails(self: Module, chatDetails: ChatDto)
 proc updateItemsByAlbum(self: Module, items: var seq[Item], message: MessageDto): bool
+proc updateLinkPreviewsContacts(self: Module, item: Item, requestFromMailserver: bool)
+proc updateLinkPreviewsCommunities(self: Module, item: Item, requestFromMailserver: bool)
+proc currentUserWalletContainsAddress(self: Module, address: string): bool
 
 method delete*(self: Module) =
   self.controller.delete
@@ -87,6 +94,171 @@ method viewDidLoad*(self: Module) =
 
 method getModuleAsVariant*(self: Module): QVariant =
   return self.viewVariant
+
+# TODO: Fetch the message from status-go. The generated albumIdToImagesMap is built on the messages received and does not account for
+#       older messages for which the images would not be found. Ticket https://github.com/status-im/status-desktop/issues/12821
+proc generateAlbumIdToImageMap(self: Module, messages: seq[MessageDto]): Table[string, seq[string]] =
+  var albumIdToImagesMap = initTable[string, seq[string]]()
+
+  for message in messages:
+    if message.albumId in albumIdToImagesMap:
+      albumIdToImagesMap[message.albumId].add(message.image)
+    else:
+      albumIdToImagesMap[message.albumId] = @[message.image]
+
+  return albumIdToImagesMap
+
+
+proc setQuotedMessageImages(self: Module, message: MessageDto, items: var seq[Item], albumIdToImagesMap: Table[string, seq[string]]) =
+  for i in 0 ..< items.len:
+    let item = items[i]
+
+    var quotedMessageAlbumMessageImages = item.quotedMessageAlbumMessageImages
+
+    if message.id != item.responseToMessageWithId:
+      continue
+    if message.albumId notin albumIdToImagesMap:
+      continue
+
+    quotedMessageAlbumMessageImages = albumIdToImagesMap[message.albumId]
+    item.quotedMessageAlbumMessageImages = quotedMessageAlbumMessageImages
+    item.quotedMessageAlbumImagesCount = quotedMessageAlbumMessageImages.len
+    items[i] = item
+
+proc createMessageItemsFromMessageDtos(self: Module, messages: seq[MessageDto], reactions: seq[ReactionDto] = @[]): seq[Item] =
+  var albumIdToImagesMap = self.generateAlbumIdToImageMap(messages)
+  for message in messages:
+    # https://github.com/status-im/status-desktop/issues/7632 will introduce deleteFroMe feature.
+    # Now we just skip deleted messages
+    if message.deletedForMe:
+      continue
+
+    # Add image to album if album already exists
+    if (message.contentType == ContentType.Image and len(message.albumId) != 0):
+      if (self.view.model().updateAlbumIfExists(message.albumId, message.image, message.id)):
+        continue
+
+      self.setQuotedMessageImages(message, result, albumIdToImagesMap)
+
+      if (self.updateItemsByAlbum(result, message)):
+        continue
+
+    let sender = self.controller.getContactDetails(message.`from`)
+
+    var quotedMessageAuthorDetails = ContactDetails()
+    if message.quotedMessage.`from` != "":
+      if(message.`from` == message.quotedMessage.`from`):
+        quotedMessageAuthorDetails = sender
+      else:
+        quotedMessageAuthorDetails = self.controller.getContactDetails(message.quotedMessage.`from`)
+
+    var deletedByContactDetails = ContactDetails()
+    if message.deletedBy != "":
+      if(message.`from` == message.deletedBy):
+        deletedByContactDetails = sender
+      else:
+        deletedByContactDetails = self.controller.getContactDetails(message.deletedBy)
+
+    # remove a message which has replace parameters filled
+    let index = self.view.model().findIndexForMessageId(message.replace)
+    if(index != -1):
+      self.view.model().removeItem(message.replace)
+
+    var communityChats: seq[ChatDto]
+    communityChats = self.controller.getCommunityDetails().chats
+
+    var renderedMessageText = self.controller.getRenderedText(message.parsedText, communityChats)
+
+    var transactionContract = message.transactionParameters.contract
+    var transactionValue = message.transactionParameters.value
+    var isCurrentUser = sender.isCurrentUser
+    if(message.contentType == ContentType.Transaction):
+      (transactionContract, transactionValue) = self.controller.getTransactionDetails(message)
+      if message.transactionParameters.fromAddress != "":
+        isCurrentUser = self.currentUserWalletContainsAddress(message.transactionParameters.fromAddress)
+
+    var item = initItem(
+      message.id,
+      message.communityId,
+      message.responseTo,
+      message.`from`,
+      sender.defaultDisplayName,
+      sender.optionalName,
+      sender.icon,
+      sender.colorHash,
+      (isCurrentUser and message.contentType != ContentType.DiscordMessage),
+      sender.dto.added,
+      message.outgoingStatus,
+      renderedMessageText,
+      message.text,
+      message.parsedText,
+      message.image,
+      message.containsContactMentions(),
+      message.seen,
+      timestamp = message.timestamp,
+      clock = message.clock,
+      message.contentType,
+      message.messageType,
+      message.contactRequestState,
+      sticker = message.sticker.url,
+      message.sticker.pack,
+      message.links,
+      message.linkPreviews,
+      newTransactionParametersItem(message.transactionParameters.id,
+        message.transactionParameters.fromAddress,
+        message.transactionParameters.address,
+        transactionContract,
+        transactionValue,
+        message.transactionParameters.transactionHash,
+        message.transactionParameters.commandState,
+        message.transactionParameters.signature),
+      message.mentionedUsersPks(),
+      sender.dto.trustStatus,
+      sender.dto.ensVerified,
+      message.discordMessage,
+      resendError = "",
+      message.deleted,
+      message.deletedBy,
+      deletedByContactDetails,
+      message.mentioned,
+      message.quotedMessage.`from`,
+      message.quotedMessage.text,
+      self.controller.getRenderedText(message.quotedMessage.parsedText, communityChats),
+      message.quotedMessage.contentType,
+      message.quotedMessage.deleted,
+      message.quotedMessage.discordMessage,
+      quotedMessageAuthorDetails,
+      message.quotedMessage.albumImages,
+      message.quotedMessage.albumImagesCount,
+      message.albumId,
+      if (len(message.albumId) == 0): @[] else: @[message.image],
+      if (len(message.albumId) == 0): @[] else: @[message.id],
+      message.albumImagesCount,
+      )
+
+    self.updateLinkPreviewsContacts(item, requestFromMailserver = item.seen)
+    self.updateLinkPreviewsCommunities(item, requestFromMailserver = item.seen)
+
+    for r in reactions:
+      if(r.messageId == message.id):
+        var emojiIdAsEnum: EmojiId
+        if(message_reaction_item.toEmojiIdAsEnum(r.emojiId, emojiIdAsEnum)):
+          let userWhoAddedThisReaction = self.controller.getContactById(r.`from`)
+          let didIReactWithThisEmoji = userWhoAddedThisReaction.id == singletonInstance.userProfile.getPubKey()
+          item.addReaction(emojiIdAsEnum, didIReactWithThisEmoji, userWhoAddedThisReaction.id,
+            userWhoAddedThisReaction.userDefaultDisplayName(), r.id)
+        else:
+          error "wrong emoji id found when loading messages", methodName="newMessagesLoaded"
+
+    if message.editedAt != 0:
+      item.isEdited = true
+
+    if(message.contentType == ContentType.Gap):
+      item.gapFrom = message.gapParameters.`from`
+      item.gapTo = message.gapParameters.to
+
+    result.add(item)
+
 
 proc createFetchMoreMessagesItem(self: Module): Item =
   let chatDto = self.controller.getChatDetails()
@@ -123,6 +295,9 @@ proc createFetchMoreMessagesItem(self: Module): Item =
     senderEnsVerified = false,
     DiscordMessage(),
     resendError = "",
+    deleted = false,
+    deletedBy = "",
+    deletedByContactDetails = ContactDetails(),
     mentioned = false,
     quotedMessageFrom = "",
     quotedMessageText = "",
@@ -131,6 +306,8 @@ proc createFetchMoreMessagesItem(self: Module): Item =
     quotedMessageDeleted = false,
     quotedMessageDiscordMessage = DiscordMessage(),
     quotedMessageAuthorDetails = ContactDetails(),
+    quotedMessageAlbumMessageImages = @[],
+    quotedMessageAlbumImagesCount = 0,
     albumId = "",
     albumMessageImages = @[],
     albumMessageIds = @[],
@@ -183,6 +360,9 @@ proc createChatIdentifierItem(self: Module): Item =
     senderEnsVerified = false,
     DiscordMessage(),
     resendError = "",
+    deleted = false,
+    deletedBy = "",
+    deletedByContactDetails = ContactDetails(),
     mentioned = false,
     quotedMessageFrom = "",
     quotedMessageText = "",
@@ -191,6 +371,8 @@ proc createChatIdentifierItem(self: Module): Item =
     quotedMessageDeleted = false,
     quotedMessageDiscordMessage = DiscordMessage(),
     quotedMessageAuthorDetails = ContactDetails(),
+    quotedMessageAlbumMessageImages = @[],
+    quotedMessageAlbumImagesCount = 0,
     albumId = "",
     albumMessageImages = @[],
     albumMessageIds = @[],
@@ -227,120 +409,8 @@ method reevaluateViewLoadingState*(self: Module) =
                        self.view.getMessageSearchOngoing())
 
 method newMessagesLoaded*(self: Module, messages: seq[MessageDto], reactions: seq[ReactionDto]) =
-  var viewItems: seq[Item]
-
   if(messages.len > 0):
-    for message in messages:
-      # https://github.com/status-im/status-desktop/issues/7632 will introduce deleteFroMe feature.
-      # Now we just skip deleted messages
-      if message.deleted or message.deletedForMe:
-        continue
-
-      let chatDetails = self.controller.getChatDetails()
-
-      let sender = self.controller.getContactDetails(message.`from`)
-      var quotedMessageAuthorDetails = ContactDetails()
-      if message.quotedMessage.`from` != "":
-        if(message.`from` == message.quotedMessage.`from`):
-          quotedMessageAuthorDetails = sender
-        else:
-          quotedMessageAuthorDetails = self.controller.getContactDetails(message.quotedMessage.`from`)
-
-      var communityChats: seq[ChatDto]
-      if chatDetails.communityId != "":
-        communityChats = self.controller.getCommunityById(chatDetails.communityId).chats
-
-      var renderedMessageText = self.controller.getRenderedText(message.parsedText, communityChats)
-
-      # Add image to album if album already exists
-      if (message.contentType == ContentType.Image and len(message.albumId) != 0):
-        if (self.view.model().updateAlbumIfExists(message.albumId, message.image, message.id)):
-          continue
-
-        if (self.updateItemsByAlbum(viewItems, message)):
-          continue
-
-      var transactionContract = message.transactionParameters.contract
-      var transactionValue = message.transactionParameters.value
-      var isCurrentUser = sender.isCurrentUser
-      if(message.contentType == ContentType.Transaction):
-        (transactionContract, transactionValue) = self.controller.getTransactionDetails(message)
-        if message.transactionParameters.fromAddress != "":
-          isCurrentUser = self.currentUserWalletContainsAddress(message.transactionParameters.fromAddress)
-      var item = initItem(
-        message.id,
-        message.communityId,
-        message.responseTo,
-        message.`from`,
-        sender.defaultDisplayName,
-        sender.optionalName,
-        sender.icon,
-        sender.colorHash,
-        (isCurrentUser and message.contentType != ContentType.DiscordMessage),
-        sender.dto.added,
-        message.outgoingStatus,
-        renderedMessageText,
-        message.text,
-        message.parsedText,
-        message.image,
-        message.containsContactMentions(),
-        message.seen,
-        timestamp = message.timestamp,
-        clock = message.clock,
-        message.contentType,
-        message.messageType,
-        message.contactRequestState,
-        sticker = message.sticker.url,
-        message.sticker.pack,
-        message.links,
-        message.linkPreviews,
-        newTransactionParametersItem(message.transactionParameters.id,
-          message.transactionParameters.fromAddress,
-          message.transactionParameters.address,
-          transactionContract,
-          transactionValue,
-          message.transactionParameters.transactionHash,
-          message.transactionParameters.commandState,
-          message.transactionParameters.signature),
-        message.mentionedUsersPks(),
-        sender.dto.trustStatus,
-        sender.dto.ensVerified,
-        message.discordMessage,
-        resendError = "",
-        message.mentioned,
-        message.quotedMessage.`from`,
-        message.quotedMessage.text,
-        self.controller.getRenderedText(message.quotedMessage.parsedText, communityChats),
-        message.quotedMessage.contentType,
-        message.quotedMessage.deleted,
-        message.quotedMessage.discordMessage,
-        quotedMessageAuthorDetails,
-        message.albumId,
-        if (len(message.albumId) == 0): @[] else: @[message.image],
-        if (len(message.albumId) == 0): @[] else: @[message.id],
-        message.albumImagesCount,
-        )
-
-      for r in reactions:
-        if(r.messageId == message.id):
-          var emojiIdAsEnum: EmojiId
-          if(message_reaction_item.toEmojiIdAsEnum(r.emojiId, emojiIdAsEnum)):
-            let userWhoAddedThisReaction = self.controller.getContactById(r.`from`)
-            let didIReactWithThisEmoji = userWhoAddedThisReaction.id == singletonInstance.userProfile.getPubKey()
-            item.addReaction(emojiIdAsEnum, didIReactWithThisEmoji, userWhoAddedThisReaction.id,
-            userWhoAddedThisReaction.userDefaultDisplayName(), r.id)
-          else:
-            error "wrong emoji id found when loading messages", methodName="newMessagesLoaded"
-
-      if message.editedAt != 0:
-        item.isEdited = true
-
-      if(message.contentType == ContentType.Gap):
-        item.gapFrom = message.gapParameters.`from`
-        item.gapTo = message.gapParameters.to
-
-      # messages are sorted from the most recent to the least recent one
-      viewItems.add(item)
+    var viewItems = self.createMessageItemsFromMessageDtos(messages, reactions)
 
     if self.controller.getChatDetails().hasMoreMessagesToRequest():
       viewItems.add(self.createFetchMoreMessagesItem())
@@ -362,100 +432,7 @@ method newPinnedMessagesLoaded*(self: Module, pinnedMessages: seq[PinnedMessageD
     self.onPinMessage(p.message.id, p.pinnedBy)
 
 method messagesAdded*(self: Module, messages: seq[MessageDto]) =
-  var items: seq[Item]
-
-  for message in messages:
-    let sender = self.controller.getContactDetails(message.`from`)
-    let chatDetails = self.controller.getChatDetails()
-    let communityChats = self.controller.getCommunityById(chatDetails.communityId).chats
-    var quotedMessageAuthorDetails = ContactDetails()
-    if message.quotedMessage.`from` != "":
-      if(message.`from` == message.quotedMessage.`from`):
-        quotedMessageAuthorDetails = sender
-      else:
-        quotedMessageAuthorDetails = self.controller.getContactDetails(message.quotedMessage.`from`)
-
-    let renderedMessageText = self.controller.getRenderedText(message.parsedText, communityChats)
-
-    var transactionContract = message.transactionParameters.contract
-    var transactionValue = message.transactionParameters.value
-    var isCurrentUser = sender.isCurrentUser
-    if message.contentType == ContentType.Transaction:
-      (transactionContract, transactionValue) = self.controller.getTransactionDetails(message)
-      if message.transactionParameters.fromAddress != "":
-        isCurrentUser = self.currentUserWalletContainsAddress(message.transactionParameters.fromAddress)
-    # remove a message which has replace parameters filled
-    let index = self.view.model().findIndexForMessageId(message.replace)
-    if(index != -1):
-      self.view.model().removeItem(message.replace)
-
-    # https://github.com/status-im/status-desktop/issues/7632 will introduce deleteFroMe feature.
-    # Now we just skip deleted messages
-    if message.deleted or message.deletedForMe:
-      continue
-
-    # Add image to album if album already exists
-    if (message.contentType == ContentType.Image and len(message.albumId) != 0):
-      if (self.view.model().updateAlbumIfExists(message.albumId, message.image, message.id)):
-        continue
-      
-      if (self.updateItemsByAlbum(items, message)):
-        continue
-
-    var item = initItem(
-      message.id,
-      message.communityId,
-      message.responseTo,
-      message.`from`,
-      sender.defaultDisplayName,
-      sender.optionalName,
-      sender.icon,
-      sender.colorHash,
-      (isCurrentUser and message.contentType != ContentType.DiscordMessage),
-      sender.dto.added,
-      message.outgoingStatus,
-      renderedMessageText,
-      message.text,
-      message.parsedText,
-      message.image,
-      message.containsContactMentions(),
-      message.seen,
-      timestamp = message.timestamp,
-      clock = message.clock,
-      message.contentType,
-      message.messageType,
-      message.contactRequestState,
-      sticker = message.sticker.url,
-      message.sticker.pack,
-      message.links,
-      message.linkPreviews,
-      newTransactionParametersItem(message.transactionParameters.id,
-                      message.transactionParameters.fromAddress,
-                      message.transactionParameters.address,
-                      transactionContract,
-                      transactionValue,
-                      message.transactionParameters.transactionHash,
-                      message.transactionParameters.commandState,
-                      message.transactionParameters.signature),
-      message.mentionedUsersPks,
-      sender.dto.trustStatus,
-      sender.dto.ensVerified,
-      message.discordMessage,
-      resendError = "",
-      message.mentioned,
-      message.quotedMessage.`from`,
-      message.quotedMessage.text,
-      self.controller.getRenderedText(message.quotedMessage.parsedText, communityChats),
-      message.quotedMessage.contentType,
-      message.quotedMessage.deleted,
-      message.quotedMessage.discordMessage,
-      quotedMessageAuthorDetails,
-      message.albumId,
-      if (len(message.albumId) == 0): @[] else: @[message.image],
-      if (len(message.albumId) == 0): @[] else: @[message.id],
-      message.albumImagesCount,
-    )
-    items.add(item)
+  let items = self.createMessageItemsFromMessageDtos(messages)
 
   self.view.model().insertItemsBasedOnClock(items)
 
@@ -533,11 +510,17 @@ method toggleReactionFromOthers*(self: Module, messageId: string, emojiId: int, 
 method pinUnpinMessage*(self: Module, messageId: string, pin: bool) =
   self.controller.pinUnpinMessage(messageId, pin)
 
+method markMessageAsUnread*(self: Module, messageId: string) =
+  self.controller.markMessageAsUnread(messageId)
+
 method onPinMessage*(self: Module, messageId: string, actionInitiatedBy: string) =
   self.view.model().pinUnpinMessage(messageId, true, actionInitiatedBy)
 
 method onUnpinMessage*(self: Module, messageId: string) =
   self.view.model().pinUnpinMessage(messageId, false, "")
+
+method onMarkMessageAsUnread*(self: Module, messageId: string) =
+  self.view.model().markMessageAsUnread(messageId)
 
 method getSectionId*(self: Module): string =
   return self.controller.getMySectionId()
@@ -558,15 +541,16 @@ method getChatIcon*(self: Module): string =
   return chatDto.icon
 
 method amIChatAdmin*(self: Module): bool =
-  if(not self.controller.belongsToCommunity()):
+  if not self.controller.belongsToCommunity():
     let chatDto = self.controller.getChatDetails()
     for member in chatDto.members:
       if (member.id == singletonInstance.userProfile.getPubKey()):
-        return member.role == MemberRole.Owner or member.role == MemberRole.Admin
+        # TODO untangle this. There is no special roles for group chats
+        return member.role == MemberRole.Owner or member.role == MemberRole.Admin or member.role == MemberRole.TokenMaster
     return false
   else:
     let communityDto = self.controller.getCommunityDetails()
-    return communityDto.memberRole == MemberRole.Owner or communityDto.memberRole == MemberRole.Admin
+    return communityDto.isPrivilegedUser
 
 method pinMessageAllowedForMembers*(self: Module): bool =
   if(self.controller.belongsToCommunity()):
@@ -595,15 +579,24 @@ method updateContactDetails*(self: Module, contactId: string) =
       item.quotedMessageAuthorAvatar = updatedContact.icon
 
     if item.messageContainsMentions and item.mentionedUsersPks.anyIt(it == contactId):
-      let chatDetails = self.controller.getChatDetails()
-      let communityChats = self.controller.getCommunityById(chatDetails.communityId).chats
+      let communityChats = self.controller.getCommunityDetails().chats
       item.messageText = self.controller.getRenderedText(item.parsedText, communityChats)
+
+    item.linkPreviewModel.setContactInfo(updatedContact)
 
 method deleteMessage*(self: Module, messageId: string) =
   self.controller.deleteMessage(messageId)
 
-method onMessageDeleted*(self: Module, messageId: string) =
-  self.view.model().removeItem(messageId)
+method onMessageDeleted*(self: Module, messageId, deletedBy: string) =
+  var deletedByValue = deletedBy
+  if deletedBy == "":
+    # deletedBy is empty if it was deleted by the sender
+    let messageItem = self.view.model().getItemWithMessageId(messageId)
+    if messageItem.id == "":
+      return
+    deletedByValue = messageItem.senderId
+  var deletedByContactDetails = self.controller.getContactDetails(deletedByValue)
+  self.view.model().messageDeleted(messageId, deletedByValue, deletedByContactDetails)
 
 method editMessage*(self: Module, messageId: string, contentType: int, updatedMsg: string) =
   self.controller.editMessage(messageId, contentType, updatedMsg)
@@ -614,8 +607,7 @@ method onMessageEdited*(self: Module, message: MessageDto) =
     return
 
   let mentionedUsersPks = itemBeforeChange.mentionedUsersPks
-  let chatDetails = self.controller.getChatDetails()
-  let communityChats = self.controller.getCommunityById(chatDetails.communityId).chats
+  let communityChats = self.controller.getCommunityDetails().chats
 
   self.view.model().updateEditedMsg(
     message.id,
@@ -631,6 +623,8 @@ method onMessageEdited*(self: Module, message: MessageDto) =
 
 method onHistoryCleared*(self: Module) =
   self.view.model().clear()
+  # Add ChatIdentifier back after model is cleared, so that the chat screen is not blank
+  self.view.model().insertItemBasedOnClock(self.createChatIdentifierItem())
 
 method updateChatIdentifier*(self: Module) =
   let chatDto = self.controller.getChatDetails()
@@ -646,12 +640,6 @@ method updateChatFetchMoreMessages*(self: Module) =
   if (self.controller.getChatDetails().hasMoreMessagesToRequest()):
     self.view.model().insertItemBasedOnClock(self.createFetchMoreMessagesItem())
 
-method getLinkPreviewData*(self: Module, link: string, uuid: string, whiteListedSites: string, whiteListedImgExtensions: string, unfurlImages: bool): string =
-  return self.controller.getLinkPreviewData(link, uuid, whiteListedSites, whiteListedImgExtensions, unfurlImages)
-
-method onPreviewDataLoaded*(self: Module, previewData: string, uuid: string) =
-  self.view.onPreviewDataLoaded(previewData, uuid)
-
 proc switchToMessage*(self: Module, messageId: string) =
   let index = self.view.model().findIndexForMessageId(messageId)
   if(index != -1):
@@ -661,13 +649,25 @@ proc switchToMessage*(self: Module, messageId: string) =
     self.controller.setSearchedMessageId(messageId)
 
 method scrollToMessage*(self: Module, messageId: string) =
-  if(messageId == ""):
+  if messageId == "":
     return
 
-  if(self.view.getMessageSearchOngoing()):
+  if self.view.getMessageSearchOngoing():
     return
 
+  self.getMessageRequestId = self.controller.asyncGetMessageById(messageId)
   self.view.setMessageSearchOngoing(true)
+
+method onGetMessageById*(self: Module, requestId: UUID, messageId: string, message: MessageDto, errorMessage: string) =
+
+  if self.getMessageRequestId != requestId:
+    return
+
+  if errorMessage != "":
+    error "attempted to scroll to a not fetched message", errorMessage, messageId, chatId = self.controller.getMyChatId()
+    self.view.setMessageSearchOngoing(false)
+    return
+
   self.controller.setSearchedMessageId(messageId)
   self.checkIfMessageLoadedAndScrollToItIfItIs()
   self.reevaluateViewLoadingState()
@@ -724,8 +724,12 @@ method markMessagesAsRead*(self: Module, messages: seq[string]) =
   self.view.model().markAsSeen(messages)
 
 method updateCommunityDetails*(self: Module, community: CommunityDto) =
-  self.view.setAmIChatAdmin(community.memberRole == MemberRole.Owner or community.memberRole == MemberRole.Admin)
-  self.view.setIsPinMessageAllowedForMembers(community.adminSettings.pinMessageAllMembersEnabled)
+  if community.id == self.getSectionId():
+    self.view.setAmIChatAdmin(community.isPrivilegedUser)
+    self.view.setIsPinMessageAllowedForMembers(community.adminSettings.pinMessageAllMembersEnabled)
+
+  for item in self.view.model().items:
+    item.linkPreviewModel.setCommunityInfo(community)
 
 proc setChatDetails(self: Module, chatDetails: ChatDto) =
   self.view.setChatColor(chatDetails.color)
@@ -762,3 +766,41 @@ method onFirstUnseenMessageLoaded*(self: Module, messageId: string) =
   self.firstUnseenMessageState.initialized = true
   self.firstUnseenMessageState.fetching = false
   self.reevaluateViewLoadingState()
+
+method forceLinkPreviewsLocalData*(self: Module, messageId: string) =
+  let item = self.view.model().getItemWithMessageId(messageId)
+  debug "forceLinkPreviewsLocalData", messageId, itemFound = $(item != nil)
+  if item == nil:
+    return
+  self.updateLinkPreviewsContacts(item, requestFromMailserver = true)
+  self.updateLinkPreviewsCommunities(item, requestFromMailserver = true)
+
+proc updateLinkPreviewsContacts(self: Module, item: Item, requestFromMailserver: bool) =
+  for contactId in item.linkPreviewModel.getContactIds().items:
+    let contact = self.controller.getContactDetails(contactId)
+
+    if contact.dto.displayName != "":
+      item.linkPreviewModel.setContactInfo(contact)
+
+    if not requestFromMailserver:
+      continue
+    
+    debug "updateLinkPreviewsContacts: contact not found, requesting from mailserver", contactId
+    item.linkPreviewModel.onContactDataRequested(contactId)
+    self.controller.requestContactInfo(contactId)
+  
+proc updateLinkPreviewsCommunities(self: Module, item: Item, requestFromMailserver: bool) =
+  for communityId, url in item.linkPreviewModel.getCommunityLinks().pairs:
+    let community = self.controller.getCommunityById(communityId)
+    
+    if community.id != "":
+      item.linkPreviewModel.setCommunityInfo(community)
+    
+    if not requestFromMailserver:
+      continue
+    
+    debug "updateLinkPreviewsCommunites: requesting from mailserver", communityId
+    let urlData = self.controller.parseSharedUrl(url)
+    item.linkPreviewModel.onCommunityInfoRequested(communityId)
+    self.controller.requestCommunityInfo(communityId, urlData.community.shard, useDatabase = false, initDuration(minutes = 10))
+

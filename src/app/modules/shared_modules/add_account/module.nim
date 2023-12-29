@@ -1,7 +1,7 @@
 import NimQml, Tables, strutils, sequtils, sugar, chronicles
 
 import io_interface
-import view, controller, derived_address_model
+import view, controller
 import internal/[state, state_factory]
 
 import ../../../core/eventemitter
@@ -9,7 +9,7 @@ import ../../../core/eventemitter
 import ../../../global/global_singleton
 
 import ../../shared/keypairs
-import ../../shared_models/[keypair_model]
+import ../../shared_models/[keypair_model, derived_address_model]
 import ../../shared_modules/keycard_popup/module as keycard_shared_module
 
 import ../../../../app_service/common/account_constants
@@ -69,6 +69,8 @@ proc newModule*[T](delegate: T,
   result.controller = controller.newController(result, events, accountsService, walletAccountService, keycardService)
   result.authenticationReason = AuthenticationReason.AddingAccount
   result.fetchingAddressesIsInProgress = false
+
+{.push warning[Deprecated]: off.}
 
 method delete*[T](self: Module[T]) =
   self.view.delete
@@ -599,6 +601,7 @@ proc doAddAccount[T](self: Module[T]) =
     keyUid = selectedOrigin.getKeyUid()
     createKeystoreFile = not selectedOrigin.getMigratedToKeycard()
     doPasswordHashing = not singletonInstance.userProfile.getIsKeycardUser()
+    hideFromTotalBalance = false
 
   if selectedOrigin.getPairType() == KeyPairType.Profile.int:
     accountType = account_constants.GENERATED
@@ -616,6 +619,7 @@ proc doAddAccount[T](self: Module[T]) =
     addingNewKeyPair = not self.isKeyPairAlreadyAdded(keyUid)
   else:
     accountType = account_constants.WATCH
+    hideFromTotalBalance = true
     createKeystoreFile = false
     doPasswordHashing = false
     keypairName = ""
@@ -678,7 +682,8 @@ proc doAddAccount[T](self: Module[T]) =
       keyUid = keyUid,
       accountType = accountType,
       colorId = self.view.getSelectedColorId(),
-      emoji = self.view.getSelectedEmoji())
+      emoji = self.view.getSelectedEmoji(),
+      hideFromTotalBalance = hideFromTotalBalance)
     if not success:
       error "failed to store account", address=selectedAddrItem.getAddress()
 
@@ -738,3 +743,5 @@ method buildNewSeedPhraseKeypairAndAddItToOrigin*[T](self: Module[T]) =
     pairType = KeyPairType.SeedImport,
     derivedFrom = genAcc.address)
   self.setItemForSelectedOrigin(item)
+
+{.pop.}

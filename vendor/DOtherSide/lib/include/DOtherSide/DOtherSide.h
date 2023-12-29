@@ -60,6 +60,8 @@ DOS_API void DOS_CALL dos_qguiapplication_enable_hdpi(const char *uiScaleFilePat
 
 DOS_API void DOS_CALL dos_qguiapplication_initialize_opengl(void);
 
+DOS_API void DOS_CALL dos_qtwebview_initialize(void);
+
 DOS_API void DOS_CALL dos_qguiapplication_try_enable_threaded_renderer();
 
 /// \brief Create a QGuiApplication
@@ -998,7 +1000,6 @@ DOS_API void DOS_CALL dos_singleinstance_delete(DosSingleInstance *vptr);
 
 #pragma region Events exposed methods
 
-DOS_API DosEvent* dos_event_create_showAppEvent(DosQQmlApplicationEngine* vptr);
 DOS_API DosEvent* dos_event_create_osThemeEvent(DosQQmlApplicationEngine* vptr);
 DOS_API DosEvent* dos_event_create_urlSchemeEvent();
 DOS_API void dos_event_delete(DosEvent* vptr);

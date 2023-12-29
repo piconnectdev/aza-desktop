@@ -12,7 +12,7 @@ import shared 1.0
 import shared.panels 1.0
 import shared.status 1.0
 import shared.controls 1.0
-import shared.popups 1.0
+import shared.popups.send 1.0
 
 Item {
     id: root
@@ -63,18 +63,19 @@ Item {
             id: connectEnsModal
             modalHeader: qsTr("Connect username with your pubkey")
             interactive: false
-            sendType: Constants.SendType.ENSSetPubKey
+            preSelectedSendType: Constants.SendType.ENSSetPubKey
             preSelectedRecipient: root.ensUsernamesStore.getEnsRegisteredAddress()
             preDefinedAmountToSend: LocaleUtils.numberToLocaleString(0)
-            preSelectedAsset: store.getAsset(connectEnsModal.store.assets, "ETH")
+            preSelectedHoldingID: Constants.ethToken
+            preSelectedHoldingType: Constants.TokenType.ERC20
             sendTransaction: function() {
-                if(bestRoutes.length === 1) {
-                    let path = bestRoutes[0]
+                if(bestRoutes.count === 1) {
+                    let path = bestRoutes.firstItem()
                     let eip1559Enabled = path.gasFees.eip1559Enabled
                     root.ensUsernamesStore.authenticateAndSetPubKey(
                                 root.ensUsernamesStore.chainId,
                                 ensUsername.text + (isStatus ? ".stateofus.eth" : "" ),
-                                selectedAccount.address,
+                                store.selectedSenderAccount.address,
                                 path.gasAmount,
                                 eip1559Enabled ? "" : path.gasFees.gasPrice,
                                 "",
@@ -85,29 +86,22 @@ Item {
             }
             Connections {
                 target: root.ensUsernamesStore.ensUsernamesModule
-                function onTransactionWasSent(txResult: string) {
-                    try {
-                        let response = JSON.parse(txResult)
-                        if (!response.success) {
-                            if (response.result.includes(Constants.walletSection.cancelledMessage)) {
-                                return
-                            }
-                            connectEnsModal.sendingError.text = response.result
-                            return connectEnsModal.sendingError.open()
+                function onTransactionWasSent(chainId: int, txHash: string, error: string) {
+                    if (!!error) {
+                        if (error.includes(Constants.walletSection.cancelledMessage)) {
+                            return
                         }
-                        for(var i=0; i<connectEnsModal.bestRoutes.length; i++) {
-                            usernameUpdated(ensUsername.text);
-                            let url =  "%1/%2".arg(connectEnsModal.store.getEtherscanLink(connectEnsModal.bestRoutes[i].fromNetwork.chainId)).arg(response.result)
-                            Global.displayToastMessage(qsTr("Transaction pending..."),
-                                                       qsTr("View on etherscan"),
-                                                       "",
-                                                       true,
-                                                       Constants.ephemeralNotificationType.normal,
-                                                       url)
-                        }
-                    } catch (e) {
-                        console.error('Error parsing the response', e)
+                        connectEnsModal.sendingError.text = error
+                        return connectEnsModal.sendingError.open()
                     }
+                    usernameUpdated(ensUsername.text);
+                    let url =  "%1/%2".arg(connectEnsModal.store.getEtherscanLink(chainId)).arg(txHash)
+                    Global.displayToastMessage(qsTr("Transaction pending..."),
+                                               qsTr("View on etherscan"),
+                                               "",
+                                               true,
+                                               Constants.ephemeralNotificationType.normal,
+                                               url)
                     connectEnsModal.close()
                 }
             }

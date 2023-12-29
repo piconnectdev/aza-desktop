@@ -21,7 +21,7 @@ import "../shared"
 
 Item {
     id: root
-
+    objectName: "onboardingInsertDetailsView"
     property StartupStore startupStore
 
     property string pubKey
@@ -196,6 +196,7 @@ Item {
                     left: parent.left
                 }
                 publicKey: root.pubKey
+                objectName: "publicKeyEmojiHash"
             }
             StatusSmartIdenticon {
                 id: userImageCopy

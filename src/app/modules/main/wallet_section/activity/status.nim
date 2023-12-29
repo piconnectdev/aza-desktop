@@ -1,7 +1,5 @@
 import NimQml, std/json, sequtils, strutils, times
-import tables, stint, sets, atomics
-
-import web3/conversions
+import stint, atomics
 
 import app/core/signals/types
 
@@ -15,6 +13,7 @@ QtObject:
       errorCode: backend_activity.ErrorCode
 
       loadingRecipients: Atomic[int]
+      loadingCollectibles: Atomic[int]
       loadingStartTimestamp: Atomic[int]
 
       startTimestamp: int
@@ -29,6 +28,11 @@ QtObject:
   proc delete*(self: Status) =
     self.QObject.delete
 
+  proc filterChainsChanged*(self: Status) {.signal.}
+
+  proc emitFilterChainsChanged*(self: Status) = 
+    self.filterChainsChanged()
+
   proc loadingDataChanged*(self: Status) {.signal.}
 
   proc setLoadingData*(self: Status, loadingData: bool) =
@@ -40,6 +44,12 @@ QtObject:
   proc setLoadingRecipients*(self: Status, loadingData: bool) =
     discard fetchAdd(self.loadingRecipients, if loadingData: 1 else: -1)
     self.loadingRecipientsChanged()
+
+  proc loadingCollectiblesChanged*(self: Status) {.signal.}
+
+  proc setLoadingCollectibles*(self: Status, loadingData: bool) =
+    discard fetchAdd(self.loadingCollectibles, if loadingData: 1 else: -1)
+    self.loadingCollectiblesChanged()
 
   proc loadingStartTimestampChanged*(self: Status) {.signal.}
 
@@ -119,6 +129,9 @@ QtObject:
   proc isFilterDirtyChanged*(self: Status) {.signal.}
 
   proc setIsFilterDirty*(self: Status, value: bool) =
+    if self.isFilterDirty == value:
+      return
+
     self.isFilterDirty = value
     self.isFilterDirtyChanged()
 

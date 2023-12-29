@@ -1,8 +1,7 @@
-import NimQml, json, strutils, json_serialization
+import NimQml, json, strutils
 
 import ./models/[sticker_list, sticker_pack_list]
 import ./io_interface, ./item
-import ../../../../app_service/service/eth/utils as eth_utils
 
 QtObject:
   type
@@ -55,7 +54,7 @@ QtObject:
     read = getRecentStickerList
     notify = recentStickersUpdated
 
-  proc transactionWasSent*(self: View, txResult: string) {.signal.}
+  proc transactionWasSent*(self: View, chainId: int, txHash: string, error: string) {.signal.}
 
   proc transactionCompleted*(self: View, success: bool, txHash: string) {.signal.}
 
@@ -74,6 +73,9 @@ QtObject:
   proc packsLoadFailedChanged*(self: View) {.signal.}
 
   proc installedStickerPacksUpdated*(self: View) {.signal.}
+
+  proc clearStickers*(self: View) =
+    self.recentStickers.clear()
 
   proc clearStickerPacks*(self: View) =
     self.stickerPacks.clear()

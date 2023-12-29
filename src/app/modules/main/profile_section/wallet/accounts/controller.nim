@@ -1,7 +1,6 @@
 import io_interface
 import app_service/service/wallet_account/service as wallet_account_service
 import app_service/service/currency/dto
-import app/modules/shared_modules/keycard_popup/io_interface as keycard_shared_module
 
 type
   Controller* = ref object of RootObj
@@ -37,6 +36,9 @@ proc renameKeypair*(self: Controller, keyUid: string, name: string) =
 proc deleteAccount*(self: Controller, address: string) =
   self.walletAccountService.deleteAccount(address)
 
+proc deleteKeypair*(self: Controller, keyUid: string) =
+  self.walletAccountService.deleteKeypair(keyUid)
+
 proc getKeycardsWithSameKeyUid*(self: Controller, keyUid: string): seq[KeycardDto] =
   return self.walletAccountService.getKeycardsWithSameKeyUid(keyUid)
 
@@ -49,12 +51,6 @@ proc getWalletAccount*(self: Controller, address: string): WalletAccountDto =
 proc getKeypairs*(self: Controller): seq[KeypairDto] =
   return self.walletAccountService.getKeypairs()
 
-proc toggleIncludeWatchOnlyAccount*(self: Controller) =
-  self.walletAccountService.toggleIncludeWatchOnlyAccount()
-
-proc isIncludeWatchOnlyAccount*(self: Controller): bool =
-  return self.walletAccountService.isIncludeWatchOnlyAccount()
-
 proc getEnabledChainIds*(self: Controller): seq[int] =
   return self.walletAccountService.getEnabledChainIds()
 
@@ -63,3 +59,18 @@ proc getCurrentCurrency*(self: Controller): string =
 
 proc getCurrencyFormat*(self: Controller, symbol: string): CurrencyFormatDto =
   return self.walletAccountService.getCurrencyFormat(symbol)
+
+proc updateWalletAccountProdPreferredChains*(self: Controller, address, preferredChainIds: string) =
+  discard self.walletAccountService.updateWalletAccountProdPreferredChains(address, preferredChainIds)
+
+proc updateWalletAccountTestPreferredChains*(self: Controller, address, preferredChainIds: string) =
+  discard self.walletAccountService.updateWalletAccountTestPreferredChains(address, preferredChainIds)
+
+proc areTestNetworksEnabled*(self: Controller): bool =
+  return self.walletAccountService.areTestNetworksEnabled()
+
+proc getCurrencyBalance*(self: Controller, address: string, chainIds: seq[int], currency: string): float64 =
+  return self.walletAccountService.getCurrencyBalance(address, chainIds, currency)
+
+proc updateWatchAccountHiddenFromTotalBalance*(self: Controller, address: string, hideFromTotalBalance: bool) =
+  discard self.walletAccountService.updateWatchAccountHiddenFromTotalBalance(address, hideFromTotalBalance)

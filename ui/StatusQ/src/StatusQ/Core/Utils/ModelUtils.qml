@@ -25,6 +25,9 @@ QtObject {
         if (!model)
             return []
 
+        if (roles === undefined)
+            roles = roleNames(model)
+
         const count = model.rowCount()
         const array = []
 
@@ -34,8 +37,11 @@ QtObject {
 
             roles.forEach(role => {
                 const entry = modelItem[role]
+                const isModel = Internal.ModelUtils.isModel(entry)
 
-                if (entry !== undefined)
+                if (isModel)
+                    arrayItem[role] = modelToArray(entry)
+                else if (entry !== undefined)
                     arrayItem[role] = entry
             })
 
@@ -50,6 +56,9 @@ QtObject {
     }
 
     function indexOf(model, role, key) {
+        if (!model)
+            return -1
+
         const count = model.rowCount()
 
         for (let i = 0; i < count; i++)

@@ -24,6 +24,11 @@ import "../controls"
 import "../popups"
 import "../panels"
 
+// TODO: remove DEV import
+import AppLayouts.Wallet.stores 1.0 as WalletStores
+import AppLayouts.Wallet.views.walletconnect 1.0
+// TODO end
+
 SettingsContentBase {
     id: root
 
@@ -82,7 +87,6 @@ SettingsContentBase {
                 anchors.leftMargin: Style.current.padding
                 anchors.rightMargin: Style.current.padding
                 text: qsTr("Application Logs")
-                font.pixelSize: 15
                 font.underline: mouseArea.containsMouse
                 color: Style.current.blue
                 topPadding: 23
@@ -152,6 +156,17 @@ SettingsContentBase {
                 }
             }
 
+            StatusSettingsLineButton {
+                anchors.leftMargin: 0
+                anchors.rightMargin: 0
+                text: qsTr("Debug Wallet Connect")
+                visible: root.advancedStore.isDebugEnabled
+
+                onClicked: {
+                    Global.popupWalletConnect()
+                }
+            }
+
             Separator {
                 width: parent.width
             }
@@ -171,13 +186,11 @@ SettingsContentBase {
             StatusSettingsLineButton {
                 anchors.leftMargin: 0
                 anchors.rightMargin: 0
-                text: qsTr("WakuV2 Store")
+                text: qsTr("Enable creation of sharded communities")
                 isSwitch: true
                 visible: root.advancedStore.isWakuV2
-                switchChecked: root.advancedStore.isWakuV2StoreEnabled
-                onClicked: {
-                    Global.openPopup(enableWakuV2StoreComponent)
-                }
+                switchChecked: root.advancedStore.isWakuV2ShardedCommunitiesEnabled
+                onClicked: root.advancedStore.toggleWakuV2ShardedCommunities()
             }
 
              StatusListItem {
@@ -332,6 +345,32 @@ SettingsContentBase {
                 }
             }
 
+            // SYNC WAKU SECTION
+
+            StatusListItem {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.leftMargin: Style.current.padding
+                anchors.rightMargin: Style.current.padding
+                title: qsTr("History nodes")
+                label: root.messagingStore.getMailserverNameForNodeAddress(root.messagingStore.activeMailserver)
+                components: [
+                    StatusIcon {
+                        icon: "next"
+                        color: Theme.palette.baseColor1
+                    }
+                ]
+                onClicked: Global.openPopup(wakuStoreModalComponent)
+            }
+
+            Component {
+                id: wakuStoreModalComponent
+                WakuStoreModal {
+                    messagingStore: root.messagingStore
+                    advancedStore: root.advancedStore
+                }
+            }
+
             StatusSectionHeadline {
                 anchors.left: parent.left
                 anchors.right: parent.right
@@ -427,6 +466,28 @@ SettingsContentBase {
             StatusSettingsLineButton {
                 anchors.leftMargin: 0
                 anchors.rightMargin: 0
+                text: qsTr("Enable Sepolia as Test Network")
+                isSwitch: true
+                switchChecked: root.advancedStore.isSepoliaEnabled
+                onClicked: {
+                    root.advancedStore.toggleIsSepoliaEnabled()
+                }
+            }
+
+            StatusSettingsLineButton {
+                anchors.leftMargin: 0
+                anchors.rightMargin: 0
+                text: qsTr("Manage communities on testnet")
+                isSwitch: true
+                switchChecked: root.advancedStore.isManageCommunityOnTestModeEnabled
+                onClicked: {
+                    root.advancedStore.toggleManageCommunityOnTestnet()
+                }
+            }
+
+            StatusSettingsLineButton {
+                anchors.leftMargin: 0
+                anchors.rightMargin: 0
                 text: qsTr("How many log files to keep archived")
                 currentValue: root.advancedStore.logMaxBackups
                 onClicked: {
@@ -454,6 +515,7 @@ SettingsContentBase {
                 property bool mode: false
 
                 id: confirmDialog
+                destroyOnClose: true
                 showCancelButton: true
                 confirmationText: qsTr("Are you sure you want to enable all the developer features? The app will be restarted.")
                 onConfirmButtonClicked: {
@@ -473,6 +535,7 @@ SettingsContentBase {
                 property bool mode: false
 
                 id: confirmDialog
+                destroyOnClose: true
                 showCancelButton: true
                 confirmationText: qsTr("Are you sure you want to enable telemetry? This will reduce your privacy level while using Status. You need to restart the app for this change to take effect.")
                 onConfirmButtonClicked: {
@@ -491,31 +554,11 @@ SettingsContentBase {
                 property bool mode: false
 
                 id: confirmDialog
+                destroyOnClose: true
                 showCancelButton: true
                 confirmationText: qsTr("Are you sure you want to enable auto message? You need to restart the app for this change to take effect.")
                 onConfirmButtonClicked: {
                     root.advancedStore.toggleAutoMessage()
-                    close()
-                }
-                onCancelButtonClicked: {
-                    close()
-                }
-            }
-        }
-
-        Component {
-            id: enableWakuV2StoreComponent
-            ConfirmationDialog {
-                property bool mode: false
-
-                id: confirmDialog
-                showCancelButton: true
-                confirmationText: qsTr("Are you sure you want to %1 WakuV2 Store? You need to restart the app for this change to take effect.")
-                    .arg(root.advancedStore.isWakuV2StoreEnabled ?
-                        qsTr("disable") :
-                        qsTr("enable"))
-                onConfirmButtonClicked: {
-                    root.advancedStore.toggleExperimentalFeature(root.advancedStore.experimentalFeatures.wakuV2StoreEnabled)
                     close()
                 }
                 onCancelButtonClicked: {
@@ -530,6 +573,7 @@ SettingsContentBase {
                 property bool mode: false
 
                 id: confirmDialog
+                destroyOnClose: true
                 showCancelButton: true
                 confirmationText: qsTr("Are you sure you want to %1 debug mode? You need to restart the app for this change to take effect.").arg(root.advancedStore.isDebugEnabled ?
                     qsTr("disable") :
@@ -559,8 +603,6 @@ SettingsContentBase {
                     width: parent.width
                     StatusBaseText {
                         width: parent.width
-                        font.pixelSize: 15
-                        color: Theme.palette.directColor1
                         padding: 15
                         wrapMode: Text.WordWrap
                         text: qsTr("Choose a number between 1 and 100")
@@ -587,8 +629,6 @@ SettingsContentBase {
 
                     StatusBaseText {
                         width: parent.width
-                        font.pixelSize: 15
-                        color: Theme.palette.directColor1
                         padding: 15
                         wrapMode: Text.WordWrap
                         text: qsTr("This change will only come into action after a restart")

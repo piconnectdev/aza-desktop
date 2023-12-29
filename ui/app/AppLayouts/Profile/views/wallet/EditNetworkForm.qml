@@ -13,41 +13,38 @@ ColumnLayout {
 
     property var network
     property var networksModule
-    signal evaluateRpcEndPoint(string url)
-    signal updateNetworkValues(int chainId, string newMainRpcInput, string newFailoverRpcUrl)
+    signal evaluateRpcEndPoint(string url, bool isMainUrl)
+    signal updateNetworkValues(int chainId, string newMainRpcInput, string newFailoverRpcUrl, bool revertToDefault)
 
     enum EvaluationState {
         UnTouched,
         Pending,
         Verified,
         InvalidURL,
-        PingUnsuccessful
+        PingUnsuccessful,
+        SameAsOther,
+        NotSameChain,
+        Empty
     }
 
     QtObject {
         id: d
-        property int evaluationStatus: EditNetworkForm.UnTouched
+        property int evaluationStatusMainRpc: EditNetworkForm.UnTouched
         property int evaluationStatusFallBackRpc: EditNetworkForm.UnTouched
-        property var evaluateRpcEndPoint: Backpressure.debounce(root, 400, function (value) {
+        property var evaluateRpcEndPoint: Backpressure.debounce(root, 400, function (value, isMainUrl) {
             if(!Utils.isURL(value)) {
-                if(value === mainRpcInput.text) {
-                    d.evaluationStatus = EditNetworkForm.InvalidURL
-                }
-                else if(value === failoverRpcUrlInput.text) {
+                if(isMainUrl)
+                    d.evaluationStatusMainRpc = EditNetworkForm.InvalidURL
+                else
                     d.evaluationStatusFallBackRpc = EditNetworkForm.InvalidURL
-                }
                 return
             }
-            root.evaluateRpcEndPoint(value)
+            root.evaluateRpcEndPoint(value, isMainUrl)
         })
 
         function revertValues() {
-            warningCheckbox.checked = false
-            d.evaluationStatus = EditNetworkForm.UnTouched
-            d.evaluationStatusFallBackRpc = EditNetworkForm.UnTouched
             if(!!network) {
-                mainRpcInput.text = network.rpcURL
-                failoverRpcUrlInput.text = network.fallbackURL
+                root.updateNetworkValues(network.chainId, network.originalRpcURL, network.originalFallbackURL, true)
             }
         }       
 
@@ -61,26 +58,65 @@ ColumnLayout {
                 return  qsTr("RPC appears to be either offline or this is not a valid JSON RPC endpoint URL")
             case EditNetworkForm.Verified:
                 return qsTr("RPC successfully reached")
+            case EditNetworkForm.SameAsOther:
+                return qsTr("Main and failover JSON RPC URLs are the same")
+            case EditNetworkForm.NotSameChain:
+                return qsTr("Chain ID returned from JSON RPC doesn’t match %1").arg(network.chainName)
             default: return ""
             }
         }
-    }
 
-    onVisibleChanged: if(!visible) {d.revertValues()}
+        function getErrorMessageColor(status) {
+            switch(status) {
+            case EditNetworkForm.Pending:
+                return Theme.palette.baseColor1
+            case EditNetworkForm.SameAsOther:
+            case EditNetworkForm.NotSameChain:
+                return  Theme.palette.warningColor1
+            case EditNetworkForm.Verified:
+                return Theme.palette.successColor1
+            default: return Theme.palette.dangerColor1
+            }
+        }
+
+        function getErrorMessageAlignment(status) {
+            switch(status) {
+            case EditNetworkForm.Pending:
+            case EditNetworkForm.Verified:
+            case EditNetworkForm.SameAsOther:
+            case EditNetworkForm.NotSameChain:
+                return  Text.AlignLeft
+            default: return Text.AlignRight
+            }
+        }
+
+        function mask(rpcUrl) {
+            // Mask the last part of the URL
+            return rpcUrl.replace(/(\/)([^\/]+)$/, (match, p1, p2) => {
+                return p1 + p2.replace(/./g, '*');
+            });
+        }
+    }
 
     Connections {
         target: networksModule
-        function onChainIdFetchedForUrl(url, chainId, success) {
+        function onChainIdFetchedForUrl(url, chainId, success, isMainUrl) {
             let status = EditNetworkForm.PingUnsuccessful
             if(success) {
-                status = EditNetworkForm.Verified
+                if (network.chainId !== chainId) {
+                    status = EditNetworkForm.NotSameChain
+                }
+                else if((isMainUrl && url === network.fallbackURL) ||
+                        (!isMainUrl && url === network.rpcURL)) {
+                  status = EditNetworkForm.SameAsOther
+                }
+                else
+                    status = EditNetworkForm.Verified
             }
-            if(url === mainRpcInput.text) {
-                d.evaluationStatus = status
-            }
-            else if(url === failoverRpcUrlInput.text) {
-                d.evaluationStatusFallBackRpc = status
-            }
+            if(isMainUrl)
+                d.evaluationStatusMainRpc = status
+            else
+                d.evaluationStatusFallBackRpc = status            
         }
     }
 
@@ -89,6 +125,7 @@ ColumnLayout {
     StatusInput {
         Layout.fillWidth: true
         label: qsTr("Network name")
+        input.edit.objectName: "editNetworkNameInput"
         text: !!network ? network.chainName : ""
         input.enabled: false
     }
@@ -96,12 +133,14 @@ ColumnLayout {
     StatusInput {
         Layout.fillWidth: true
         label: qsTr("Short name")
+        input.edit.objectName: "editNetworkShortNameInput"
         text: !!network ? network.shortName : ""
         input.enabled: false
     }
 
     StatusInput {
         Layout.fillWidth: true
+        input.edit.objectName: "editNetworkChainIdInput"
         label: qsTr("Chain ID")
         text: !!network ? network.chainId : ""
         input.enabled: false
@@ -109,6 +148,7 @@ ColumnLayout {
 
     StatusInput {
         Layout.fillWidth: true
+        input.edit.objectName: "editNetworkSymbolInput"
         label: qsTr("Native Token Symbol")
         text: !!network ? network.nativeCurrencySymbol : ""
         input.enabled: false
@@ -129,51 +169,85 @@ ColumnLayout {
         }
         StatusInput {
             id: mainRpcInput
+            objectName: "mainRpcInputObject"
+            input.edit.objectName: "editNetworkMainRpcInput"
             width: parent.width
             label: qsTr("Main JSON RPC URL")
-            text: !!network ? network.rpcURL : ""
+            text: {
+                if (!network) {
+                    return ""
+                }
+                if (network.originalRpcURL === network.rpcURL) {
+                    return d.mask(network.rpcURL)
+                }
+                return network.rpcURL
+            }
             onTextChanged: {
-                if(!!text && text !== network.rpcURL) {
-                    d.evaluationStatus = EditNetworkForm.Pending
-                    Qt.callLater(d.evaluateRpcEndPoint, text);
+                if (text === "") {
+                    d.evaluationStatusMainRpc = EditNetworkForm.Empty
+                    return
+                }
+                else {
+                    if ((d.mask(network.originalRpcURL) === text) ||
+                            (network.rpcURL === text)) {
+                        d.evaluationStatusMainRpc = EditNetworkForm.UnTouched
+                    } else {
+                        d.evaluationStatusMainRpc = EditNetworkForm.Pending
+                        Qt.callLater(d.evaluateRpcEndPoint, text, true);
+                    }
                 }
             }
-            errorMessageCmp.horizontalAlignment: d.evaluationStatus === EditNetworkForm.Pending ||
-                                                 d.evaluationStatus === EditNetworkForm.Verified ?
-                                                     Text.AlignLeft: Text.AlignRight
-            errorMessageCmp.visible: d.evaluationStatus !== EditNetworkForm.UnTouched
-            errorMessageCmp.text: d.getUrlStatusText(d.evaluationStatus, text)
-            errorMessageCmp.color: d.evaluationStatus === EditNetworkForm.Pending ?
-                                       Theme.palette.baseColor1:
-                                       d.evaluationStatus === EditNetworkForm.Verified ?
-                                           Theme.palette.successColor1 : Theme.palette.dangerColor1
+            errorMessageCmp.horizontalAlignment: d.getErrorMessageAlignment(d.evaluationStatusMainRpc)
+            errorMessageCmp.visible: d.evaluationStatusMainRpc !== EditNetworkForm.UnTouched
+
+            errorMessageCmp.color: d.getErrorMessageColor(d.evaluationStatusMainRpc)
+            errorMessageCmp.text: {
+                if (text === "") {
+                    return qsTr("Main JSON RPC URL is required")
+                }
+                return d.getUrlStatusText(d.evaluationStatusMainRpc, text)
+            }
         }
     }
 
     StatusInput {
         id: failoverRpcUrlInput
+        objectName: "failoverRpcUrlInputObject"
+        input.edit.objectName: "editNetworkFailoverRpcUrlInput"
         Layout.fillWidth: true
         label: qsTr("Failover JSON RPC URL")
-        text: !!network ? network.fallbackURL : ""
+        text: {
+            if (!network) {
+                return ""
+            }
+            if (network.originalFallbackURL === network.fallbackURL) {
+                return d.mask(network.fallbackURL)
+            }
+            return network.fallbackURL
+        }
         onTextChanged: {
-            if(!!text && text !== network.fallbackURL) {
-                d.evaluationStatusFallBackRpc = EditNetworkForm.Pending
-                Qt.callLater(d.evaluateRpcEndPoint, text);
+            if (text === "") {
+                d.evaluationStatusFallBackRpc = EditNetworkForm.Empty
+                return
+            }
+            else {
+                if ((d.mask(network.originalFallbackURL) === text) ||
+                        (network.fallbackURL === text)) {
+                    d.evaluationStatusFallBackRpc = EditNetworkForm.UnTouched
+                } else {
+                    d.evaluationStatusFallBackRpc = EditNetworkForm.Pending
+                    Qt.callLater(d.evaluateRpcEndPoint, text, false);
+                }
             }
         }
-        errorMessageCmp.horizontalAlignment: d.evaluationStatusFallBackRpc === EditNetworkForm.Pending ||
-                                             d.evaluationStatusFallBackRpc === EditNetworkForm.Verified ?
-                                                 Text.AlignLeft: Text.AlignRight
+        errorMessageCmp.horizontalAlignment: d.getErrorMessageAlignment(d.evaluationStatusFallBackRpc)
         errorMessageCmp.visible: d.evaluationStatusFallBackRpc !== EditNetworkForm.UnTouched
         errorMessageCmp.text: d.getUrlStatusText(d.evaluationStatusFallBackRpc, text)
-        errorMessageCmp.color: d.evaluationStatusFallBackRpc === EditNetworkForm.Pending ?
-                                   Theme.palette.baseColor1:
-                                   d.evaluationStatusFallBackRpc === EditNetworkForm.Verified ?
-                                       Theme.palette.successColor1 : Theme.palette.dangerColor1
-
+        errorMessageCmp.color: d.getErrorMessageColor(d.evaluationStatusFallBackRpc)
     }
 
     StatusInput {
+        input.edit.objectName: "editNetworkExplorerInput"
         Layout.fillWidth: true
         label: qsTr("Block Explorer")
         text: !!network ? network.blockExplorerURL : ""
@@ -182,6 +256,7 @@ ColumnLayout {
 
     StatusCheckBox {
         id: warningCheckbox
+        objectName: "editNetworkAknowledgmentCheckbox"
         Layout.fillWidth: true
         text: qsTr("I understand that changing network settings can cause unforeseen issues, errors, security risks and potentially even loss of funds.")
         checkState: Qt.Unchecked
@@ -194,15 +269,39 @@ ColumnLayout {
         Layout.alignment: Qt.AlignRight
         spacing: 8
         StatusButton {
+            objectName: "editNetworkRevertButton"
             text: qsTr("Revert to default")
             normalColor: "transparent"
-            enabled: d.evaluationStatus !== EditNetworkForm.UnTouched || d.evaluationStatusFallBackRpc !== EditNetworkForm.UnTouched
+            enabled: (failoverRpcUrlInput.text !== d.mask(network.originalFallbackURL)) ||
+                     (mainRpcInput.text !== d.mask(network.originalRpcURL))
             onClicked: d.revertValues()
         }
         StatusButton {
+            objectName: "editNetworkSaveButton"
             text: qsTr("Save Changes")
-            enabled: (d.evaluationStatus === EditNetworkForm.Verified || d.evaluationStatusFallBackRpc === EditNetworkForm.Verified) && warningCheckbox.checked
-            onClicked: root.updateNetworkValues(network.chainId, mainRpcInput.text, failoverRpcUrlInput.text)
+            enabled: (
+                d.evaluationStatusMainRpc === EditNetworkForm.Verified || 
+                d.evaluationStatusFallBackRpc === EditNetworkForm.Verified || 
+                d.evaluationStatusMainRpc === EditNetworkForm.SameAsOther || 
+                d.evaluationStatusFallBackRpc === EditNetworkForm.SameAsOther ||
+                d.evaluationStatusMainRpc === EditNetworkForm.Empty ||
+                d.evaluationStatusFallBackRpc === EditNetworkForm.Empty ||
+                d.evaluationStatusMainRpc === EditNetworkForm.NotSameChain ||
+                d.evaluationStatusFallBackRpc === EditNetworkForm.NotSameChain
+                ) && warningCheckbox.checked
+
+            onClicked: {
+                let main = mainRpcInput.text
+                let fallback = failoverRpcUrlInput.text
+                if (main === d.mask(network.originalRpcURL)) {
+                    main = network.originalRpcURL
+                }
+
+                if (fallback === d.mask(network.originalFallbackURL)) {
+                    fallback = network.originalFallbackURL
+                }
+                root.updateNetworkValues(network.chainId, main, fallback, false)
+            }
         }
     }
 }

@@ -15,12 +15,15 @@ import shared.panels 1.0
 import shared.popups 1.0
 import shared.stores 1.0
 import shared.views.chat 1.0
+import shared.stores.send 1.0
 import utils 1.0
 
 import AppLayouts.Communities.controls 1.0
 import AppLayouts.Communities.panels 1.0
 import AppLayouts.Communities.popups 1.0
 import AppLayouts.Communities.helpers 1.0
+
+import AppLayouts.Wallet.stores 1.0
 
 StatusSectionLayout {
     id: root
@@ -31,13 +34,22 @@ StatusSectionLayout {
 
     property var rootStore
     property var chatCommunitySectionModule
+    required property TokensStore tokensStore
     property var community
     property var transactionStore: TransactionStore {}
     property bool communitySettingsDisabled
+    property var sendModalPopup
+
+    required property var walletAccountsModel // name, address, emoji, color
 
     readonly property bool isOwner: community.memberRole === Constants.memberRole.owner
-    readonly property bool isAdmin: isOwner || community.memberRole === Constants.memberRole.admin
+    readonly property bool isAdmin: community.memberRole === Constants.memberRole.admin
+    readonly property bool isTokenMasterOwner: community.memberRole === Constants.memberRole.tokenMaster
     readonly property bool isControlNode: community.isControlNode
+
+    // Community transfer ownership related props:
+    required property bool isPendingOwnershipRequest
+    signal finaliseOwnershipClicked
 
     readonly property string filteredSelectedTags: {
         let tagsArray = []
@@ -101,10 +113,10 @@ StatusSectionLayout {
 
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.leftMargin: Style.current.padding
+                Layout.leftMargin: Style.current.halfPadding
                 Layout.rightMargin: Style.current.padding
                 model: stackLayout.children
-                spacing: 8
+                spacing: Style.current.halfPadding
                 enabled: !root.communitySettingsDisabled
 
                 delegate: StatusNavigationListItem {
@@ -112,8 +124,6 @@ StatusSectionLayout {
                     width: ListView.view.width
                     title: model.sectionName
                     asset.name: model.sectionIcon
-                    asset.height: 24
-                    asset.width: 24
                     selected: d.currentIndex === index && !root.communitySettingsDisabled
                     onClicked: d.currentIndex = index
                     visible: model.sectionEnabled
@@ -157,6 +167,7 @@ StatusSectionLayout {
             readonly property string sectionIcon: "show"
             readonly property bool sectionEnabled: true
 
+            isOwner: root.isOwner
             communityId: root.community.id
             name: root.community.name
             description: root.community.description
@@ -172,10 +183,27 @@ StatusSectionLayout {
             requestToJoinEnabled: root.community.access === Constants.communityChatOnRequestAccess
             pinMessagesEnabled: root.community.pinMessageAllMembersEnabled
             editable: true
-            owned: root.community.memberRole === Constants.memberRole.owner
             loginType: root.rootStore.loginType
             isControlNode: root.isControlNode
             communitySettingsDisabled: root.communitySettingsDisabled
+            overviewChartData: rootStore.overviewChartData
+            shardingEnabled: localAppSettings.wakuV2ShardedCommunitiesEnabled ?? false
+            shardIndex: root.community.shardIndex
+            shardingInProgress: root.chatCommunitySectionModule.shardingInProgress
+            pubsubTopic: root.community.pubsubTopic
+            pubsubTopicKey: root.community.pubsubTopicKey
+
+            sendModalPopup: root.sendModalPopup
+            ownerToken: tokensModelChangesTracker.ownerToken
+            accounts: root.walletAccountsModel
+
+            isPendingOwnershipRequest: root.isPendingOwnershipRequest
+
+            onFinaliseOwnershipClicked: root.finaliseOwnershipClicked()
+
+            onCollectCommunityMetricsMessagesCount: {
+                rootStore.collectCommunityMetricsMessagesCount(intervals)
+            }
 
             onEdited: {
                 const error = root.chatCommunitySectionModule.editCommunity(
@@ -209,23 +237,23 @@ StatusSectionLayout {
                 if(!root.isControlNode)
                     return
 
-                root.rootStore.authenticateWithCallback((authenticated) => {
-                    if(!authenticated)
-                        return
-
-                    Global.openExportControlNodePopup(root.community.name, root.chatCommunitySectionModule.exportCommunity(root.community.id), (popup) => {
-                        popup.onDeletePrivateKey.connect(() => {
-                            root.rootStore.removePrivateKey(root.community.id)
-                        })  
-                    })
-                })
+                Global.openExportControlNodePopup(root.community)
             }
 
             onImportControlNodeClicked: {
                 if(root.isControlNode)
                     return
 
-                Global.openImportControlNodePopup(root.community, d.importControlNodePopupOpened)
+                Global.openImportControlNodePopup(root.community)
+            }
+
+            onMintOwnerTokenClicked: {
+                root.goTo(Constants.CommunitySettingsSections.MintTokens)
+                mintPanel.openNewTokenForm(false/*Collectible owner token*/)
+            }
+
+            onShardIndexEdited: if (root.community.shardIndex != shardIndex) {
+                root.chatCommunitySectionModule.setCommunityShard(shardIndex)
             }
         }
 
@@ -240,7 +268,8 @@ StatusSectionLayout {
             bannedMembersModel: root.community.bannedMembers
             pendingMemberRequestsModel: root.community.pendingMemberRequests
             declinedMemberRequestsModel: root.community.declinedMemberRequests
-            editable: root.isAdmin
+            editable: root.isAdmin || root.isOwner || root.isTokenMasterOwner
+            memberRole: community.memberRole
             communityName: root.community.name
 
             onKickUserClicked: root.rootStore.removeUserFromCommunity(id)
@@ -295,61 +324,43 @@ StatusSectionLayout {
             readonly property int sectionKey: Constants.CommunitySettingsSections.MintTokens
             readonly property string sectionName: qsTr("Tokens")
             readonly property string sectionIcon: "token"
-            readonly property bool sectionEnabled: root.isOwner
+            readonly property bool sectionEnabled: true
 
             readonly property CommunityTokensStore communityTokensStore:
                 rootStore.communityTokensStore
 
-            function setFeesInfo(ethCurrency, fiatCurrency, errorCode) {
-                if (errorCode === Constants.ComputeFeeErrorCode.Success
-                        || errorCode === Constants.ComputeFeeErrorCode.Balance) {
-
-                    const valueStr = LocaleUtils.currencyAmountToLocaleString(ethCurrency)
-                        + "(" + LocaleUtils.currencyAmountToLocaleString(fiatCurrency) + ")"
-                    mintPanel.feeText = valueStr
-
-                    if (errorCode === Constants.ComputeFeeErrorCode.Balance)
-                        mintPanel.errorText = qsTr("Not enough funds to make transaction")
-
-                    mintPanel.isFeeLoading = false
-
-                    return
-                } else if (errorCode === Constants.ComputeFeeErrorCode.Infura) {
-                    mintPanel.errorText = qsTr("Infura error")
-                    mintPanel.isFeeLoading = true
-                    return
-                }
-                mintPanel.errorText = qsTr("Unknown error")
-                mintPanel.isFeeLoading = true
-            }
-
             // General community props
+            communityId: root.community.id
             communityName: root.community.name
             communityLogo: root.community.image
             communityColor: root.community.color
+            sendModalPopup: root.sendModalPopup
 
             // User profile props
             isOwner: root.isOwner
             isAdmin: root.isAdmin
-            isTokenMasterOwner: false // TODO: Backend
+            isTokenMasterOwner: root.isTokenMasterOwner
 
             // Owner and TMaster properties
             isOwnerTokenDeployed: tokensModelChangesTracker.isOwnerTokenDeployed
             isTMasterTokenDeployed: tokensModelChangesTracker.isTMasterTokenDeployed
+            anyPrivilegedTokenFailed: tokensModelChangesTracker.isOwnerTokenFailed || tokensModelChangesTracker.isTMasterTokenFailed
+            ownerOrTMasterTokenItemsExist: tokensModelChangesTracker.ownerOrTMasterTokenItemsExist
 
             // Models
             tokensModel: root.community.communityTokens
-            tokensModelWallet: root.rootStore.tokensModelWallet
             layer1Networks: communityTokensStore.layer1Networks
             layer2Networks: communityTokensStore.layer2Networks
-            testNetworks: communityTokensStore.testNetworks
             enabledNetworks: communityTokensStore.enabledNetworks
             allNetworks: communityTokensStore.allNetworks
-            accounts: root.rootStore.accounts
+            accounts: root.walletAccountsModel
+            referenceAssetsBySymbolModel: root.tokensStore.assetsBySymbolModel
 
-            onSignMintTransactionOpened:
-                communityTokensStore.computeDeployFee(
-                    chainId, accountAddress, tokenType)
+            onRegisterDeployFeesSubscriber: d.feesBroker.registerDeployFeesSubscriber(feeSubscriber)
+
+            onRegisterSelfDestructFeesSubscriber: d.feesBroker.registerSelfDestructFeesSubscriber(feeSubscriber)
+
+            onRegisterBurnTokenFeesSubscriber: d.feesBroker.registerBurnFeesSubscriber(feeSubscriber)
 
             onMintCollectible:
                 communityTokensStore.deployCollectible(
@@ -362,19 +373,20 @@ StatusSectionLayout {
                 communityTokensStore.deployOwnerToken(
                     root.community.id, ownerToken, tMasterToken)
 
-            onSignRemoteDestructTransactionOpened:
-                communityTokensStore.computeSelfDestructFee(
-                    remotelyDestructTokensList, tokenKey)
-
             onRemotelyDestructCollectibles:
                 communityTokensStore.remoteSelfDestructCollectibles(
-                    root.community.id, remotelyDestructTokensList, tokenKey)
+                    root.community.id, walletsAndAmounts, tokenKey, accountAddress)
 
-            onSignBurnTransactionOpened:
-                communityTokensStore.computeBurnFee(tokenKey, amount)
+            onRemotelyDestructAndBan:
+                communityTokensStore.remotelyDestructAndBan(
+                    root.community.id, contactId, tokenKey, accountAddress)
+
+            onRemotelyDestructAndKick:
+                communityTokensStore.remotelyDestructAndKick(
+                    root.community.id, contactId, tokenKey, accountAddress)
 
             onBurnToken:
-                communityTokensStore.burnToken(root.community.id, tokenKey, amount)
+                communityTokensStore.burnToken(root.community.id, tokenKey, amount, accountAddress)
 
             onDeleteToken:
                 communityTokensStore.deleteToken(root.community.id, tokenKey)
@@ -382,12 +394,15 @@ StatusSectionLayout {
             onAirdropToken: {
                 root.goTo(Constants.CommunitySettingsSections.Airdrops)
 
-                // Force a token selection to be airdroped with default amount 1
-                airdropPanel.selectToken(tokenKey, 1, type)
+                // Force a token selection to be airdroped with given amount
+                airdropPanel.selectToken(tokenKey, amount, type)
 
                 // Set given addresses as recipients
                 airdropPanel.addAddresses(addresses)
             }
+
+            onKickUserRequested: root.rootStore.removeUserFromCommunity(contactId)
+            onBanUserRequested: root.rootStore.banUserFromCommunity(contactId)
         }
 
         AirdropsSettingsPanel {
@@ -396,13 +411,13 @@ StatusSectionLayout {
             readonly property int sectionKey: Constants.CommunitySettingsSections.Airdrops
             readonly property string sectionName: qsTr("Airdrops")
             readonly property string sectionIcon: "airdrop"
-            readonly property bool sectionEnabled: root.isOwner
+            readonly property bool sectionEnabled: true
 
             communityDetails: d.communityDetails
 
             // Profile type
             isOwner: root.isOwner
-            isTokenMasterOwner: false // TODO: Backend
+            isTokenMasterOwner: root.isTokenMasterOwner
             isAdmin: root.isAdmin
 
             // Owner and TMaster properties
@@ -456,10 +471,20 @@ StatusSectionLayout {
                 sourceComponent: SortFilterProxyModel {
 
                     sourceModel: airdropPanel.communityTokens
-                    filters: ValueFilter {
-                        roleName: "tokenType"
-                        value: Constants.TokenType.ERC721
-                    }
+                    filters: [
+                        ValueFilter {
+                            roleName: "tokenType"
+                            value: Constants.TokenType.ERC721
+                        },
+                        ExpressionFilter {
+                            function getPrivileges(privilegesLevel) {
+                                return privilegesLevel === Constants.TokenPrivilegesLevel.Community ||
+                                        (root.isOwner && privilegesLevel === Constants.TokenPrivilegesLevel.TMaster)
+                            }
+
+                            expression: { return getPrivileges(model.privilegesLevel) }
+                        }
+                    ]
                     proxyRoles: [
                         ExpressionRole {
                             name: "category"
@@ -486,26 +511,19 @@ StatusSectionLayout {
 
             assetsModel: assetsModelLoader.item
             collectiblesModel: collectiblesModelLoader.item
-            membersModel: {
-                const chatContentModule = root.rootStore.currentChatContentModule()
-                if (!chatContentModule || !chatContentModule.usersModule) {
-                    // New communities have no chats, so no chatContentModule
-                    return null
-                }
-                return chatContentModule.usersModule.model
-            }
+            membersModel: community.members
 
-            onAirdropClicked: communityTokensStore.airdrop(root.community.id,
-                                                           airdropTokens, addresses)
+            accountsModel: root.walletAccountsModel
+            onAirdropClicked: communityTokensStore.airdrop(
+                                   root.community.id, airdropTokens, addresses,
+                                   feeAccountAddress)
 
             onNavigateToMintTokenSettings: {
                 root.goTo(Constants.CommunitySettingsSections.MintTokens)
                 mintPanel.openNewTokenForm(isAssetType)
             }
 
-            onAirdropFeesRequested:
-                communityTokensStore.computeAirdropFee(
-                    root.community.id, contractKeysAndAmounts, addresses)
+            onRegisterAirdropFeeSubscriber: d.feesBroker.registerAirdropFeesSubscriber(feeSubscriber)
         }
     }
 
@@ -521,6 +539,11 @@ StatusSectionLayout {
             readonly property string color: root.community.color
             readonly property bool owner: root.community.memberRole === Constants.memberRole.owner
             readonly property bool admin: root.community.memberRole === Constants.memberRole.admin
+            readonly property bool tokenMaster: root.community.memberRole === Constants.memberRole.tokenMaster
+        }
+
+        readonly property TransactionFeesBroker feesBroker: TransactionFeesBroker {
+            communityTokensStore: root.rootStore.communityTokensStore
         }
 
         function goTo(section: int, subSection: int) {
@@ -539,101 +562,74 @@ StatusSectionLayout {
                 }
             }
         }
-
-        function requestCommunityInfoWithCallback(privateKey, callback) {
-            if(!callback) return
-
-            //success
-            root.rootStore.communityAdded.connect(function communityAddedHandler(communityId) {
-                root.rootStore.communityAdded.disconnect(communityAddedHandler)
-                let community = null
-                try {
-                    const communityJson = root.rootStore.getSectionByIdJson(communityId)
-                    community = JSON.parse(communityJson)
-                } catch (e) {
-                    console.warn("Error parsing community json: ", communityJson, " error: ", e.message)
-                }
-
-                callback(community)
-            })
-
-            //error
-            root.rootStore.importingCommunityStateChanged.connect(function communityImportingStateChangedHandler(communityId, status) {
-                root.rootStore.importingCommunityStateChanged.disconnect(communityImportingStateChangedHandler)
-                if(status === Constants.communityImportingError) {
-                    callback(null)
-                }
-            })
-
-            root.rootStore.requestCommunityInfo(privateKey, false)
-        }
-
-        function importControlNodePopupOpened(popup) {
-            popup.requestCommunityInfo.connect((privateKey) => {
-                requestCommunityInfoWithCallback(privateKey, popup.setCommunityInfo)
-            })
-
-            popup.importControlNode.connect((privateKey) => {
-                root.rootStore.importCommunity(privateKey)
-            })
-        }
     }
 
     StatusQUtils.ModelChangeTracker {
         id: tokensModelChangesTracker
 
+        Component.onCompleted: {
+            updateOwnerAndTMasterProperties()
+        }
+
         // Owner and TMaster token deployment states
         property bool isOwnerTokenDeployed: false
         property bool isTMasterTokenDeployed: false
+        property bool isOwnerTokenFailed: false
+        property bool isTMasterTokenFailed: false
+        property var ownerToken: null
 
         // It will monitorize if Owner and/or TMaster token items are included in the `model` despite the deployment state
         property bool ownerOrTMasterTokenItemsExist: false
 
         function checkIfPrivilegedTokenItemsExist() {
-           return SQUtils.ModelUtils.contains(model, "name", PermissionsHelpers.ownerTokenNameTag + root.communityName) ||
-                  SQUtils.ModelUtils.contains(model, "name", PermissionsHelpers.tMasterTokenNameTag + root.communityName)
+           return StatusQUtils.ModelUtils.contains(model, "privilegesLevel", Constants.TokenPrivilegesLevel.Owner) ||
+                  StatusQUtils.ModelUtils.contains(model, "privilegesLevel", Constants.TokenPrivilegesLevel.TMaster)
         }
 
-        function reviewTokenDeployState(tagType, isOwner) {
-            const index = SQUtils.ModelUtils.indexOf(model, "name", tagType + root.communityName)
+        function updateOwnerAndTMasterProperties() {
+            // It will update property to know if Owner and TMaster token items have been added into the tokens list.
+            ownerOrTMasterTokenItemsExist = checkIfPrivilegedTokenItemsExist()
+            if(!ownerOrTMasterTokenItemsExist)
+                return
+            // It monitors the deployment:
+            if(!isOwnerTokenDeployed) {
+                isOwnerTokenDeployed = reviewTokenDeployState(true, Constants.ContractTransactionStatus.Completed)
+                isOwnerTokenFailed = reviewTokenDeployState(true, Constants.ContractTransactionStatus.Failed)
+            }
+
+            if(!isTMasterTokenDeployed) {
+                isTMasterTokenDeployed = reviewTokenDeployState(false, Constants.ContractTransactionStatus.Completed)
+                isTMasterTokenFailed = reviewTokenDeployState(false, Constants.ContractTransactionStatus.Failed)
+            }
+
+            // Not necessary to track more changes since privileged tokens have been correctly deployed.
+            if(isOwnerTokenDeployed && isTMasterTokenDeployed) {
+                tokensModelChangesTracker.ownerToken = StatusQUtils.ModelUtils.getByKey(model, "privilegesLevel", Constants.TokenPrivilegesLevel.Owner)
+                tokensModelChangesTracker.enabled = false
+            }
+        }
+
+        function reviewTokenDeployState(isOwner, deployState) {
+            const privileges = isOwner ? Constants.TokenPrivilegesLevel.Owner : Constants.TokenPrivilegesLevel.TMaster
+            const index = StatusQUtils.ModelUtils.indexOf(model, "privilegesLevel", privileges)
             if(index === -1)
                 return false
 
-            const token = SQUtils.ModelUtils.get(model, index)
-
+            const token = StatusQUtils.ModelUtils.get(model, index)
             // Some assertions:
-            if(!token.isPrivilegedToken)
+            if(isOwner && token.privilegesLevel !== Constants.TokenPrivilegesLevel.Owner)
                 return false
-
-            if(token.isOwner !== isOwner)
+            if(!isOwner && token.privilegesLevel !== Constants.TokenPrivilegesLevel.TMaster)
                 return false
 
             // Deploy state check:
-            if(token.deployState !== Constants.ContractTransactionStatus.Completed)
-                return false
-
-            // Token deployed!!
-            return true
+            return token.deployState === deployState
         }
 
         model: root.community.communityTokens
 
         onRevisionChanged: {
-            // It will update property to know if Owner and TMaster token items have been added into the tokens list.
-            ownerOrTMasterTokenItemsExist = checkIfPrivilegedTokenItemsExist()
-            if(!ownerOrTMasterTokenItemsExist)
-                return
-
-            // It monitors the deployment:
-            if(!isOwnerTokenDeployed)
-                isOwnerTokenDeployed = reviewTokenDeployState(PermissionsHelpers.ownerTokenNameTag, true)
-
-            if(!isTMasterTokenDeployed)
-                isTMasterTokenDeployed = reviewTokenDeployState(PermissionsHelpers.tMasterTokenNameTag, false)
-
-            // Not necessary to track more changes since privileged tokens have been correctly deployed.
-            if(isOwnerTokenDeployed && isTMasterTokenDeployed)
-                tokensModelChangesTracker.enabled = false
+            updateOwnerAndTMasterProperties()
         }
     }
 
@@ -643,16 +639,6 @@ StatusSectionLayout {
         title: qsTr("Error editing the community")
         icon: StandardIcon.Critical
         standardButtons: StandardButton.Ok
-    }
-
-    Component {
-        id: transferOwnershipPopup
-
-        TransferOwnershipPopup {
-            anchors.centerIn: parent
-            store: root.rootStore
-            onClosed: destroy()
-        }
     }
 
     Component {
@@ -670,22 +656,6 @@ StatusSectionLayout {
 
     Connections {
         target: rootStore.communityTokensStore
-
-        function onDeployFeeUpdated(ethCurrency, fiatCurrency, errorCode) {
-            mintPanel.setFeesInfo(ethCurrency, fiatCurrency, errorCode)
-        }
-
-        function onSelfDestructFeeUpdated(ethCurrency, fiatCurrency, errorCode) {
-            mintPanel.setFeesInfo(ethCurrency, fiatCurrency, errorCode)
-        }
-
-        function onBurnFeeUpdated(ethCurrency, fiatCurrency, errorCode) {
-            mintPanel.setFeesInfo(ethCurrency, fiatCurrency, errorCode)
-        }
-
-        function onAirdropFeeUpdated(airdropFees) {
-            airdropPanel.airdropFees = airdropFees
-        }
 
         function onRemoteDestructStateChanged(communityId, tokenName, status, url) {
             if (root.community.id !== communityId)
@@ -802,6 +772,39 @@ StatusSectionLayout {
 
             Global.displayToastMessage(title, url === "" ? qsTr("Something went wrong") : qsTr("View on etherscan"), "",
                                        loading, type, url)
+        }
+
+        function onOwnerTokenDeploymentStateChanged(communityId, status, url) {
+            if (root.community.id !== communityId)
+                return
+
+            if (status === Constants.ContractTransactionStatus.Completed)
+            {
+                let title1 = qsTr("%1 Owner and TokenMaster tokens minting complete").arg(community.name)
+                let title2 = qsTr("%1 Owner token airdropped to you").arg(community.name)
+                let title3 = qsTr("%1 Owner and TokenMaster permissions created").arg(community.name)
+                let type = Constants.ephemeralNotificationType.normal
+
+                Global.displayToastMessage(title1, url, "", true, type, url)
+                Global.displayToastMessage(title2, url, "", true, type, url)
+                Global.displayToastMessage(title3, url, "", true, type, url)
+            } else if (status === Constants.ContractTransactionStatus.Failed) {
+                let title = qsTr("%1 Owner and TokenMaster tokens minting failed").arg(community.name)
+                let type = Constants.ephemeralNotificationType.normal
+                Global.displayToastMessage(title, url, "", true, type, url)
+            }
+        }
+
+        function onOwnerTokenDeploymentStarted(communityId, url) {
+            if (root.community.id !== communityId)
+                return
+
+            let title1 = qsTr("%1 Owner and TokenMaster tokens are being minted...").arg(community.name)
+            let title2 = qsTr("Airdropping %1 Owner token to you...").arg(community.name)
+            let type = Constants.ephemeralNotificationType.normal
+
+            Global.displayToastMessage(title1, url, "", true, type, url)
+            Global.displayToastMessage(title2, url, "", true, type, url)
         }
     }
 

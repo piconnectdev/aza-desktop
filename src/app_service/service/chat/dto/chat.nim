@@ -2,6 +2,7 @@
 
 import json, strformat, strutils, tables
 import ../../community/dto/community
+import ../../shared_urls/dto/url_data
 
 include ../../../common/json_utils
 import ../../../../app_service/common/types
@@ -35,16 +36,10 @@ type
     large*: string
     banner*: string
 
-type RevealedAccount* = object
-  address*: string
-  chainIds*: seq[int]
-  isAirdropAddress*: bool
-
 type ChatMember* = object
   id*: string
   joined*: bool
   role*: MemberRole
-  airdropAccount*: RevealedAccount
 
 type CheckPermissionsResultDto* = object
   criteria*: seq[bool]
@@ -119,6 +114,9 @@ type ChannelGroupDto* = object
   unviewedMessagesCount*: int
   unviewedMentionsCount*: int
   channelPermissions*: CheckAllChannelsPermissionsResponseDto
+  pubsubTopic*: string
+  pubsubTopicKey*: string
+  shard*: Shard
 
 type ClearedHistoryDto* = object
   chatId*: string
@@ -242,22 +240,6 @@ proc toChannelMember*(jsonObj: JsonNode, memberId: string, joined: bool): ChatMe
   if(jsonObj.getProp("roles", rolesObj)):
     for roleObj in rolesObj:
       roles.add(roleObj.getInt)
-
-  var revealedAccountsObj: JsonNode
-  if jsonObj.getProp("revealed_accounts", revealedAccountsObj):
-    for revealedAccountObj in revealedAccountsObj:
-      if revealedAccountObj{"isAirdropAddress"}.getBool:
-        var chainIdsObj: JsonNode
-        var chainIds: seq[int] = @[]
-        if revealedAccountObj.getProp("chain_ids", chainIdsObj):
-          for chainIdObj in chainIdsObj:
-            chainIds.add(chainIdObj.getInt)
-
-        result.airdropAccount = RevealedAccount(
-          address: revealedAccountObj["address"].getStr,
-          chainIds: chainIds,
-          isAirdropAddress: true,
-        )
   
   result.role = MemberRole.None
   if roles.contains(MemberRole.Owner.int): 
@@ -268,6 +250,8 @@ proc toChannelMember*(jsonObj: JsonNode, memberId: string, joined: bool): ChatMe
     result.role = MemberRole.ManageUsers
   elif roles.contains(MemberRole.ModerateContent.int):
     result.role = MemberRole.ModerateContent
+  elif roles.contains(MemberRole.TokenMaster.int):
+    result.role = MemberRole.TokenMaster
 
   result.joined = joined
 
@@ -394,6 +378,11 @@ proc toChannelGroupDto*(jsonObj: JsonNode): ChannelGroupDto =
     for channelId, permissionResponse in checkChannelPermissionResponsesObj:
       result.channelPermissions.channels[channelId] = permissionResponse.toCheckChannelPermissionsResponseDto()
 
+  discard jsonObj.getProp("pubsubTopic", result.pubsubTopic)
+  discard jsonObj.getProp("pubsubTopicKey", result.pubsubTopicKey)
+
+  result.shard = jsonObj.getShard()
+
 # To parse Community chats to ChatDto, we need to add the commuity ID and type
 proc toChatDto*(jsonObj: JsonNode, communityId: string): ChatDto =
   result = jsonObj.toChatDto()
@@ -422,3 +411,8 @@ proc hasMoreMessagesToRequest*(chatDto: ChatDto, syncedFrom: int64): bool =
 
 proc hasMoreMessagesToRequest*(chatDto: ChatDto): bool =
   chatDto.hasMoreMessagesToRequest(chatDto.syncedFrom)
+
+proc communityChannelUuid*(self: ChatDto): string =
+  if self.communityId == "":
+    return ""
+  return self.id[self.communityId.len .. ^1]

@@ -36,3 +36,7 @@ SplitView {
         logsView.logText: logs.logText
     }
 }
+
+// category: Panels
+
+// https://www.figma.com/file/17fc13UBFvInrLgNUKJJg5/Kuba%E2%8E%9CDesktop?node-id=2698%3A375926&t=iIeFeGOBx5BbbYJa-0

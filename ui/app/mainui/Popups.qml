@@ -9,10 +9,15 @@ import StatusQ.Controls 0.1
 import StatusQ.Components 0.1
 import StatusQ.Popups 0.1
 import StatusQ.Core.Theme 0.1
+import StatusQ.Core.Utils 0.1 as SQUtils
 
 import AppLayouts.Chat.popups 1.0
 import AppLayouts.Profile.popups 1.0
 import AppLayouts.Communities.popups 1.0
+import AppLayouts.Communities.helpers 1.0
+
+import AppLayouts.Wallet.stores 1.0 as WalletStore
+import AppLayouts.Chat.stores 1.0 as ChatStore
 
 import shared.popups 1.0
 import shared.status 1.0
@@ -24,8 +29,14 @@ QtObject {
 
     required property var popupParent
     required property var rootStore
+    required property var communityTokensStore
     property var communitiesStore
+    property var devicesStore
     property bool isDevBuild
+
+    signal openExternalLink(string link)
+    signal saveDomainToUnfurledWhitelist(string domain)
+    signal ownershipDeclined
 
     property var activePopupComponents: []
 
@@ -49,6 +60,8 @@ QtObject {
         Global.openCommunityProfilePopupRequested.connect(openCommunityProfilePopup)
         Global.createCommunityPopupRequested.connect(openCreateCommunityPopup)
         Global.importCommunityPopupRequested.connect(openImportCommunityPopup)
+        Global.communityShareAddressesPopupRequested.connect(openCommunityShareAddressesPopup)
+        Global.communityIntroPopupRequested.connect(openCommunityIntroPopup)
         Global.removeContactRequested.connect(openRemoveContactConfirmationPopup)
         Global.openPopupRequested.connect(openPopup)
         Global.closePopupRequested.connect(closePopup)
@@ -58,6 +71,10 @@ QtObject {
         Global.openTestnetPopup.connect(openTestnetPopup)
         Global.openExportControlNodePopup.connect(openExportControlNodePopup)
         Global.openImportControlNodePopup.connect(openImportControlNodePopup)
+        Global.openEditSharedAddressesFlow.connect(openEditSharedAddressesPopup)
+        Global.openTransferOwnershipPopup.connect(openTransferOwnershipPopup)
+        Global.openFinaliseOwnershipPopup.connect(openFinaliseOwnershipPopup)
+        Global.openDeclineOwnershipPopup.connect(openDeclineOwnershipPopup)
     }
 
     property var currentPopup
@@ -100,9 +117,8 @@ QtObject {
         openPopup(downloadPageComponent, popupProperties)
     }
 
-    function openImagePopup(image) {
-        var popup = imagePopupComponent.createObject(popupParent)
-        popup.openPopup(image)
+    function openImagePopup(image, url) {
+        openPopup(imagePopupComponent, {image: image, url: url})
     }
 
     function openProfilePopup(publicKey: string, parentPopup, cb) {
@@ -140,13 +156,12 @@ QtObject {
 
     function openSendIDRequestPopup(publicKey, cb) {
         const contactDetails = Utils.getContactDetailsAsJson(publicKey, false)
+        const mainDisplayName = ProfileUtils.displayName(contactDetails.localNickname, contactDetails.name, contactDetails.displayName, contactDetails.alias)
         openPopup(sendIDRequestPopupComponent, {
             userPublicKey: publicKey,
-            userDisplayName: contactDetails.displayName,
-            userIcon: contactDetails.largeImage,
-            userIsEnsVerified: contactDetails.ensVerified,
-            "headerSettings.title": qsTr("Verify %1's Identity").arg(contactDetails.displayName),
-            challengeText: qsTr("Ask a question that only the real %1 will be able to answer e.g. a question about a shared experience, or ask %1 to enter a code or phrase you have sent to them via a different communication channel (phone, post, etc...).").arg(contactDetails.displayName),
+            contactDetails: contactDetails,
+            title: qsTr("Verify %1's Identity").arg(mainDisplayName),
+            challengeText: qsTr("Ask a question that only the real %1 will be able to answer e.g. a question about a shared experience, or ask %1 to enter a code or phrase you have sent to them via a different communication channel (phone, post, etc...).").arg(mainDisplayName),
             buttonText: qsTr("Send verification request")
         }, cb)
     }
@@ -187,9 +202,7 @@ QtObject {
         const contactDetails = Utils.getContactDetailsAsJson(publicKey, false)
         const popupProperties = {
             userPublicKey: publicKey,
-            userDisplayName: contactDetails.displayName,
-            userIcon: contactDetails.largeImage,
-            userIsEnsVerified: contactDetails.ensVerified
+            contactDetails: contactDetails
         }
 
         openPopup(sendContactRequestPopupComponent, popupProperties, cb)
@@ -217,8 +230,36 @@ QtObject {
         openPopup(importCommunitiesPopupComponent)
     }
 
-    function openDiscordImportProgressPopup() {
-        openPopup(discordImportProgressDialog)
+    function openCommunityIntroPopup(communityId, name, introMessage,
+                                     imageSrc, accessType, isInvitationPending) {
+        openPopup(communityIntroDialogPopup,
+                  {communityId: communityId,
+                   name: name,
+                   introMessage: introMessage,
+                   imageSrc: imageSrc,
+                   accessType: accessType,
+                   isInvitationPending: isInvitationPending
+                  })
+    }
+
+    function openCommunityShareAddressesPopup(communityId, name, imageSrc) {
+        openPopup(communityIntroDialogPopup,
+                  {communityId: communityId,
+                   stackTitle: qsTr("Share addresses with %1's owner").arg(name),
+                   name: name,
+                   introMessage: qsTr("Share addresses to rejoin %1").arg(name),
+                   imageSrc: imageSrc,
+                   accessType: Constants.communityChatOnRequestAccess,
+                   isInvitationPending: false
+                  })
+    }
+
+    function openEditSharedAddressesPopup(communityId) {
+        openPopup(editSharedAddressesPopupComponent, {communityId: communityId, isEditMode: true})
+    }
+
+    function openDiscordImportProgressPopup(importingSingleChannel) {
+        openPopup(discordImportProgressDialog, {importingSingleChannel: importingSingleChannel})
     }
 
     function openRemoveContactConfirmationPopup(displayName, publicKey) {
@@ -250,15 +291,28 @@ QtObject {
         openPopup(testnetModal)
     }
 
-    function openExportControlNodePopup(communityName, privateKey, cb) {
-        openPopup(exportControlNodePopup, {
-            communityName: communityName,
-            privateKey: privateKey
-        }, cb)
+    function openExportControlNodePopup(community) {
+        openPopup(exportControlNodePopup, { community })
     }
 
-    function openImportControlNodePopup(community, cb) {
-        openPopup(importControlNodePopup, {community: community}, cb)
+    function openImportControlNodePopup(community) {
+        openPopup(importControlNodePopup, { community })
+    }
+
+    function openTransferOwnershipPopup(communityId, communityName, communityLogo, token, accounts, sendModalPopup) {
+        openPopup(transferOwnershipPopup, { communityId, communityName, communityLogo, token, accounts, sendModalPopup })
+    }
+
+    function openConfirmExternalLinkPopup(link, domain) {
+        openPopup(confirmExternalLinkPopup, {link, domain})
+    }
+
+    function openFinaliseOwnershipPopup(communityId) {
+        openPopup(finaliseOwnershipPopup, { communityId: communityId })
+    }
+
+    function openDeclineOwnershipPopup(communityId, communityName) {
+        openPopup(declineOwnershipPopup, { communityName: communityName, communityId: communityId })
     }
 
     readonly property list<Component> _components: [
@@ -477,8 +531,80 @@ QtObject {
             id: importCommunitiesPopupComponent
             ImportCommunityPopup {
                 store: root.communitiesStore
-                onClosed: {
-                    destroy()
+                onJoinCommunityRequested: {
+                    close()
+                    openCommunityIntroPopup(communityId,
+                                            communityDetails.name,
+                                            communityDetails.introMessage,
+                                            communityDetails.image,
+                                            communityDetails.access,
+                                            root.rootStore.isMyCommunityRequestPending(communityId))
+                }
+                onClosed: destroy()
+            }
+        },
+
+        Component {
+            id: communityIntroDialogPopup
+            CommunityIntroDialog {
+                id: communityIntroDialog
+                property string communityId
+                loginType: root.rootStore.loginType
+                requirementsCheckPending: root.rootStore.requirementsCheckPending
+                walletAccountsModel: root.rootStore.walletAccountsModel
+                permissionsModel: {
+                    root.rootStore.prepareTokenModelForCommunity(communityIntroDialog.communityId)
+                    return root.rootStore.permissionsModel
+                }
+                assetsModel: root.rootStore.assetsModel
+                collectiblesModel: root.rootStore.collectiblesModel
+                onPrepareForSigning: {
+                    root.rootStore.prepareKeypairsForSigning(communityIntroDialog.communityId, communityIntroDialog.name, sharedAddresses, airdropAddress, false)
+
+                    communityIntroDialog.keypairSigningModel = root.rootStore.communitiesModuleInst.keypairsSigningModel
+                }
+
+                onSignSharedAddressesForAllNonKeycardKeypairs: {
+                    root.rootStore.signSharedAddressesForAllNonKeycardKeypairs()
+                }
+
+                onSignSharedAddressesForKeypair: {
+                    root.rootStore.signSharedAddressesForKeypair(keyUid)
+                }
+
+                onJoinCommunity: {
+                    root.rootStore.joinCommunityOrEditSharedAddresses()
+                }
+
+                onCancelMembershipRequest: root.rootStore.cancelPendingRequest(communityIntroDialog.communityId)
+                Connections {
+                    target: root.communitiesStore.communitiesModuleInst
+                    function onCommunityAccessRequested(communityId: string) {
+                        if (communityId !== communityIntroDialog.communityId)
+                            return
+                        root.communitiesStore.spectateCommunity(communityId);
+                        communityIntroDialog.close();
+                    }
+                    function onCommunityAccessFailed(communityId: string, error: string) {
+                        if (communityId !== communityIntroDialog.communityId)
+                            return
+                        communityIntroDialog.close();
+                    }
+                }
+                onSharedAddressesUpdated: {
+                    root.rootStore.updatePermissionsModel(communityIntroDialog.communityId, sharedAddresses)
+                }
+                onAboutToShow: { root.rootStore.communityKeyToImport = communityIntroDialog.communityId; }
+                onClosed: { root.rootStore.communityKeyToImport = ""; destroy(); }
+
+                Connections {
+                    target: root.rootStore.communitiesModuleInst
+
+                    function onSharedAddressesForAllNonKeycardKeypairsSigned() {
+                        if (!!communityIntroDialog.replaceItem) {
+                            communityIntroDialog.replaceLoader.item.sharedAddressesForAllNonKeycardKeypairsSigned()
+                        }
+                    }
                 }
             }
         },
@@ -606,6 +732,7 @@ QtObject {
         Component {
             id: exportControlNodePopup
             ExportControlNodePopup {
+                devicesStore: root.devicesStore
                 onClosed: destroy()
             }
         },
@@ -614,8 +741,185 @@ QtObject {
             id: importControlNodePopup
             ImportControlNodePopup {
                 onClosed: destroy()
+                onImportControlNode: console.warn("!!! TODO importControlNode for community:", community.name) // FIXME implement moving (importing) the control node
+            }
+        },
+
+        Component {
+            id: editSharedAddressesPopupComponent
+            SharedAddressesPopup {
+                id: editSharedAddressesPopup
+
+                readonly property var oldSharedAddresses: root.rootStore.myRevealedAddressesForCurrentCommunity
+                readonly property string oldAirdropAddress: root.rootStore.myRevealedAirdropAddressForCurrentCommunity
+
+                onOldSharedAddressesChanged: {
+                    editSharedAddressesPopup.setOldSharedAddresses(
+                        editSharedAddressesPopup.oldSharedAddresses
+                    )
+                }
+
+                onOldAirdropAddressChanged: {
+                    editSharedAddressesPopup.setOldAirdropAddress(
+                        editSharedAddressesPopup.oldAirdropAddress
+                    )
+                }
+
+                property string communityId
+
+                readonly property var chatStore: ChatStore.RootStore {
+                    contactsStore: root.rootStore.contactStore
+                    chatCommunitySectionModule: {
+                        root.rootStore.mainModuleInst.prepareCommunitySectionModuleForCommunityId(editSharedAddressesPopup.communityId)
+                        return root.rootStore.mainModuleInst.getCommunitySectionModule()
+                    }
+                }
+
+                communityName: chatStore.sectionDetails.name
+                communityIcon: chatStore.sectionDetails.image
+                requirementsCheckPending: root.rootStore.requirementsCheckPending
+                loginType: chatStore.loginType
+                walletAccountsModel: root.rootStore.walletAccountsModel
+                permissionsModel: {
+                    root.rootStore.prepareTokenModelForCommunity(editSharedAddressesPopup.communityId)
+                    return root.rootStore.permissionsModel
+                }
+                assetsModel: chatStore.assetsModel
+                collectiblesModel: chatStore.collectiblesModel
+
+                onSharedAddressesChanged: root.rootStore.updatePermissionsModel(
+                    editSharedAddressesPopup.communityId, sharedAddresses)
+                onPrepareForSigning: {
+                    root.rootStore.prepareKeypairsForSigning(editSharedAddressesPopup.communityId, "", sharedAddresses, airdropAddress, true)
+
+                    editSharedAddressesPopup.keypairSigningModel = root.rootStore.communitiesModuleInst.keypairsSigningModel
+                }
+
+                onSignSharedAddressesForAllNonKeycardKeypairs: {
+                    root.rootStore.signSharedAddressesForAllNonKeycardKeypairs()
+                }
+
+                onSignSharedAddressesForKeypair: {
+                    root.rootStore.signSharedAddressesForKeypair(keyUid)
+                }
+
+                onEditRevealedAddresses: {
+                    root.rootStore.joinCommunityOrEditSharedAddresses()
+                }
+
+                onClosed: destroy()
+
+                Connections {
+                    target: root.rootStore.communitiesModuleInst
+
+                    function onSharedAddressesForAllNonKeycardKeypairsSigned() {
+                        editSharedAddressesPopup.sharedAddressesForAllNonKeycardKeypairsSigned()
+                    }
+                }
+            }
+        },
+
+        Component {
+            id: transferOwnershipPopup
+            TransferOwnershipPopup {
+                onClosed: destroy()
+            }
+        },
+
+        Component {
+            id: confirmExternalLinkPopup
+            ConfirmExternalLinkPopup {
+                destroyOnClose: true
+                onOpenExternalLink: root.openExternalLink(link)
+                onSaveDomainToUnfurledWhitelist: root.saveDomainToUnfurledWhitelist(domain)
+            }
+        },
+
+        // Components related to transfer community ownership flow:
+        Component {
+            id: finaliseOwnershipPopup
+            FinaliseOwnershipPopup {
+                id: finalisePopup
+
+                property string communityId
+                readonly property var ownerTokenDetails: root.communityTokensStore.ownerTokenDetails
+                readonly property var communityData : root.communitiesStore.getCommunityDetailsAsJson(communityId)
+
+                Component.onCompleted: root.communityTokensStore.asyncGetOwnerTokenDetails(communityId)
+
+                communityName: communityData.name
+                communityLogo: communityData.image
+                communityColor: communityData.color
+
+                tokenSymbol: ownerTokenDetails.symbol
+                tokenChainName: ownerTokenDetails.chainName
+
+                feeText: feeSubscriber.feeText
+                feeErrorText: feeSubscriber.feeErrorText
+                isFeeLoading: !feeSubscriber.feesResponse
+
+                accounts: WalletStore.RootStore.nonWatchAccounts
+
+                destroyOnClose: true
+
+                onRejectClicked: Global.openDeclineOwnershipPopup(finalisePopup.communityId, communityData.name)
+                onFinaliseOwnershipClicked: signPopup.open()
+
+                onVisitCommunityClicked: communitiesStore.navigateToCommunity(finalisePopup.communityId)
+                onOpenControlNodeDocClicked: Global.openLink(link)
+
+                SetSignerFeesSubscriber {
+                    id: feeSubscriber
+
+                    readonly property TransactionFeesBroker feesBroker: TransactionFeesBroker {
+                        communityTokensStore: root.communityTokensStore
+                    }
+
+                    chainId: finalisePopup.ownerTokenDetails.chainId
+                    contractAddress: finalisePopup.ownerTokenDetails.contractAddress
+                    accountAddress: finalisePopup.ownerTokenDetails.accountAddress
+                    enabled: finalisePopup.visible || signPopup.visible
+                    Component.onCompleted: feesBroker.registerSetSignerFeesSubscriber(feeSubscriber)
+                }
+
+                SignTransactionsPopup {
+                    id: signPopup
+
+                    title: qsTr("Sign transaction - update %1 smart contract").arg(finalisePopup.communityName)
+                    totalFeeText: finalisePopup.isFeeLoading ? "" : finalisePopup.feeText
+                    errorText: finalisePopup.feeErrorText
+                    accountName: finalisePopup.ownerTokenDetails.accountName
+
+                    model: QtObject {
+                        readonly property string title: finalisePopup.feeLabel
+                        readonly property string feeText: signPopup.totalFeeText
+                        readonly property bool error: finalisePopup.feeErrorText !== ""
+                    }
+
+                    onSignTransactionClicked: {
+                        finalisePopup.close()
+                        root.communityTokensStore.updateSmartContract(finalisePopup.communityId, finalisePopup.ownerTokenDetails.chainId, finalisePopup.ownerTokenDetails.contractAddress, finalisePopup.ownerTokenDetails.accountAddress)
+                    }
+                }
+
+                Connections {
+                    target: root
+                    onOwnershipDeclined: {
+                        finalisePopup.close()
+                        root.rootStore.communityTokensStore.ownershipDeclined(communityId, communityName)
+                    }
+                }
+            }
+        },
+
+        Component {
+            id: declineOwnershipPopup
+            FinaliseOwnershipDeclinePopup {
+                destroyOnClose: true
+
+                onDeclineClicked: root.ownershipDeclined()
             }
         }
-
+        // End of components related to transfer community ownership flow.
     ]
 }

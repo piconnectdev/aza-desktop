@@ -40,6 +40,11 @@ BUILD_SYSTEM_DIR := vendor/nimbus-build-system
 	status-keycard-go \
 	statusq-sanity-checker \
 	run-statusq-sanity-checker \
+        statusq-tests \
+        run-statusq-tests \
+        storybook-build \
+        run-storybook \
+        run-storybook-tests \
 	update
 
 ifeq ($(NIM_PARAMS),)
@@ -69,12 +74,13 @@ else
 endif
 
 ifeq ($(detected_OS),Darwin)
- CFLAGS := -mmacosx-version-min=10.14
+ CFLAGS := -mmacosx-version-min=11.0
  export CFLAGS
- CGO_CFLAGS := -mmacosx-version-min=10.14
+ CGO_CFLAGS := -mmacosx-version-min=11.0
  export CGO_CFLAGS
  LIBSTATUS_EXT := dylib
- MACOSX_DEPLOYMENT_TARGET := 10.14
+  # keep in sync with BOTTLE_MACOS_VERSION
+ MACOSX_DEPLOYMENT_TARGET := 11.0
  export MACOSX_DEPLOYMENT_TARGET
  PKG_TARGET := pkg-macos
  RUN_TARGET := run-macos
@@ -118,17 +124,18 @@ ifeq ($(detected_OS),Darwin)
 BOTTLES_DIR := $(shell pwd)/bottles
 BOTTLES := $(addprefix $(BOTTLES_DIR)/,openssl@1.1 pcre)
 ifeq ($(QT_ARCH),arm64)
-	EXCLUDE_BOTTLES := 'linux'
+# keep in sync with MACOSX_DEPLOYMENT_TARGET
+	BOTTLE_MACOS_VERSION := 'arm64_big_sur'
 else
-	EXCLUDE_BOTTLES := 'arm|linux'
+	BOTTLE_MACOS_VERSION := 'big_sur'
 endif
 $(BOTTLES): | $(BOTTLES_DIR)
-	echo -e "\033[92mFetching:\033[39m $(notdir $@) bottle arch $(QT_ARCH)"
-	./scripts/fetch-brew-bottle.sh $(notdir $@) $(EXCLUDE_BOTTLES)
+	echo -e "\033[92mFetching:\033[39m $(notdir $@) bottle arch $(QT_ARCH) $(BOTTLE_MACOS_VERSION)"
+	./scripts/fetch-brew-bottle.sh $(notdir $@) $(BOTTLE_MACOS_VERSION) $(HANDLE_OUTPUT)
 
 $(BOTTLES_DIR):
 	echo -e "\033[92mUpdating:\033[39m macOS Homebrew"
-	if [[ $$(stat -f %u /usr/local/var/homebrew) -ne "$${UID}" ]]; then \
+	if [[ $$(stat -f %u /usr/local/var/homebrew) -ne "$${UID}" ]] && [[ $$(stat -f %u /opt/homebrew/bin/brew) -ne "$${UID}" ]]; then \
 		echo "Missing permissions to update Homebrew formulae!" >&2; \
 	else \
 		brew update >/dev/null; \
@@ -146,18 +153,15 @@ QML_DEBUG ?= false
 QML_DEBUG_PORT ?= 49152
 
 ifneq ($(QML_DEBUG), false)
- STATUSQ_BUILD_TYPE=Debug
- DOTHERSIDE_CMAKE_PARAMS := -DCMAKE_BUILD_TYPE=Debug -DQML_DEBUG_PORT=$(QML_DEBUG_PORT)
- DOTHERSIDE_BUILD_CMD := cmake --build . --config Debug
+ COMMON_CMAKE_BUILD_TYPE=Debug
+ DOTHERSIDE_CMAKE_CONFIG_PARAMS := -DQML_DEBUG_PORT=$(QML_DEBUG_PORT)
 else
- STATUSQ_BUILD_TYPE=Release
- DOTHERSIDE_CMAKE_PARAMS := -DCMAKE_BUILD_TYPE=Release
- DOTHERSIDE_BUILD_CMD := cmake --build . --config Release
+ COMMON_CMAKE_BUILD_TYPE=Release
 endif
 
 MONITORING ?= false
 ifneq ($(MONITORING), false)
- DOTHERSIDE_CMAKE_PARAMS += -DMONITORING:BOOL=ON -DMONITORING_QML_ENTRY_POINT:STRING="/../monitoring/Main.qml"
+ DOTHERSIDE_CMAKE_CONFIG_PARAMS += -DMONITORING:BOOL=ON -DMONITORING_QML_ENTRY_POINT:STRING="/../monitoring/Main.qml"
 endif
 
 
@@ -182,19 +186,15 @@ ifneq ($(detected_OS),Windows)
  else
   NIM_PARAMS += --passL:"-L$(QT5_LIBDIR)"
  endif
- DOTHERSIDE := vendor/DOtherSide/build/lib/libDOtherSideStatic.a
- DOTHERSIDE_CMAKE_PARAMS += -DENABLE_DYNAMIC_LIBS=OFF -DENABLE_STATIC_LIBS=ON
+ DOTHERSIDE_LIBFILE := vendor/DOtherSide/build/lib/libDOtherSideStatic.a
  # order matters here, due to "-Wl,-as-needed"
- NIM_PARAMS += --passL:"$(DOTHERSIDE)" --passL:"$(shell PKG_CONFIG_PATH="$(QT5_PCFILEDIR)" pkg-config --libs Qt5Core Qt5Qml Qt5Gui Qt5Quick Qt5QuickControls2 Qt5Widgets Qt5Svg Qt5Multimedia)"
+ NIM_PARAMS += --passL:"$(DOTHERSIDE_LIBFILE)" --passL:"$(shell PKG_CONFIG_PATH="$(QT5_PCFILEDIR)" pkg-config --libs Qt5Core Qt5Qml Qt5Gui Qt5Quick Qt5QuickControls2 Qt5Widgets Qt5Svg Qt5Multimedia Qt5WebView Qt5WebChannel)"
 else
- ifneq ($(QML_DEBUG), false)
-  DOTHERSIDE := vendor/DOtherSide/build/lib/Debug/DOtherSide.dll
- else
-  DOTHERSIDE := vendor/DOtherSide/build/lib/Release/DOtherSide.dll
- endif
- DOTHERSIDE_CMAKE_PARAMS += -T"v141" -A x64 -DENABLE_DYNAMIC_LIBS=ON -DENABLE_STATIC_LIBS=OFF
- NIM_PARAMS += -L:$(DOTHERSIDE)
  NIM_EXTRA_PARAMS := --passL:"-lsetupapi -lhid"
+endif
+
+ifeq ($(detected_OS),Windows)
+ COMMON_CMAKE_CONFIG_PARAMS := -T"v141" -A x64
 endif
 
 ifeq ($(detected_OS),Darwin)
@@ -202,8 +202,7 @@ ifeq ($(detected_OS),Darwin)
    ifneq ($(QT_ARCH),arm64)
 	STATUSGO_MAKE_PARAMS += GOBIN_SHARED_LIB_CFLAGS="CGO_ENABLED=1 GOOS=darwin GOARCH=amd64"
 	STATUSKEYCARDGO_MAKE_PARAMS += CGOFLAGS="CGO_ENABLED=1 GOOS=darwin GOARCH=amd64"
-	DOTHERSIDE_CMAKE_PARAMS += -DCMAKE_OSX_ARCHITECTURES=x86_64
-	STATUSQ_CMAKE_CONFIG_PARAMS += -DCMAKE_OSX_ARCHITECTURES=x86_64
+	COMMON_CMAKE_CONFIG_PARAMS += -DCMAKE_OSX_ARCHITECTURES=x86_64
 	QRCODEGEN_MAKE_PARAMS += CFLAGS="-target x86_64-apple-macos10.12"
 	NIM_PARAMS += --cpu:amd64 --os:MacOSX --passL:"-arch x86_64" --passC:"-arch x86_64"
   endif
@@ -230,8 +229,11 @@ NIM_PARAMS += --outdir:./bin
 
 # App version
 VERSIONFILE=VERSION
+SGVERSIONFILE=vendor/status-go/VERSION
 DESKTOP_VERSION=`cat $(VERSIONFILE)`
+STATUSGO_VERSION=`cat $(SGVERSIONFILE)`
 NIM_PARAMS += -d:DESKTOP_VERSION="$(DESKTOP_VERSION)"
+NIM_PARAMS += -d:STATUSGO_VERSION="$(STATUSGO_VERSION)"
 
 GIT_COMMIT=`git log --pretty=format:'%h' -n 1`
 NIM_PARAMS += -d:GIT_COMMIT="$(GIT_COMMIT)"
@@ -247,37 +249,32 @@ endif
 ##	StatusQ
 ##
 
-ifneq ($(detected_OS),Windows)
- STATUSQ := bin/StatusQ/libStatusQ.$(LIBSTATUS_EXT)
-else
- STATUSQ := bin/StatusQ/StatusQ.$(LIBSTATUS_EXT)
- STATUSQ_CMAKE_CONFIG_PARAMS := -T"v141" -A x64
-endif
-
+STATUSQ_SOURCE_PATH := ui/StatusQ
 STATUSQ_BUILD_PATH := ui/StatusQ/build
 STATUSQ_INSTALL_PATH := $(shell pwd)/bin
 STATUSQ_CMAKE_CACHE := $(STATUSQ_BUILD_PATH)/CMakeCache.txt
 
 $(STATUSQ_CMAKE_CACHE): | deps
 	echo -e "\033[92mConfiguring:\033[39m StatusQ"
-	cmake -DCMAKE_INSTALL_PREFIX=$(STATUSQ_INSTALL_PATH) \
-		-DCMAKE_BUILD_TYPE=$(STATUSQ_BUILD_TYPE) \
+	cmake \
+		-DCMAKE_INSTALL_PREFIX=$(STATUSQ_INSTALL_PATH) \
+		-DCMAKE_BUILD_TYPE=$(COMMON_CMAKE_BUILD_TYPE) \
 		-DSTATUSQ_BUILD_SANDBOX=OFF \
 		-DSTATUSQ_BUILD_SANITY_CHECKER=OFF \
 		-DSTATUSQ_BUILD_TESTS=OFF \
-		$(STATUSQ_CMAKE_CONFIG_PARAMS) \
+		$(COMMON_CMAKE_CONFIG_PARAMS) \
 		-B $(STATUSQ_BUILD_PATH) \
-		-S ui/StatusQ \
+		-S $(STATUSQ_SOURCE_PATH) \
 		-Wno-dev \
 		$(HANDLE_OUTPUT)
 
-statusq-configure: | $(STATUSQ_CMAKE_CACHE) 
+statusq-configure: | $(STATUSQ_CMAKE_CACHE)
 
 statusq-build: | statusq-configure
 	echo -e "\033[92mBuilding:\033[39m StatusQ"
 	cmake --build $(STATUSQ_BUILD_PATH) \
 		--target StatusQ \
-		--config $(STATUSQ_BUILD_TYPE) \
+		--config $(COMMON_CMAKE_BUILD_TYPE) \
 		$(HANDLE_OUTPUT)
 
 statusq-install: | statusq-build
@@ -298,8 +295,8 @@ statusq-sanity-checker:
 		-DSTATUSQ_BUILD_SANDBOX=OFF \
 		-DSTATUSQ_BUILD_SANITY_CHECKER=ON \
 		-DSTATUSQ_BUILD_TESTS=OFF \
-		-B$(STATUSQ_BUILD_PATH) \
-		-Sui/StatusQ \
+		-B $(STATUSQ_BUILD_PATH) \
+		-S $(STATUSQ_SOURCE_PATH) \
 		$(HANDLE_OUTPUT)
 	echo -e "\033[92mBuilding:\033[39m StatusQ SanityChecker"
 	cmake \
@@ -311,27 +308,120 @@ run-statusq-sanity-checker: statusq-sanity-checker
 	echo -e "\033[92mRunning:\033[39m StatusQ SanityChecker"
 	$(STATUSQ_BUILD_PATH)/bin/SanityChecker
 
+statusq-tests:
+	echo -e "\033[92mConfiguring:\033[39m StatusQ Unit Tests"
+	cmake \
+		-DSTATUSQ_BUILD_SANDBOX=OFF \
+		-DSTATUSQ_BUILD_SANITY_CHECKER=OFF \
+		-DSTATUSQ_BUILD_TESTS=ON \
+		-DSTATUSQ_SHADOW_BUILD=OFF \
+		-B $(STATUSQ_BUILD_PATH) \
+		-S $(STATUSQ_SOURCE_PATH) \
+		$(HANDLE_OUTPUT)
+	echo -e "\033[92mBuilding:\033[39m StatusQ Unit Tests"
+	cmake \
+		--build $(STATUSQ_BUILD_PATH) \
+		$(HANDLE_OUTPUT)
+
+run-statusq-tests: statusq-tests
+	echo -e "\033[92mRunning:\033[39m StatusQ Unit Tests"
+	ctest -V --test-dir $(STATUSQ_BUILD_PATH) ${ARGS}
+
+##
+##	Storybook
+##
+
+STORYBOOK_SOURCE_PATH := storybook
+STORYBOOK_BUILD_PATH := $(STORYBOOK_SOURCE_PATH)/build
+STORYBOOK_CMAKE_CACHE := $(STORYBOOK_BUILD_PATH)/CMakeCache.txt
+
+$(STORYBOOK_CMAKE_CACHE): | deps
+	echo -e "\033[92mConfiguring:\033[39m Storybook"
+	cmake \
+		-DCMAKE_INSTALL_PREFIX=$(STORYBOOK_INSTALL_PATH) \
+		-DCMAKE_BUILD_TYPE=$(COMMON_CMAKE_BUILD_TYPE) \
+		-DSTATUSQ_SHADOW_BUILD=OFF \
+		$(COMMON_CMAKE_CONFIG_PARAMS) \
+		-B $(STORYBOOK_BUILD_PATH) \
+		-S $(STORYBOOK_SOURCE_PATH) \
+		-Wno-dev \
+		$(HANDLE_OUTPUT)
+
+storybook-configure: | $(STORYBOOK_CMAKE_CACHE)
+
+storybook-build: | storybook-configure
+	echo -e "\033[92mBuilding:\033[39m Storybook"
+	cmake --build $(STORYBOOK_BUILD_PATH) \
+		--config $(COMMON_CMAKE_BUILD_TYPE) \
+		$(HANDLE_OUTPUT)
+
+run-storybook: storybook-build
+	echo -e "\033[92mRunning:\033[39m Storybook"
+	$(STORYBOOK_BUILD_PATH)/bin/Storybook
+
+run-storybook-tests: storybook-build
+	echo -e "\033[92mRunning:\033[39m Storybook Tests"
+	ctest -V --test-dir $(STORYBOOK_BUILD_PATH) -E PagesValidator
+
+# repeat because of https://bugreports.qt.io/browse/QTBUG-92236 (Qt < 5.15.4)
+run-storybook-pages-validator: storybook-build
+	echo -e "\033[92mRunning:\033[39m Storybook Pages Validator"
+	ctest -V --test-dir $(STORYBOOK_BUILD_PATH) -R PagesValidator --repeat until-pass:3
+
+storybook-clean:
+	echo -e "\033[92mCleaning:\033[39m Storybook"
+	rm -rf $(STORYBOOK_BUILD_PATH)
+
 ##
 ##	DOtherSide
 ##
 
-$(DOTHERSIDE): | deps
-	echo -e $(BUILD_MSG) "DOtherSide"
-	+ cd vendor/DOtherSide && \
-		mkdir -p build && \
-		cd build && \
-		rm -f CMakeCache.txt && \
-		cmake $(DOTHERSIDE_CMAKE_PARAMS)\
-			-DENABLE_DOCS=OFF \
-			-DENABLE_TESTS=OFF \
-			.. $(HANDLE_OUTPUT) && \
-		$(DOTHERSIDE_BUILD_CMD) \
-			$(HANDLE_OUTPUT)
+ifneq ($(detected_OS),Windows)
+ DOTHERSIDE_CMAKE_CONFIG_PARAMS += -DENABLE_DYNAMIC_LIBS=OFF -DENABLE_STATIC_LIBS=ON
+#  NIM_PARAMS +=
+else
+ DOTHERSIDE_LIBFILE := vendor/DOtherSide/build/lib/$(COMMON_CMAKE_BUILD_TYPE)/DOtherSide.dll
+ DOTHERSIDE_CMAKE_CONFIG_PARAMS += -DENABLE_DYNAMIC_LIBS=ON -DENABLE_STATIC_LIBS=OFF
+ NIM_PARAMS += -L:$(DOTHERSIDE_LIBFILE)
+endif
 
-dotherside: $(DOTHERSIDE)
+DOTHERSIDE_SOURCE_PATH := vendor/DOtherSide
+DOTHERSIDE_BUILD_PATH := vendor/DOtherSide/build
+DOTHERSIDE_CMAKE_CACHE := $(DOTHERSIDE_BUILD_PATH)/CMakeCache.txt
+DOTHERSIDE_LIBDIR := $(shell pwd)/$(shell dirname "$(DOTHERSIDE_LIBFILE)")
+export DOTHERSIDE_LIBDIR
+
+$(DOTHERSIDE_CMAKE_CACHE): | deps
+	echo -e "\033[92mConfiguring:\033[39m DOtherSide"
+	cmake \
+		-DCMAKE_BUILD_TYPE=$(COMMON_CMAKE_BUILD_TYPE) \
+		-DENABLE_DOCS=OFF \
+		-DENABLE_TESTS=OFF \
+		$(COMMON_CMAKE_CONFIG_PARAMS) \
+		$(DOTHERSIDE_CMAKE_CONFIG_PARAMS) \
+		-B $(DOTHERSIDE_BUILD_PATH) \
+		-S $(DOTHERSIDE_SOURCE_PATH) \
+		-Wno-dev \
+		$(HANDLE_OUTPUT)
+
+dotherside-configure: | $(DOTHERSIDE_CMAKE_CACHE)
+
+dotherside-build: | dotherside-configure
+	echo -e "\033[92mBuilding:\033[39m DOtherSide"
+	cmake \
+		--build $(DOTHERSIDE_BUILD_PATH) \
+		--config $(COMMON_CMAKE_BUILD_TYPE) \
+		$(HANDLE_OUTPUT)
 
 dotherside-clean:
-	$(MAKE) -C vendor/DOtherSide/build --no-print-directory clean
+	echo -e "\033[92mCleaning:\033[39m DOtherSide"
+	rm -rf $(DOTHERSIDE_BUILD_PATH)
+
+dotherside: | dotherside-build
+
+##
+##	status-go
+##
 
 STATUSGO := vendor/status-go/build/bin/libstatus.$(LIBSTATUS_EXT)
 STATUSGO_LIBDIR := $(shell pwd)/$(shell dirname "$(STATUSGO)")
@@ -349,14 +439,14 @@ status-go-clean:
 	rm -f $(STATUSGO)
 
 STATUSKEYCARDGO := vendor/status-keycard-go/build/libkeycard/libkeycard.$(LIBSTATUS_EXT)
-STATUSKEYCARDGO_LIBDIR := $(shell pwd)/$(shell dirname "$(STATUSKEYCARDGO)")
-export STATUSKEYCARDGO_LIBDIR
+export STATUSKEYCARDGO_LIBDIR := "$(shell pwd)/$(shell dirname "$(STATUSKEYCARDGO)")"
 
 status-keycard-go: $(STATUSKEYCARDGO)
 $(STATUSKEYCARDGO): | deps
 	echo -e $(BUILD_MSG) "status-keycard-go"
-	+ cd vendor/status-keycard-go && \
-	  $(MAKE) build-lib $(STATUSKEYCARDGO_MAKE_PARAMS) $(HANDLE_OUTPUT)
+	+ $(MAKE) -C vendor/status-keycard-go \
+		$(if $(filter 1 true,$(USE_MOCKED_KEYCARD_LIB)), build-mocked-lib, build-lib) \
+		$(STATUSKEYCARDGO_MAKE_PARAMS) $(HANDLE_OUTPUT)
 
 QRCODEGEN := vendor/QR-Code-generator/c/libqrcodegen.a
 
@@ -414,37 +504,13 @@ log-compile-translations:
 
 compile-translations: | log-compile-translations $(QM_BINARIES)
 
-# default token is a free-tier token with limited capabilities and usage
-# limits; our docs should include directions for community contributor to setup
-# their own Pokt account and token instead of relying on this default token
-# during development
-DEFAULT_POKT_TOKEN := 849214fd2f85acead08f5184
-POKT_TOKEN ?= $(DEFAULT_POKT_TOKEN)
-NIM_PARAMS += -d:POKT_TOKEN:"$(POKT_TOKEN)"
-
-# default token is a free-tier token with limited capabilities and usage
-# limits; our docs should include directions for community contributor to setup
-# their own Infura account and token instead of relying on this default token
-# during development
-DEFAULT_INFURA_TOKEN := 220a1abb4b6943a093c35d0ce4fb0732
-INFURA_TOKEN ?= $(DEFAULT_INFURA_TOKEN)
-NIM_PARAMS += -d:INFURA_TOKEN:"$(INFURA_TOKEN)"
-
-DEFAULT_OPENSEA_API_KEY := ""
-OPENSEA_API_KEY ?= $(DEFAULT_OPENSEA_API_KEY)
-NIM_PARAMS += -d:OPENSEA_API_KEY:"$(OPENSEA_API_KEY)"
-
-DEFAULT_TENOR_API_KEY := DU7DWZ27STB2
-TENOR_API_KEY ?= $(DEFAULT_TENOR_API_KEY)
-NIM_PARAMS += -d:TENOR_API_KEY:"$(TENOR_API_KEY)"
-
 # used to override the default number of kdf iterations for sqlcipher
 KDF_ITERATIONS ?= 0
 ifeq ($(shell test $(KDF_ITERATIONS) -gt 0; echo $$?),0)
   NIM_PARAMS += -d:KDF_ITERATIONS:"$(KDF_ITERATIONS)"
 endif
 
-NIM_PARAMS += -d:chronicles_sinks=textlines[stdout],textlines[nocolors,dynamic],textlines[file,nocolors] -d:chronicles_runtime_filtering=on -d:chronicles_default_output_device=dynamic
+NIM_PARAMS += -d:chronicles_sinks=textlines[stdout],textlines[nocolors,dynamic],textlines[file,nocolors] -d:chronicles_runtime_filtering=on -d:chronicles_default_output_device=dynamic -d:chronicles_log_level=trace
 
 RESOURCES_LAYOUT ?= -d:development
 
@@ -471,7 +537,7 @@ else
 endif
 
 $(NIM_STATUS_CLIENT): NIM_PARAMS += $(RESOURCES_LAYOUT)
-$(NIM_STATUS_CLIENT): $(NIM_SOURCES) $(DOTHERSIDE) | statusq check-qt-dir $(STATUSGO) $(STATUSKEYCARDGO) $(QRCODEGEN) $(FLEETS) rcc compile-translations deps
+$(NIM_STATUS_CLIENT): $(NIM_SOURCES) | statusq dotherside check-qt-dir $(STATUSGO) $(STATUSKEYCARDGO) $(QRCODEGEN) $(FLEETS) rcc compile-translations deps
 	echo -e $(BUILD_MSG) "$@"
 	$(ENV_SCRIPT) nim c $(NIM_PARAMS) \
 		--passL:"-L$(STATUSGO_LIBDIR)" \
@@ -492,7 +558,7 @@ ifeq ($(detected_OS),Darwin)
 		bin/nim_status_client
 ifeq ("$(wildcard ./node_modules/.bin/fileicon)","")
 	echo -e "\033[92mInstalling:\033[39m fileicon"
-	npm i
+	yarn install
 endif
 endif
 
@@ -588,7 +654,7 @@ DMG_TOOL := node_modules/.bin/create-dmg
 
 $(DMG_TOOL):
 	echo -e "\033[92mInstalling:\033[39m create-dmg"
-	npm i
+	yarn install
 
 MACOS_OUTER_BUNDLE := tmp/macos/dist/Status.app
 MACOS_INNER_BUNDLE := $(MACOS_OUTER_BUNDLE)/Contents/Frameworks/QtWebEngineCore.framework/Versions/Current/Helpers/QtWebEngineProcess.app
@@ -596,6 +662,7 @@ MACOS_INNER_BUNDLE := $(MACOS_OUTER_BUNDLE)/Contents/Frameworks/QtWebEngineCore.
 STATUS_CLIENT_DMG ?= pkg/Status.dmg
 
 $(STATUS_CLIENT_DMG): override RESOURCES_LAYOUT := $(PRODUCTION_PARAMETERS)
+$(STATUS_CLIENT_DMG): ENTITLEMENTS ?= resources/Entitlements.plist
 $(STATUS_CLIENT_DMG): nim_status_client $(DMG_TOOL)
 	rm -rf tmp/macos pkg/*.dmg
 	mkdir -p $(MACOS_OUTER_BUNDLE)/Contents/MacOS
@@ -623,9 +690,8 @@ $(STATUS_CLIENT_DMG): nim_status_client $(DMG_TOOL)
 	# if MACOS_CODESIGN_IDENT is not set then the outer and inner .app
 	# bundles are not signed
 ifdef MACOS_CODESIGN_IDENT
-	scripts/sign-macos-pkg.sh $(MACOS_OUTER_BUNDLE) $(MACOS_CODESIGN_IDENT)
-	scripts/sign-macos-pkg.sh $(MACOS_INNER_BUNDLE) $(MACOS_CODESIGN_IDENT) \
-		--entitlements QtWebEngineProcess.plist
+	scripts/sign-macos-pkg.sh $(MACOS_OUTER_BUNDLE) $(MACOS_CODESIGN_IDENT) \
+		--entitlements $(ENTITLEMENTS)
 endif
 	echo -e $(BUILD_MSG) "dmg"
 	mkdir -p pkg
@@ -646,8 +712,7 @@ ifdef MACOS_CODESIGN_IDENT
 	scripts/sign-macos-pkg.sh $(STATUS_CLIENT_DMG) $(MACOS_CODESIGN_IDENT)
 endif
 
-notarize-macos: export CHECK_INTERVAL_SEC ?= 30
-notarize-macos: export CHECK_RETRY_LIMIT ?= 40
+notarize-macos: export CHECK_TIMEOUT ?= 10m
 notarize-macos: export MACOS_BUNDLE_ID ?= im.status.ethereum.desktop
 notarize-macos:
 	scripts/notarize-macos-pkg.sh $(STATUS_CLIENT_DMG)
@@ -683,7 +748,7 @@ $(STATUS_CLIENT_EXE): nim_status_client nim_windows_launcher $(NIM_WINDOWS_PREBU
 	cp bin/nim_windows_launcher.exe $(OUTPUT)/Status.exe
 	rcedit $(OUTPUT)/bin/Status.exe --set-icon $(OUTPUT)/resources/status.ico
 	rcedit $(OUTPUT)/Status.exe --set-icon $(OUTPUT)/resources/status.ico
-	cp $(DOTHERSIDE) $(STATUSGO) $(STATUSKEYCARDGO) tmp/windows/tools/*.dll $(OUTPUT)/bin/
+	cp $(DOTHERSIDE_LIBFILE) $(STATUSGO) $(STATUSKEYCARDGO) tmp/windows/tools/*.dll $(OUTPUT)/bin/
 	cp "$(shell which libgcc_s_seh-1.dll)" $(OUTPUT)/bin/
 	cp "$(shell which libwinpthread-1.dll)" $(OUTPUT)/bin/
 	echo -e $(BUILD_MSG) "deployable folder"
@@ -727,7 +792,7 @@ pkg-windows: check-pkg-target-windows $(STATUS_CLIENT_EXE)
 
 zip-windows: check-pkg-target-windows $(STATUS_CLIENT_7Z)
 
-clean: | clean-common statusq-clean status-go-clean dotherside-clean
+clean: | clean-common statusq-clean status-go-clean dotherside-clean storybook-clean
 	rm -rf bin/* node_modules bottles/* pkg/* tmp/* $(STATUSKEYCARDGO)
 	+ $(MAKE) -C vendor/QR-Code-generator/c/ --no-print-directory clean
 
@@ -748,7 +813,7 @@ ICON_TOOL := node_modules/.bin/fileicon
 run-linux: nim_status_client
 	echo -e "\033[92mRunning:\033[39m bin/nim_status_client"
 	LD_LIBRARY_PATH="$(QT5_LIBDIR)":"$(STATUSGO_LIBDIR)":"$(STATUSKEYCARDGO_LIBDIR):$(LD_LIBRARY_PATH)" \
-	./bin/nim_status_client
+	./bin/nim_status_client $(ARGS)
 
 run-macos: nim_status_client
 	mkdir -p bin/StatusDev.app/Contents/{MacOS,Resources}
@@ -758,15 +823,17 @@ run-macos: nim_status_client
 		ln -fs ../../../nim_status_client ./
 	./node_modules/.bin/fileicon set bin/nim_status_client status-dev.icns
 	echo -e "\033[92mRunning:\033[39m bin/StatusDev.app/Contents/MacOS/nim_status_client"
-	./bin/StatusDev.app/Contents/MacOS/nim_status_client
+	./bin/StatusDev.app/Contents/MacOS/nim_status_client $(ARGS)
 
 run-windows: nim_status_client $(NIM_WINDOWS_PREBUILT_DLLS)
 	echo -e "\033[92mRunning:\033[39m bin/nim_status_client.exe"
-	PATH="$(shell pwd)"/"$(shell dirname "$(DOTHERSIDE)")":"$(STATUSGO_LIBDIR)":"$(STATUSKEYCARDGO_LIBDIR)":"$(shell pwd)"/"$(shell dirname "$(NIM_WINDOWS_PREBUILT_DLLS)")":"$(PATH)" \
-	./bin/nim_status_client.exe
+	PATH="$(DOTHERSIDE_LIBDIR)":"$(STATUSGO_LIBDIR)":"$(STATUSKEYCARDGO_LIBDIR)":"$(shell pwd)"/"$(shell dirname "$(NIM_WINDOWS_PREBUILT_DLLS)")":"$(PATH)" \
+	./bin/nim_status_client.exe $(ARGS)
 
-tests-nim-linux: | $(DOTHERSIDE)
+NIM_TEST_FILES := $(wildcard test/nim/*.nim)
+
+tests-nim-linux: | dotherside
 	LD_LIBRARY_PATH="$(QT5_LIBDIR):$(LD_LIBRARY_PATH)" \
-	$(ENV_SCRIPT) nim c $(NIM_PARAMS) $(NIM_EXTRA_PARAMS) -r test/nim/message_model_test.nim
+	$(foreach nimfile,$(NIM_TEST_FILES),$(ENV_SCRIPT) nim c $(NIM_PARAMS) $(NIM_EXTRA_PARAMS) -r $(nimfile);)
 
 endif # "variables.mk" was not included

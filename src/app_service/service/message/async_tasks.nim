@@ -1,4 +1,4 @@
-import std/uri
+import uuids
 include ../../common/json_utils
 include ../../../app/core/tasks/common
 
@@ -6,6 +6,15 @@ import ../../../backend/chat as status_go_chat
 
 import ../../../app/core/custom_urls/urls_manager
 
+import dto/seen_unseen_messages
+
+proc getCountAndCountWithMentionsFromResponse(chatId: string, seenAndUnseenMessagesBatch: JsonNode): (int, int) =
+  if seenAndUnseenMessagesBatch.len > 0:
+    for seenAndUnseenMessagesRaw in seenAndUnseenMessagesBatch:
+      let seenAndUnseenMessages = seenAndUnseenMessagesRaw.toSeenUnseenMessagesDto()
+      if seenAndUnseenMessages.chatId == chatId:
+        return (seenAndUnseenMessages.count, seenAndUnseenMessages.countWithMentions)
+  return (0, 0)
 
 #################################################
 # Async load messages
@@ -124,12 +133,17 @@ const asyncMarkAllMessagesReadTask: Task = proc(argEncoded: string) {.gcsafe, ni
   let arg = decode[AsyncMarkAllMessagesReadTaskArg](argEncoded)
 
   let response =  status_go.markAllMessagesFromChatWithIdAsRead(arg.chatId)
+
+  var activityCenterNotifications: JsonNode = newJObject()
+  discard response.result.getProp("activityCenterNotifications", activityCenterNotifications)
+
   let responseJson = %*{
     "chatId": arg.chatId,
+    "activityCenterNotifications": activityCenterNotifications,
     "error": response.error
   }
+
   arg.finish(responseJson)
-#################################################
 
 #################################################
 # Async mark certain messages read
@@ -144,11 +158,12 @@ const asyncMarkCertainMessagesReadTask: Task = proc(argEncoded: string) {.gcsafe
 
   let response = status_go.markCertainMessagesFromChatWithIdAsRead(arg.chatId, arg.messagesIds)
 
-  var count: int
-  discard response.result.getProp("count", count)
+  var seenAndUnseenMessagesBatch: JsonNode = newJObject()
+  discard response.result.getProp("seenAndUnseenMessages", seenAndUnseenMessagesBatch)
+  let (count, countWithMentions) = getCountAndCountWithMentionsFromResponse(arg.chatId, seenAndUnseenMessagesBatch)
 
-  var countWithMentions: int
-  discard response.result.getProp("countWithMentions", countWithMentions)
+  var activityCenterNotifications: JsonNode = newJObject()
+  discard response.result.getProp("activityCenterNotifications", activityCenterNotifications)
 
   var error = ""
   if(count == 0):
@@ -159,99 +174,12 @@ const asyncMarkCertainMessagesReadTask: Task = proc(argEncoded: string) {.gcsafe
     "messagesIds": arg.messagesIds,
     "count": count,
     "countWithMentions": countWithMentions,
+    "activityCenterNotifications": activityCenterNotifications,
     "error": error
   }
+
   arg.finish(responseJson)
-#################################################
 
-#################################################
-# Async GetLinkPreviewData
-#################################################
-
-type
-  AsyncGetLinkPreviewDataTaskArg = ref object of QObjectTaskArg
-    links: string
-    uuid: string
-    whiteListedUrls: string
-    whiteListedImgExtensions: string
-    unfurlImages: bool
-
-
-
-const asyncGetLinkPreviewDataTask: Task = proc(argEncoded: string) {.gcsafe, nimcall.} =
-  let arg = decode[AsyncGetLinkPreviewDataTaskArg](argEncoded)
-  var previewData =  %* {
-    "links": %*[]
-    }
-    
-  if arg.links == "":
-    arg.finish(previewData)
-    return
-
-  let parsedWhiteListUrls = parseJson(arg.whiteListedUrls)
-  let parsedWhiteListImgExtensions = arg.whiteListedImgExtensions.split(",")
-  
-  for link in arg.links.split(" "):
-    if link == "":
-      continue
-
-    let uri = parseUri(link)
-    let path = uri.path
-    let domain = uri.hostname.toLower()
-    let isSupportedImage = any(parsedWhiteListImgExtensions, proc (extenstion: string): bool = path.endsWith(extenstion))
-    let isListed = parsedWhiteListUrls.hasKey(domain)
-    let isProfileLink = path.startsWith(profileLinkPrefix)
-    let processUrl = not isProfileLink and (isListed or isSupportedImage)
-
-    if domain == "" or processUrl == false:
-      continue
-
-    let canUnfurl = parsedWhiteListUrls{domain}.getBool() or (isSupportedImage and arg.unfurlImages)
-    let responseJson = %*{
-      "link": link,
-      "success": true,
-      "unfurl": canUnfurl,
-      "isStatusDeepLink": false,
-      "result": %*{}
-    }
-
-    if canUnfurl == false:
-      previewData["links"].add(responseJson)
-      continue
-
-    #1. if it's an image, we use httpclient to validate the url
-    if isSupportedImage:
-      #TODO: validate image url using HEAD request
-      responseJson["result"] = %*{
-            "site": domain,
-            "thumbnailUrl": link,
-            "contentType": "image/" & path.split(".")[^1]
-          }
-      previewData["links"].add(responseJson)
-      continue
-
-    #2. Process whitelisted url
-    #status deep links are handled internally
-    if domain == StatusInternalLink or domain == StatusExternalLink:
-      responseJson["success"] = %true
-      responseJson["isStatusDeepLink"] = %true
-      responseJson["result"] = %*{
-        "site": domain,
-        "contentType": "text/html"
-      }
-      previewData["links"].add(responseJson)
-      continue
-    #other links are handled by status-go
-    try:
-      let response = status_go_chat.getLinkPreviewData(link)
-      responseJson["result"] = response.result
-      responseJson["success"] = %true
-    except:
-      responseJson["success"] = %false
-    previewData["links"].add(responseJson)
-
-  let tpl: tuple[previewData: JsonNode, uuid: string] = (previewData, arg.uuid)
-  arg.finish(tpl)
 
 #################################################
 # Async get first unseen message id
@@ -285,6 +213,32 @@ const asyncGetFirstUnseenMessageIdForTaskArg: Task = proc(argEncoded: string) {.
 
   arg.finish(responseJson)
 
+#################################################
+# Async get text URLs to unfurl
+#################################################
+
+type
+  AsyncGetTextURLsToUnfurlTaskArg = ref object of QObjectTaskArg
+    text*: string
+    requestUuid*: string
+
+const asyncGetTextURLsToUnfurlTask: Task = proc(argEncoded: string) {.gcsafe, nimcall.} =
+  let arg = decode[AsyncGetTextURLsToUnfurlTaskArg](argEncoded)
+  var output = %*{
+    "error": "",
+    "response": "",
+    "requestUuid": arg.requestUuid
+  }
+  try:
+    let response = status_go.getTextURLsToUnfurl(arg.text)
+    if response.error != nil:
+      output["error"] = %*response.error.message
+    output["response"] = %*response.result
+  except Exception as e:
+    error "asyncGetTextURLsToUnfurlTask failed:", msg = e.msg
+    output["error"] = %*e.msg
+  arg.finish(output)
+
 
 #################################################
 # Async unfurl urls
@@ -293,6 +247,7 @@ const asyncGetFirstUnseenMessageIdForTaskArg: Task = proc(argEncoded: string) {.
 type
   AsyncUnfurlUrlsTaskArg = ref object of QObjectTaskArg
     urls*: seq[string]
+    requestUuid*: string
 
 const asyncUnfurlUrlsTask: Task = proc(argEncoded: string) {.gcsafe, nimcall.} =
   let arg = decode[AsyncUnfurlUrlsTaskArg](argEncoded)
@@ -301,7 +256,8 @@ const asyncUnfurlUrlsTask: Task = proc(argEncoded: string) {.gcsafe, nimcall.} =
     let output = %*{
       "error": (if response.error != nil: response.error.message else: ""),
       "response": response.result,
-      "requestedUrls": %*arg.urls
+      "requestedUrls": %*arg.urls,
+      "requestUuid": arg.requestUuid
     }
     arg.finish(output)
   except Exception as e:
@@ -309,6 +265,80 @@ const asyncUnfurlUrlsTask: Task = proc(argEncoded: string) {.gcsafe, nimcall.} =
     let output = %*{
       "error": e.msg,
       "response": "",
-      "requestedUrls": %*arg.urls
+      "requestedUrls": %*arg.urls,
+      "requestUuid": arg.requestUuid
     }
     arg.finish(output)
+
+
+#################################################
+# Async get message by id
+#################################################
+
+type
+  AsyncGetMessageByMessageIdTaskArg = ref object of QObjectTaskArg
+    requestId*: string
+    messageId*: string
+
+const asyncGetMessageByMessageIdTask: Task = proc(argEncoded: string) {.gcsafe, nimcall.} =
+  let arg = decode[AsyncGetMessageByMessageIdTaskArg](argEncoded)
+  try:
+    let response = status_go.getMessageByMessageId(arg.messageId)
+    let output = %*{
+      "error": (if response.error != nil: response.error.message else: ""),
+      "message": response.result,
+      "requestId": arg.requestId,
+      "messageId": arg.messageId,
+    }
+    arg.finish(output)
+  except Exception as e:
+    error "asyncGetMessageByMessageIdTask failed", message = e.msg
+    let output = %*{
+      "error": e.msg,
+      "message": "",
+      "requestId": arg.requestId,
+      "messageId": arg.messageId,
+    }
+    arg.finish(output)
+
+#################################################
+# Async mark message as unread
+#################################################
+
+type
+    AsyncMarkMessageAsUnreadTaskArg = ref object of QObjectTaskArg
+      messageId*: string
+      chatId*: string
+
+const asyncMarkMessageAsUnreadTask: Task = proc(argEncoded: string) {.gcsafe, nimcall.} =
+  let arg = decode[AsyncMarkMessageAsUnreadTaskArg](argEncoded)
+
+  var responseJson = %*{
+    "chatId": arg.chatId,
+    "messageId": arg.messageId,
+    "messagesCount": 0,
+    "messagesWithMentionsCount": 0,
+    "error": ""
+  }
+
+  try:
+    let response = status_go.markMessageAsUnread(arg.chatId, arg.messageId)
+
+    var activityCenterNotifications: JsonNode = newJObject()
+    discard response.result.getProp("activityCenterNotifications", activityCenterNotifications)
+    responseJson["activityCenterNotifications"] = activityCenterNotifications
+
+    var seenAndUnseenMessagesBatch: JsonNode = newJObject()
+    discard response.result.getProp("seenAndUnseenMessages", seenAndUnseenMessagesBatch)
+    let (count, countWithMentions) = getCountAndCountWithMentionsFromResponse(arg.chatId, seenAndUnseenMessagesBatch)
+    responseJson["messagesCount"] = %count
+    responseJson["messagesWithMentionsCount"] = %countWithMentions
+
+    if response.error != nil:
+      responseJson["error"] = %response.error
+
+  except Exception as e:
+    error "asyncMarkMessageAsUnreadTask failed", message = e.msg
+    responseJson["error"] = %e.msg
+
+  arg.finish(responseJson)

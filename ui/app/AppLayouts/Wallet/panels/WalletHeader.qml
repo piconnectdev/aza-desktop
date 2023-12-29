@@ -82,31 +82,6 @@ Item {
                 visible: !overview.isAllAccounts
             }
 
-
-            StatusButton {
-                objectName: "hideShowWatchOnlyButton"
-                Layout.preferredHeight: 38
-                Layout.alignment: Qt.AlignTop
-
-                spacing: 8
-                size: StatusBaseButton.Size.Small
-                borderColor: Theme.palette.directColor7
-                normalColor: Theme.palette.transparent
-                hoverColor: Theme.palette.baseColor2
-
-                font.weight: Font.Normal
-                textColor: Theme.palette.baseColor1
-                text: overview.includeWatchOnly ? qsTr("Hide watch-only"): qsTr("Show watch-only")
-
-                icon.name: overview.includeWatchOnly ? "hide" : "show"
-                icon.height: 16
-                icon.width: 16
-                icon.color: Theme.palette.baseColor1
-
-                onClicked: switchHideWatchOnlyAccounts()
-                visible: overview.isAllAccounts
-            }
-
             // network filter
             NetworkFilter {
                 id: networkFilter
@@ -116,7 +91,6 @@ Item {
                 allNetworks: walletStore.allNetworks
                 layer1Networks: walletStore.layer1Networks
                 layer2Networks: walletStore.layer2Networks
-                testNetworks: walletStore.testNetworks
                 enabledNetworks: walletStore.enabledNetworks
 
                 onToggleNetwork: (network) => {

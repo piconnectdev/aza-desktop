@@ -1,12 +1,15 @@
-import QtQuick 2.13
-import QtQuick.Layouts 1.13
+import QtQuick 2.15
+import QtQuick.Layouts 1.15
 
 import StatusQ.Core 0.1
 import StatusQ.Controls 0.1
+import StatusQ.Core.Theme 0.1
 
 import utils 1.0
+import shared.controls 1.0
 import shared.views 1.0
 import shared.stores 1.0
+import shared.panels 1.0
 
 import "./"
 import "../stores"
@@ -21,12 +24,14 @@ Item {
     property var contactsStore
     property var sendModal
     property var networkConnectionStore
+    property bool showAllAccounts: false
 
     signal launchShareAddressModal()
 
     function resetView() {
         stack.currentIndex = 0
         root.currentTabIndex = 0
+        historyView.resetView()
     }
 
     function resetStack() {
@@ -45,13 +50,13 @@ Item {
         id: d
         function getBackButtonText(index) {
             switch(index) {
-                case 1:
+            case 1:
                 return qsTr("Collectibles")
-                case 2:
+            case 2:
                 return qsTr("Assets")
-                case 3:
+            case 3:
                 return qsTr("Activity")
-                default:
+            default:
                 return ""
             }
         }
@@ -75,85 +80,152 @@ Item {
                 onLaunchShareAddressModal: root.launchShareAddressModal()
                 onSwitchHideWatchOnlyAccounts: RootStore.toggleWatchOnlyAccounts()
             }
-            StatusTabBar {
-                id: walletTabBar
-                objectName: "rightSideWalletTabBar"
-                horizontalPadding: Style.current.padding
-                Layout.fillWidth: true
-                Layout.topMargin: Style.current.padding
 
-                StatusTabButton {
-                    leftPadding: 0
-                    width: implicitWidth
-                    text: qsTr("Assets")
+            ImportKeypairInfo {
+                Layout.fillWidth: true
+                Layout.topMargin: Style.current.bigPadding
+                Layout.preferredHeight: childrenRect.height
+                visible: root.store.walletSectionInst.hasPairedDevices && root.store.walletSectionInst.keypairOperabilityForObservedAccount === Constants.keypair.operability.nonOperable
+
+                onRunImport: {
+                    root.store.walletSectionInst.runKeypairImportPopup()
                 }
-                StatusTabButton {
-                    width: implicitWidth
-                    text: qsTr("Collectibles")
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                StatusTabBar {
+                    id: walletTabBar
+                    objectName: "rightSideWalletTabBar"
+                    Layout.fillWidth: true
+                    Layout.topMargin: Style.current.padding
+
+                    StatusTabButton {
+                        leftPadding: 0
+                        width: implicitWidth
+                        text: qsTr("Assets")
+                    }
+                    StatusTabButton {
+                        width: implicitWidth
+                        text: qsTr("Collectibles")
+                    }
+                    StatusTabButton {
+                        rightPadding: 0
+                        width: implicitWidth
+                        text: qsTr("Activity")
+                    }
+                    onCurrentIndexChanged: {
+                        RootStore.setCurrentViewedHoldingType(walletTabBar.currentIndex === 1 ? Constants.TokenType.ERC721 : Constants.TokenType.ERC20)
+                    }
                 }
-                StatusTabButton {
-                    rightPadding: 0
-                    width: implicitWidth
-                    text: qsTr("Activity")
+                StatusFlatButton {
+                    Layout.alignment: Qt.AlignTop
+                    id: filterButton
+                    icon.name: "filter"
+                    checkable: true
+                    icon.color: checked ? Theme.palette.primaryColor1 : Theme.palette.baseColor1
+                    Behavior on icon.color { ColorAnimation { duration: 200; easing.type: Easing.InOutQuad } }
+                    highlighted: checked
                 }
             }
             StackLayout {
+                id: mainViewLoader
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.topMargin: Style.current.padding
-                Layout.bottomMargin: Style.current.padding
                 currentIndex: walletTabBar.currentIndex
 
                 AssetsView {
                     assets: RootStore.assets
+                    overview: RootStore.overview
                     networkConnectionStore: root.networkConnectionStore
                     assetDetailsLaunched: stack.currentIndex === 2
+                    filterVisible: filterButton.checked
                     onAssetClicked: {
                         assetDetailView.token = token
+                        RootStore.setCurrentViewedHolding(token.symbol, Constants.TokenType.ERC20)
                         stack.currentIndex = 2
                     }
+                    onSendRequested: (symbol) => {
+                                         root.sendModal.preSelectedSendType = Constants.SendType.Transfer
+                                         root.sendModal.preSelectedHoldingID = symbol
+                                         root.sendModal.preSelectedHoldingType = Constants.TokenType.ERC20
+                                         root.sendModal.onlyAssets = true
+                                         root.sendModal.open()
+                                     }
+                    onReceiveRequested: (symbol) => root.launchShareAddressModal()
+                    onSwitchToCommunityRequested: (communityId) => Global.switchToCommunity(communityId)
+                    onManageTokensRequested: Global.changeAppSectionBySectionType(Constants.appSection.profile, Constants.settingsSubsection.wallet,
+                                                                                  Constants.walletSettingsSubsection.manageAssets)
                 }
+
                 CollectiblesView {
-                    collectiblesModel: RootStore.flatCollectibles
+                    collectiblesModel: RootStore.collectiblesStore.ownedCollectibles
+                    sendEnabled: root.networkConnectionStore.sendBuyBridgeEnabled && !RootStore.overview.isWatchOnlyAccount && RootStore.overview.canSend
+                    filterVisible: filterButton.checked
                     onCollectibleClicked: {
-                        RootStore.selectCollectible(address, tokenId)
+                        RootStore.collectiblesStore.getDetailedCollectible(chainId, contractAddress, tokenId)
+                        RootStore.setCurrentViewedHolding(uid, Constants.TokenType.ERC721)
                         stack.currentIndex = 1
                     }
+                    onSendRequested: (symbol) => {
+                                         root.sendModal.preSelectedSendType = Constants.SendType.Transfer
+                                         root.sendModal.preSelectedHoldingID = symbol
+                                         root.sendModal.preSelectedHoldingType = Constants.TokenType.ERC721
+                                         root.sendModal.onlyAssets = false
+                                         root.sendModal.open()
+                                     }
+                    onReceiveRequested: (symbol) => root.launchShareAddressModal()
+                    onSwitchToCommunityRequested: (communityId) => Global.switchToCommunity(communityId)
+                    onManageTokensRequested: Global.changeAppSectionBySectionType(Constants.appSection.profile, Constants.settingsSubsection.wallet,
+                                                                                  Constants.walletSettingsSubsection.manageCollectibles)
                 }
+
                 HistoryView {
+                    id: historyView
                     overview: RootStore.overview
-                    onLaunchTransactionDetail: {
-                        transactionDetailView.transaction = transaction
+                    showAllAccounts: root.showAllAccounts
+                    sendModal: root.sendModal
+                    onLaunchTransactionDetail: function (entry, entryIndex) {
+                        transactionDetailView.transactionIndex = entryIndex
+                        transactionDetailView.transaction = entry
                         stack.currentIndex = 3
                     }
                 }
             }
         }
         CollectibleDetailView {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
+            collectible: RootStore.collectiblesStore.detailedCollectible
+            isCollectibleLoading: RootStore.collectiblesStore.isDetailedCollectibleLoading
+
+            onVisibleChanged: {
+                if (!visible)
+                    RootStore.resetCurrentViewedHolding(Constants.TokenType.ERC721)
+            }
         }
         AssetsDetailView {
             id: assetDetailView
 
-            Layout.fillWidth: true
-            Layout.fillHeight: true
             visible: (stack.currentIndex === 2)
 
             assetsLoading: RootStore.assetsLoading
             address: RootStore.overview.mixedcaseAddress
+            showAllAccounts: root.showAllAccounts
 
             networkConnectionStore: root.networkConnectionStore
+
+            onVisibleChanged: {
+                if (!visible)
+                    RootStore.resetCurrentViewedHolding(Constants.TokenType.ERC20)
+            }
         }
 
         TransactionDetailView {
             id: transactionDetailView
-            Layout.fillWidth: true
-            Layout.fillHeight: true
             onVisibleChanged: {
                 if (!visible)
                     transaction = null
             }
+            showAllAccounts: root.showAllAccounts
             sendModal: root.sendModal
             contactsStore: root.contactsStore
             visible: (stack.currentIndex === 3)

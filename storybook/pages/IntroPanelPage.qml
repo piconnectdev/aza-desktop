@@ -23,6 +23,7 @@ SplitView {
             anchors.fill: tokenPanel
             border.width: 1
             anchors.margins: -15
+            color: "transparent"
         }
 
         IntroPanel {
@@ -67,7 +68,7 @@ SplitView {
                     id: addRadioButton
 
                     readonly property string textContent:
-                        ModelsData.descriptions._short_
+                        ModelsData.descriptions.shortLoremIpsum
 
                     text: "Short text"
                     checked: true
@@ -76,7 +77,7 @@ SplitView {
                     id: updateRadioButton
 
                     readonly property string textContent:
-                        ModelsData.descriptions.medium
+                        ModelsData.descriptions.mediumLoremIpsum
 
                     text: "Long text"
                 }
@@ -84,3 +85,5 @@ SplitView {
         }
     }
 }
+
+// category: Panels

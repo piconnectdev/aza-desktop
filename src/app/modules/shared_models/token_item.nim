@@ -1,6 +1,5 @@
 import strformat
 
-import ../../../app_service/service/wallet_account/dto
 import ./balance_item as balance_item
 import ./balance_model as balance_model
 import ./currency_amount
@@ -9,12 +8,11 @@ type
   Item* = object
     name: string
     symbol: string
+    totalRawBalance: string
     totalBalance: CurrencyAmount
     totalCurrencyBalance: CurrencyAmount
     enabledNetworkCurrencyBalance: CurrencyAmount
     enabledNetworkBalance: CurrencyAmount
-    visibleForNetwork: bool
-    visibleForNetworkWithPositiveBalance: bool
     balances: balance_model.BalanceModel
     description: string
     assetWebsiteUrl: string
@@ -29,16 +27,18 @@ type
     change24hour: float64
     currencyPrice: CurrencyAmount
     decimals: int
+    image: string
+    communityId: string
+    communityName: string
+    communityImage: string
     loading: bool
 
 proc initItem*(
-  name, symbol: string,
+  name, symbol, totalRawBalance: string,
   totalBalance: CurrencyAmount,
   totalCurrencyBalance: CurrencyAmount,
   enabledNetworkBalance: CurrencyAmount,
   enabledNetworkCurrencyBalance: CurrencyAmount,
-  visibleForNetwork: bool,
-  visibleForNetworkWithPositiveBalance: bool,
   balances: seq[balance_item.Item],
   description: string,
   assetWebsiteUrl: string,
@@ -53,16 +53,19 @@ proc initItem*(
   change24hour: float64,
   currencyPrice: CurrencyAmount,
   decimals: int,
+  image: string,
+  communityId: string,
+  communityName: string,
+  communityImage: string,
   loading: bool = false
 ): Item =
   result.name = name
   result.symbol = symbol
+  result.totalRawBalance = totalRawBalance
   result.totalBalance = totalBalance
   result.totalCurrencyBalance = totalCurrencyBalance
   result.enabledNetworkBalance = enabledNetworkBalance
   result.enabledNetworkCurrencyBalance = enabledNetworkCurrencyBalance
-  result.visibleForNetwork = visibleForNetwork
-  result.visibleForNetworkWithPositiveBalance = visibleForNetworkWithPositiveBalance
   result.balances = balance_model.newModel()
   result.balances.setItems(balances)
   result.description =  description
@@ -78,18 +81,21 @@ proc initItem*(
   result.change24hour = change24hour
   result.currencyPrice = currencyPrice
   result.decimals = decimals
+  result.image = image
+  result.communityId = communityId
+  result.communityName = communityName
+  result.communityImage = communityImage
   result.loading = loading
 
 proc `$`*(self: Item): string =
   result = fmt"""AllTokensItem(
     name: {self.name},
     symbol: {self.symbol},
+    totalRawBalance: {self.totalRawBalance},
     totalBalance: {self.totalBalance},
     totalCurrencyBalance: {self.totalCurrencyBalance},
     enabledNetworkBalance: {self.enabledNetworkBalance},
     enabledNetworkCurrencyBalance: {self.enabledNetworkCurrencyBalance},
-    visibleForNetworkWithPositiveBalance: {self.visibleForNetworkWithPositiveBalance},
-    visibleForNetwork: {self.visibleForNetwork},
     description: {self.description},
     assetWebsiteUrl: {self.assetWebsiteUrl}
     builtOn: {self.builtOn}
@@ -103,6 +109,10 @@ proc `$`*(self: Item): string =
     change24hour: {self.change24hour},
     currencyPrice: {self.currencyPrice},
     decimals: {self.decimals},
+    image: {self.image},
+    communityId: {self.communityId},
+    communityName: {self.communityName},
+    communityImage: {self.communityImage},
     loading: {self.loading},
     ]"""
 
@@ -110,12 +120,11 @@ proc initLoadingItem*(): Item =
   return initItem(
     name = "",
     symbol = "",
+    totalRawBalance = "0",
     totalBalance = newCurrencyAmount(),
     totalCurrencyBalance = newCurrencyAmount(),
     enabledNetworkBalance = newCurrencyAmount(),
     enabledNetworkCurrencyBalance = newCurrencyAmount(),
-    visibleForNetwork = false,
-    visibleForNetworkWithPositiveBalance = false,
     balances = @[],
     description = "",
     assetWebsiteUrl = "",
@@ -130,6 +139,10 @@ proc initLoadingItem*(): Item =
     change24hour = 0,
     currencyPrice = newCurrencyAmount(),
     decimals = 0,
+    image = "",
+    communityId = "",
+    communityName = "",
+    communityImage = "",
     loading = true
   )
 
@@ -138,6 +151,9 @@ proc getName*(self: Item): string =
 
 proc getSymbol*(self: Item): string =
   return self.symbol
+
+proc getTotalRawBalance*(self: Item): string =
+  return self.totalRawBalance
 
 proc getTotalBalance*(self: Item): CurrencyAmount =
   return self.totalBalance
@@ -150,12 +166,6 @@ proc getEnabledNetworkBalance*(self: Item): CurrencyAmount =
 
 proc getEnabledNetworkCurrencyBalance*(self: Item): CurrencyAmount =
   return self.enabledNetworkCurrencyBalance
-
-proc getVisibleForNetwork*(self: Item): bool =
-  return self.visibleForNetwork
-
-proc getVisibleForNetworkWithPositiveBalance*(self: Item): bool =
-  return self.visibleForNetworkWithPositiveBalance
 
 proc getBalances*(self: Item): balance_model.BalanceModel =
   return self.balances
@@ -198,6 +208,18 @@ proc getCurrencyPrice*(self: Item): CurrencyAmount =
 
 proc getDecimals*(self: Item): int =
   return self.decimals
+
+proc getImage*(self: Item): string =
+  return self.image
+
+proc getCommunityId*(self: Item): string =
+  return self.communityId
+
+proc getCommunityName*(self: Item): string =
+  return self.communityName
+
+proc getCommunityImage*(self: Item): string =
+  return self.communityImage
 
 proc getLoading*(self: Item): bool =
   return self.loading

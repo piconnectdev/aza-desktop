@@ -11,6 +11,8 @@ type
     Image
     Category
     CommunityId
+    Supply
+    InfiniteSupply
 
 QtObject:
   type TokenListModel* = ref object of QAbstractListModel
@@ -39,6 +41,17 @@ QtObject:
   proc setItems*(self: TokenListModel, items: seq[TokenListItem]) =
     self.beginResetModel()
     self.items = items
+    self.endResetModel()
+    self.countChanged()
+
+  proc setWalletTokenItems*(self: TokenListModel, items: seq[TokenListItem]) =
+    var newItems = items
+    for item in self.items:
+      # Add back the community tokens
+      if item.communityId != "":
+        newItems.add(item)
+    self.beginResetModel()
+    self.items = newItems
     self.endResetModel()
     self.countChanged()
 
@@ -76,6 +89,8 @@ QtObject:
       ModelRole.Image.int:"icon",
       ModelRole.Category.int:"category",
       ModelRole.CommunityId.int:"communityId",
+      ModelRole.Supply.int:"supply",
+      ModelRole.InfiniteSupply.int:"infiniteSupply",
     }.toTable
 
   method rowCount(self: TokenlistModel, index: QModelIndex = nil): int =
@@ -105,3 +120,7 @@ QtObject:
         result = newQVariant(item.getCategory())
       of ModelRole.CommunityId:
         result = newQVariant(item.getCommunityId())
+      of ModelRole.Supply:
+        result = newQVariant(item.getSupply())
+      of ModelRole.InfiniteSupply:
+        result = newQVariant(item.getInfiniteSupply())

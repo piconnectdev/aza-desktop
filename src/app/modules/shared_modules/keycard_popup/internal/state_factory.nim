@@ -1,13 +1,16 @@
 import parseutils, sequtils, sugar, chronicles
-import ../../../../global/global_singleton
-import ../../../../../app_service/service/keycard/constants
-from ../../../../../app_service/service/keycard/service import KCSFlowType
-from ../../../../../app_service/service/keycard/service import PINLengthForStatusApp
-from ../../../../../app_service/service/keycard/service import PUKLengthForStatusApp
-import ../../../../../app_service/common/account_constants
-import ../../../../../app_service/service/wallet_account/[keypair_dto, keycard_dto]
+
+import app/global/global_singleton
+import app_service/service/keycard/constants
+import app_service/common/account_constants
+import app_service/service/wallet_account/dto/[keypair_dto]
+import app/modules/shared_models/[keypair_model]
+
+from app_service/service/keycard/service import KCSFlowType
+from app_service/service/keycard/service import PINLengthForStatusApp
+from app_service/service/keycard/service import PUKLengthForStatusApp
+
 import ../controller
-import ../../../shared_models/[keypair_model]
 import state
 
 logScope:
@@ -24,6 +27,7 @@ type PredefinedKeycardData* {.pure.} = enum
   UseGeneralMessageForLockedState = 64
   MaxPUKReached = 128
   CopyFromAKeycardPartDone = 256
+  MaxPairingSlotsReached = 512
 
 # Forward declaration
 # General section
@@ -31,20 +35,25 @@ proc createState*(stateToBeCreated: StateType, flowType: FlowType, backState: St
 proc extractPredefinedKeycardDataToNumber*(currValue: string): int
 proc updatePredefinedKeycardData*(currValue: string, value: PredefinedKeycardData, add: bool): string
 proc isPredefinedKeycardDataFlagSet*(currValue: string, value: PredefinedKeycardData): bool
+proc findBackStateWithTargetedStateType*(currentState: State, targetedStateType: StateType): State
 # Resolve state section
 proc ensureReaderAndCardPresence*(state: State, keycardFlowType: string, keycardEvent: KeycardEvent, controller: Controller): State
 proc ensureReaderAndCardPresenceAndResolveNextState*(state: State, keycardFlowType: string, keycardEvent: KeycardEvent, controller: Controller): State
+proc readingKeycard*(state: State, keycardFlowType: string, keycardEvent: KeycardEvent, controller: Controller): State
 
+include biometrics_state
 include biometrics_password_failed_state
 include biometrics_pin_failed_state
 include biometrics_pin_invalid_state
 include biometrics_ready_to_sign_state
 include changing_keycard_pin_state
 include changing_keycard_puk_state
+include confirm_password_state
 include copy_to_keycard_state
 include copying_keycard_state
 include changing_keycard_pairing_code_state
 include create_pairing_code_state
+include create_password_state
 include create_pin_state
 include create_puk_state
 include creating_account_new_seed_phrase_state
@@ -88,12 +97,15 @@ include keycard_already_unlocked_state
 include max_pin_retries_reached_state
 include max_puk_retries_reached_state
 include max_pairing_slots_reached_state
-include migrating_key_pair_state
-include no_pcsc_service_state 
-include not_keycard_state 
+include migrate_keypair_to_app_state
+include migrate_keypair_to_keycard_state
+include migrating_keypair_to_app_state
+include migrating_keypair_to_keycard_state
+include no_pcsc_service_state
+include not_keycard_state
 include pin_set_state
 include pin_verified_state
-include plugin_reader_state 
+include plugin_reader_state
 include reading_keycard_state
 include recognized_keycard_state
 include remove_keycard_state
