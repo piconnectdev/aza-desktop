@@ -47,7 +47,8 @@ Popup {
                 nameFiled.clear();
                 root.close();
             }
-            GridLayout.columnSpan: 2
+            /// TODO: Check compile error
+            //GridLayout.columnSpan: 2
             Layout.fillWidth: true
         }
     }

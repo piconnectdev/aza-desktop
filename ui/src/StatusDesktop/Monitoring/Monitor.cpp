@@ -22,7 +22,7 @@ void Monitor::initialize(QQmlApplicationEngine* engine) {
 
         QQuickWindow* window = qobject_cast<QQuickWindow*>(obj);
         QQmlComponent cmp(engine, QCoreApplication::applicationDirPath()
-                          + QStringLiteral("Monitor"), window);
+                          + QStringLiteral(MONITORING_QML_ENTRY_POINT), window);
 
         cmp.create(qmlContext(window));
 

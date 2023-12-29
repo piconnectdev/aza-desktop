@@ -8,7 +8,7 @@ project(StatusGoQt
 
 set(QT_NO_CREATE_VERSIONLESS_FUNCTIONS true)
 
-find_package(nlohmann_json 3.10.5 REQUIRED)
+#find_package(nlohmann_json 3.10.5 REQUIRED)
 find_package(Boost)
 
 find_package(Qt6 ${STATUS_QT_VERSION} COMPONENTS Core Concurrent Gui REQUIRED)
@@ -29,9 +29,9 @@ target_link_libraries(${PROJECT_NAME}
         Qt6::Core
         Qt6::Concurrent
 
-        nlohmann_json::nlohmann_json
+	#nlohmann_json::nlohmann_json
 
-        statusgo_shared
+	#statusgo_shared
 )
 add_library(Status::${PROJECT_NAME} ALIAS ${PROJECT_NAME})
 
@@ -64,7 +64,7 @@ add_custom_command(
 
 install(
     IMPORTED_RUNTIME_ARTIFACTS
-    statusgo_shared
+    #statusgo_shared
 )
 
 if(CMAKE_SYSTEM_NAME MATCHES "Linux")
@@ -122,6 +122,8 @@ target_sources(${PROJECT_NAME}
         src/StatusGo/SignalsManager.cpp
         src/StatusGo/StatusGoEvent.h
         src/StatusGo/StatusGoEvent.cpp
+        src/StatusGo/StatusGoWrapper.h
+        src/StatusGo/StatusGoWrapper.cpp
 
         src/StatusGo/Settings/SettingsAPI.h
         src/StatusGo/Settings/SettingsAPI.cpp

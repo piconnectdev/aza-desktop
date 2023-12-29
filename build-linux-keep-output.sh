@@ -16,3 +16,11 @@ docker run -it --rm \
   -w /status-desktop \
   statusteam/nim-status-client-build:1.2.1-qt5.15.2 \
   ./docker-linux-app-image.sh
+
+
+# Build with custom Qt
+# https://timmousk.com/blog/git-reset-submodule/
+# git submodule update --init --recursive
+# mkdir build && cd build && cmake -DCMAKE_PREFIX_PATH="~/usr/Qt/6.5.3/macos/lib/cmake" ../
+# set(STATUS_QT_VERSION 6.5.3)
+
